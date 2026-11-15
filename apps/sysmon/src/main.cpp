@@ -2,12 +2,15 @@
 #include <QQmlApplicationEngine>
 #include <QUrl>
 #include <QtQml/qqmlextensionplugin.h>
+#include "crashhandler.h"
 
 Q_IMPORT_QML_PLUGIN(Win95UiPlugin)
 
 // usage: win95sysmon
 int main(int argc, char *argv[])
 {
+    // a problem report if it crashes (~/.local/state/wayland95/crashes)
+    installCrashHandler("win95sysmon");
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("win95sysmon"));
     app.setOrganizationName(QStringLiteral("win95-wayland"));

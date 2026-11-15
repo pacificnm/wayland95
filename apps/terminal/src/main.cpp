@@ -3,11 +3,14 @@
 #include <QQmlContext>
 #include <QUrl>
 #include <QtQml/qqmlextensionplugin.h>
+#include "crashhandler.h"
 
 Q_IMPORT_QML_PLUGIN(Win95UiPlugin)
 
 int main(int argc, char *argv[])
 {
+    // a problem report if it crashes (~/.local/state/wayland95/crashes)
+    installCrashHandler("win95terminal");
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("win95terminal"));
     app.setOrganizationName(QStringLiteral("win95-wayland"));

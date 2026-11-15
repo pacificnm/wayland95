@@ -4,10 +4,19 @@
 # The login screen runs this for the "Wayland 95" session
 # (wayland95.desktop); it can also be run by hand from a text console.
 #
-# Its output goes to ~/.wayland95-session.log (the last one before that
-# in ~/.wayland95-session.log.old).
+# Its output goes to ~/.wayland95-session.log; the four sessions before
+# are in .log.1 (the last one) to .log.4.
+#
+# If the compositor crashes, it's started again (your programs close, but
+# you stay logged in), and a problem report is left in
+# ~/.local/state/wayland95/crashes for Control Panel > Problem Reports.
+# Three crashes within two minutes and it gives up, back to the login screen.
 LOG="$HOME/.wayland95-session.log"
-[ -f "$LOG" ] && mv -f "$LOG" "$LOG.old"
+for n in 3 2 1; do
+    [ -f "$LOG.$n" ] && mv -f "$LOG.$n" "$LOG.$((n + 1))"
+done
+[ -f "$LOG" ] && mv -f "$LOG" "$LOG.1"
+rm -f "$LOG.old" # the name before there were several
 # the compositor is installed next to this script
 BIN=$(dirname "$(readlink -f "$0")")
 
@@ -59,8 +68,77 @@ config="${XDG_RUNTIME_DIR:-/tmp}/wayland95-kms.json"
 printf '{ "device": "%s", "hwcursor": false }\n' "$card" > "$config"
 export QT_QPA_EGLFS_KMS_CONFIG="$config"
 
+CRASHES="${XDG_STATE_HOME:-$HOME/.local/state}/wayland95/crashes"
+VERSION=$(dpkg-query -W -f '${Version}' wayland95 2>/dev/null || echo "installed from source")
+
+# Finishes the problem report for a compositor that died: the one its crash
+# handler wrote (crashhandler.cpp), or a new one when it couldn't (killed,
+# or an exit status). Adds the end of the log and what the computer is.
+report() { # pid status
+    mkdir -p "$CRASHES"
+    file=$(ls -t "$CRASHES"/win95compositor-*-"$1".crash 2>/dev/null | head -n 1)
+    if [ -z "$file" ]; then
+        file="$CRASHES/win95compositor-$(date +%s)-$1.crash"
+        if [ "$2" -gt 128 ]; then
+            how="Signal: $(($2 - 128)) SIG$(kill -l $(($2 - 128)) 2>/dev/null)"
+            [ "$2" = 137 ] && how="$how (killed; out of memory?)"
+        else
+            how="Exit: status $2"
+        fi
+        printf 'Wayland 95 problem report\nProgram: win95compositor\nVersion: %s\nTime: %s\nPID: %s\n%s\n' \
+            "$VERSION" "$(date +%s)" "$1" "$how" > "$file"
+    fi
+    {
+        printf '\n== System\n'
+        printf 'Wayland 95: %s\n' "$VERSION"
+        . /etc/os-release 2>/dev/null && printf 'OS: %s\n' "$PRETTY_NAME"
+        printf 'Kernel: %s\n' "$(uname -r)"
+        printf 'Graphics: %s (%s)\n' "$card" "$driver"
+        printf 'Memory: %s\n' "$(free -h 2>/dev/null | awk '/^Mem:/ { print $2 " total, " $7 " available" }')"
+        printf 'Qt: %s\n' "$(dpkg-query -W -f '${Version}' libqt6core6t64 2>/dev/null || dpkg-query -W -f '${Version}' libqt6core6 2>/dev/null)"
+        if command -v coredumpctl >/dev/null 2>&1; then
+            sleep 2 # systemd-coredump needs a moment
+            info=$(timeout 15 coredumpctl --no-pager info "$1" 2>/dev/null | sed -n '/Stack trace/,$p' | head -n 60)
+            [ -z "$info" ] || printf '\n== Core dump\n%s\n' "$info"
+        fi
+        printf '\n== Session log (last 150 lines)\n'
+        tail -n 150 "$LOG"
+    } >> "$file"
+    echo "wayland95-session: problem report in $file" >> "$LOG"
+}
+
+# logging out or shutting down: stop the compositor, and don't restart it
+stopping=""
+pid=""
+trap 'stopping=1; [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null' TERM HUP INT
+
 echo "wayland95-session: starting on $card ($(date))" > "$LOG"
-"$BIN/win95compositor" "$@" >> "$LOG" 2>&1
-status=$?
-echo "wayland95-session: exited with status $status" >> "$LOG"
-exit $status
+recent=""
+while :; do
+    "$BIN/win95compositor" "$@" >> "$LOG" 2>&1 &
+    pid=$!
+    # wait returns early when a signal comes in; wait again until it's gone
+    wait "$pid"
+    status=$?
+    while kill -0 "$pid" 2>/dev/null; do
+        wait "$pid"
+        status=$?
+    done
+    echo "wayland95-session: exited with status $status ($(date))" >> "$LOG"
+    [ -n "$stopping" ] && exit 0
+    case "$status" in
+        0) exit 0 ;;                                # logged out
+        143|129|130) exit "$status" ;;              # told to stop (TERM, HUP, INT)
+    esac
+
+    # a crash
+    report "$pid" "$status"
+    now=$(date +%s)
+    recent="$(for t in $recent; do [ $((now - t)) -lt 120 ] && echo "$t"; done) $now"
+    if [ "$(echo $recent | wc -w)" -ge 3 ]; then
+        echo "wayland95-session: crashed 3 times in two minutes; giving up" >> "$LOG"
+        exit "$status"
+    fi
+    echo "wayland95-session: starting again ($(date))" >> "$LOG"
+    sleep 1
+done

@@ -45,6 +45,8 @@ Window {
           description: "Turns off the display and sleeps when idle, and sets brightness, the power mode and what the lid does." },
         { id: "printers", name: "Printers", file: "PrintersApplet.qml",
           description: "Adds printers, and shows and changes what they're printing." },
+        { id: "problems", name: "Problem Reports", file: "ProblemsApplet.qml",
+          description: "Shows what happened when a program crashed, and sends a report to get it fixed." },
         { id: "regional", name: "Regional Settings", file: "RegionalApplet.qml",
           description: "Changes how numbers, currency, times and dates are shown." },
         { id: "services", name: "Services", file: "ServicesApplet.qml",

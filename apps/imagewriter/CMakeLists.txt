@@ -15,7 +15,7 @@ set_target_properties(win95imagewriter PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
-target_include_directories(win95imagewriter PRIVATE src)
+target_include_directories(win95imagewriter PRIVATE src ${CMAKE_SOURCE_DIR}/apps/common)
 
 qt_add_qml_module(win95imagewriter
     URI Win95ImageWriter

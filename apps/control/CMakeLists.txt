@@ -88,6 +88,7 @@ qt_add_qml_module(win95control
         PostgresSettings.qml
         PythonSettings.qml
         NodeSettings.qml
+        ProblemsApplet.qml
     RESOURCE_PREFIX /qt/qml
 )
 

@@ -63,6 +63,10 @@ qt_add_qml_module(win95ui
         desktopentry.cpp
         accountpassword.h
         accountpassword.cpp
+        crashhandler.h
+        crashhandler.cpp
+        problemreports.h
+        problemreports.cpp
 )
 
 target_link_libraries(win95ui PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)

@@ -651,7 +651,47 @@ WaylandCompositor {
         function onActionInvoked(id, key) {
             if (id === updateCheck.notice)
                 Launcher.launch("win95control", ["--applet", "programs", "--tab", "1", "--check"]);
+            else if (id === problemNotice.id)
+                Launcher.launch("win95control", ["--applet", "problems"]);
         }
+    }
+
+    // Problem reports (apps/common/crashhandler.h): a program that crashed,
+    // or the desktop itself before wayland95-session restarted it. Each
+    // gets one notice; Details opens Control Panel > Problem Reports.
+    QtObject {
+        id: problemNotice
+        property real id: 0
+
+        function tell(reports) {
+            if (reports.length === 0)
+                return;
+            var desktop = reports.filter(function (r) { return r.program === "win95compositor"; });
+            var r = desktop.length ? desktop[0] : reports[0];
+            var when = new Date(r.time).toLocaleTimeString(Qt.locale(), "h:mm AP");
+            var body = desktop.length
+                    ? "The Wayland 95 desktop stopped unexpectedly at " + when
+                      + " and was started again. Programs that were open had to close."
+                    : r.name + " closed unexpectedly at " + when + ".";
+            if (reports.length > 1)
+                body += " (" + reports.length + " problem reports.)";
+            id = Notifications.notifyWithActions("Wayland 95", desktop.length ? "Wayland 95 restarted" : r.name + " crashed",
+                                                 body + " Click here to see the report.",
+                                                 ["default", "Details", "details", "Details..."], 1, 20000);
+            Ui.ProblemReports.markAllSeen();
+        }
+    }
+    Connections {
+        target: Ui.ProblemReports
+        function onReportAdded(report) {
+            problemNotice.tell([report]);
+        }
+    }
+    // reports from before this start (the desktop's own crash among them)
+    Timer {
+        interval: 4000
+        running: true
+        onTriggered: problemNotice.tell(Ui.ProblemReports.unseen())
     }
 
     TaskSwitchKeys {

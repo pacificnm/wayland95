@@ -28,3 +28,6 @@ target_link_libraries(win95volume PRIVATE
 )
 
 install(TARGETS win95volume RUNTIME DESTINATION bin)
+
+# crashhandler.h
+target_include_directories(win95volume PRIVATE ${CMAKE_SOURCE_DIR}/apps/common)

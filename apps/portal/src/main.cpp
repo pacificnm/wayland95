@@ -5,6 +5,7 @@
 #include <QtQml/qqmlextensionplugin.h>
 
 #include "filechooser.h"
+#include "crashhandler.h"
 
 Q_IMPORT_QML_PLUGIN(Win95UiPlugin)
 
@@ -14,6 +15,8 @@ Q_IMPORT_QML_PLUGIN(Win95UiPlugin)
 // after a while with nothing to do.
 int main(int argc, char *argv[])
 {
+    // a problem report if it crashes (~/.local/state/wayland95/crashes)
+    installCrashHandler("win95portal");
     // started by D-Bus, maybe without Qt's platform chosen
     if (qEnvironmentVariableIsSet("WAYLAND_DISPLAY") && !qEnvironmentVariableIsSet("QT_QPA_PLATFORM"))
         qputenv("QT_QPA_PLATFORM", "wayland");

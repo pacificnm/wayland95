@@ -3,6 +3,7 @@
 #include <QQmlContext>
 #include <QUrl>
 #include <QtQml/qqmlextensionplugin.h>
+#include "crashhandler.h"
 
 Q_IMPORT_QML_PLUGIN(Win95UiPlugin)
 
@@ -10,6 +11,8 @@ Q_IMPORT_QML_PLUGIN(Win95UiPlugin)
 // --record opens the recording (microphone) controls instead of playback.
 int main(int argc, char *argv[])
 {
+    // a problem report if it crashes (~/.local/state/wayland95/crashes)
+    installCrashHandler("win95volume");
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("win95volume"));
     app.setOrganizationName(QStringLiteral("win95-wayland"));

@@ -21,6 +21,22 @@ endif()
 
 qt_standard_project_setup(REQUIRES 6.4)
 
+# The version problem reports give: the newest in debian/changelog (what the
+# update system publishes), else the project's
+set(WAYLAND95_VERSION ${PROJECT_VERSION})
+if(EXISTS ${CMAKE_SOURCE_DIR}/debian/changelog)
+    file(STRINGS ${CMAKE_SOURCE_DIR}/debian/changelog _changelog LIMIT_COUNT 1)
+    if(_changelog MATCHES "^wayland95 \\(([^)]+)\\)")
+        set(WAYLAND95_VERSION ${CMAKE_MATCH_1})
+    endif()
+endif()
+add_compile_definitions(
+    WAYLAND95_VERSION="${WAYLAND95_VERSION}"
+    WAYLAND95_ISSUES_URL="https://github.com/pacificnm/wayland95/issues/new"
+)
+# debian/changelog decides the version: rerun cmake when it changes
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/debian/changelog)
+
 qt_add_executable(win95compositor
     src/main.cpp
     src/windowmanager.h

@@ -336,6 +336,18 @@ Canvas {
             for (var nl = 0; nl < 3; ++nl)
                 rect(7, 4 + nl * 2, 10, 1, "#808080");
             break;
+        case "problems":
+            // a warning sign over a page
+            frame(6, 2, 20, 26, "#ffffff");
+            for (var pl = 0; pl < 5; ++pl)
+                rect(9, 5 + pl * 3, 14, 1, "#808080");
+            ctx.fillStyle = "#ffd800";
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(17, 11); ctx.lineTo(30, 30); ctx.lineTo(4, 30); ctx.closePath(); ctx.fill(); ctx.stroke();
+            rect(16, 17, 2, 7, "#000000");
+            rect(16, 26, 2, 2, "#000000");
+            break;
         case "folder":
             frame(2, 9, 28, 19, "#ffff80");
             frame(2, 6, 12, 5, "#ffff80");

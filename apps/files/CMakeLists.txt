@@ -14,7 +14,7 @@ set_target_properties(win95files PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
-target_include_directories(win95files PRIVATE src)
+target_include_directories(win95files PRIVATE src ${CMAKE_SOURCE_DIR}/apps/common)
 
 qt_add_qml_module(win95files
     URI Win95Files

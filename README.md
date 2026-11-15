@@ -489,6 +489,11 @@ up next to the compositor binary first, then on `$PATH`.
       `lpadmin` group, which Debian gives the first user and the live user
       has. Your default printer goes in `~/.cups/lpoptions`, which programs'
       Print dialogs follow.
+  - **Problem Reports:** the reports written when a Wayland 95 program
+    (or the desktop) crashed, newest first, each with its text. **Report
+    on GitHub...** opens a new issue on github.com/pacificnm/wayland95
+    filled in with the report, to look over and submit (nothing is sent
+    by itself); **Copy**, **Delete** and **Delete All**. See Crashes below.
   - **Regional Settings:** Win95's five tabs. **Regional Settings** lists
     every region (type to find one); **Number**, **Currency**, **Time** and
     **Date** show samples and can each format like a different region (US
@@ -570,6 +575,31 @@ adding `Q_IMPORT_QML_PLUGIN(Win95UiPlugin)` to its `main.cpp`.
 
 To add a program to the Start menu, add an entry to `programs` in
 [StartMenu.qml](qml/Win95Shell/StartMenu.qml).
+
+## Crashes
+
+- **Problem reports:** every Wayland 95 program installs a crash handler
+  ([apps/common/crashhandler.cpp](apps/common/crashhandler.cpp)). On
+  SIGSEGV, SIGABRT, SIGBUS, SIGFPE or SIGILL it writes
+  `~/.local/state/wayland95/crashes/PROGRAM-START-PID.crash`: the program,
+  version, signal, a backtrace, each frame as module+offset, and its last
+  40 log messages. Then it dies of the same signal, so core dumps and exit
+  statuses are unchanged. To turn an offset into a source line:
+  `addr2line -f -C -e /usr/bin/win95files 0x1e28e` (with the
+  `wayland95-dbgsym` package for an installed copy).
+- **The desktop restarts:** if the compositor crashes, `wayland95-session`
+  starts it again, so you stay logged in (open programs do close). It adds
+  the end of the session log, system details (OS, kernel, graphics driver,
+  memory, Qt) and, with systemd-coredump, the core dump's stack trace to
+  the report. Three crashes within two minutes and it gives up and goes
+  back to the login screen. Logging out or shutting down never counts as a
+  crash.
+- **Telling you:** the desktop watches that folder. When a program crashes
+  a notification says so, and after a restart it says the desktop
+  restarted; clicking it opens Control Panel > Problem Reports.
+- **Smaller logs:** log lines get the time in front, and a message
+  repeated over and over is written once, followed by "(the message above
+  was repeated N more times)" at most once a minute.
 
 ## X11 programs
 
@@ -751,7 +781,9 @@ What's installed:
 - the programs, in `/usr/local/bin`;
 - `wayland95-session` ([session/wayland95-session](session/wayland95-session)),
   which starts the compositor straight on the screen (Qt's eglfs on
-  DRM/KMS) and logs to `~/.wayland95-session.log`;
+  DRM/KMS), starts it again if it crashes (see Crashes below), and logs to
+  `~/.wayland95-session.log` (the four sessions before in `.log.1` to
+  `.log.4`);
 - `share/wayland-sessions/wayland95.desktop`, the login screen's entry
   (SDDM and GDM read `/usr/local/share/wayland-sessions` too);
 - `win95portal` and `share/xdg-desktop-portal/wayland95-portals.conf`:

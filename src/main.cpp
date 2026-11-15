@@ -21,6 +21,7 @@ Q_IMPORT_QML_PLUGIN(Win95UiPlugin)
 #include <fcntl.h>
 #include <sys/file.h>
 #include <unistd.h>
+#include "crashhandler.h"
 
 // Pick the socket name our compositor will listen on.
 //
@@ -105,6 +106,8 @@ private:
 
 int main(int argc, char *argv[])
 {
+    // a problem report if it crashes (~/.local/state/wayland95/crashes)
+    installCrashHandler("win95compositor");
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("wayland95"));
     app.setOrganizationName(QStringLiteral("win95-wayland"));

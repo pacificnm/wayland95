@@ -12,7 +12,7 @@ set_target_properties(win95portal PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
-target_include_directories(win95portal PRIVATE src)
+target_include_directories(win95portal PRIVATE src ${CMAKE_SOURCE_DIR}/apps/common)
 
 qt_add_qml_module(win95portal
     URI Win95Portal

@@ -6,15 +6,18 @@
 
 #include "desktopentry.h"
 #include "software.h"
+#include "crashhandler.h"
 
 Q_IMPORT_QML_PLUGIN(Win95UiPlugin)
 
-// usage: win95control [--applet accessibility|bluetooth|datetime|display|fonts|hardware|keyboard|mouse|network|passwords|power|printers|programs|regional|services|sounds|system|taskbar [--tab N] [--check]]
+// usage: win95control [--applet accessibility|bluetooth|datetime|display|fonts|hardware|keyboard|mouse|network|passwords|power|printers|problems|programs|regional|services|sounds|system|taskbar [--tab N] [--check]]
 // With --applet, only that applet's window opens (Start > Settings >
 // Taskbar... uses this), optionally on tab N (0-based), like Win95's
 // "control desk.cpl,,2"; otherwise the Control Panel folder opens.
 int main(int argc, char *argv[])
 {
+    // a problem report if it crashes (~/.local/state/wayland95/crashes)
+    installCrashHandler("win95control");
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("win95control"));
     app.setOrganizationName(QStringLiteral("win95-wayland"));

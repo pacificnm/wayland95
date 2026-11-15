@@ -4,12 +4,15 @@
 #include <QQmlContext>
 #include <QUrl>
 #include <QtQml/qqmlextensionplugin.h>
+#include "crashhandler.h"
 
 Q_IMPORT_QML_PLUGIN(Win95UiPlugin)
 
 // usage: win95notepad [file]
 int main(int argc, char *argv[])
 {
+    // a problem report if it crashes (~/.local/state/wayland95/crashes)
+    installCrashHandler("win95notepad");
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("win95notepad"));
     app.setOrganizationName(QStringLiteral("win95-wayland"));

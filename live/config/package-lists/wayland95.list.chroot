@@ -1,0 +1,92 @@
+# Everything on the live ISO. Recommends are off (live/auto/config:
+# --apt-recommends false): with them on, sddm's Breeze theme alone pulled in
+# the whole Plasma desktop and its apps. So list what's wanted by name, and
+# no KDE programs. (Calamares still needs a few KDE Frameworks libraries.)
+
+# --- booting live ---------------------------------------------------------
+live-boot
+live-config
+live-config-systemd
+live-tools
+systemd-sysv
+user-setup
+keyboard-configuration
+uuid-runtime
+rsync
+iproute2
+firmware-linux-free
+apparmor
+
+# --- the desktop (built from this repository, see live/build.sh) ----------
+wayland95
+sddm
+# a login theme that isn't KDE's (sddm-theme-debian-breeze needs Plasma)
+sddm-theme-debian-maui
+libpam-systemd
+
+# --- installing to disk ---------------------------------------------------
+calamares
+calamares-settings-debian
+btrfs-progs
+squashfs-tools
+# calamares-install-debian lets root use the screen with xhost
+x11-xserver-utils
+pkexec
+
+# --- what Control Panel and the tray talk to ------------------------------
+network-manager
+wpasupplicant
+dnsmasq-base
+wireless-regdb
+modemmanager
+ppp
+polkitd
+pipewire
+pipewire-pulse
+pipewire-alsa
+wireplumber
+alsa-utils
+sound-theme-freedesktop
+bluez
+upower
+cups
+cups-client
+cups-filters
+avahi-daemon
+flatpak
+packagekit
+packagekit-tools
+appstream
+desktop-file-utils
+shared-mime-info
+hicolor-icon-theme
+gtk-update-icon-cache
+xdg-desktop-portal
+xdg-desktop-portal-gtk
+xdg-user-dirs
+udisks2
+dosfstools
+e2fsprogs
+exfatprogs
+ntfs-3g
+eject
+locales-all
+
+# --- fonts ------------------------------------------------------------------
+fonts-liberation
+fonts-dejavu
+fonts-noto-core
+fonts-noto-color-emoji
+
+# --- graphics -------------------------------------------------------------
+mesa-vulkan-drivers
+libgl1-mesa-dri
+
+# --- programs -------------------------------------------------------------
+chromium
+chromium-sandbox
+sudo
+nano
+less
+curl
+ca-certificates

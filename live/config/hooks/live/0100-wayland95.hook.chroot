@@ -1,0 +1,29 @@
+#!/bin/sh
+# Runs inside the image while it's built: points the installer (Calamares)
+# at Wayland 95.
+set -e
+
+modules=/etc/calamares/modules
+
+# Wayland 95 reads the keyboard and mouse itself, which needs the input
+# group (and render for the GPU): new accounts get both.
+if ! grep -q '^ *- input$' "$modules/users.conf"; then
+    sed -i 's/^defaultGroups:$/defaultGroups:\n    - input\n    - render/' "$modules/users.conf"
+fi
+
+# "Log in automatically" goes to the Wayland 95 session
+if ! grep -q '^defaultDesktopEnvironment:' "$modules/displaymanager.conf"; then
+    cat >> "$modules/displaymanager.conf" <<'CONF'
+defaultDesktopEnvironment:
+    executable: "wayland95-session"
+    desktopFile: "wayland95"
+CONF
+fi
+
+# the Start menu entry
+sed -i 's/^Name=Install Debian$/Name=Install Wayland 95/' /usr/share/applications/calamares-install-debian.desktop
+
+# Wayland 95's look for the installer: /etc/calamares/branding/wayland95
+# (from includes.chroot; artwork made by live/calamares/make-images.py)
+sed -i 's/^branding: .*/branding: wayland95/' /etc/calamares/settings.conf
+grep -q '^branding: wayland95$' /etc/calamares/settings.conf

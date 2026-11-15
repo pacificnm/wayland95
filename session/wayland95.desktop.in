@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Wayland 95
+Comment=A Windows 95-style desktop for Wayland
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/wayland95-session
+TryExec=@CMAKE_INSTALL_FULL_BINDIR@/wayland95-session
+DesktopNames=Wayland95

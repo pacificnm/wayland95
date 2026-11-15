@@ -1,0 +1,67 @@
+Source: wayland95
+Section: x11
+Priority: optional
+Maintainer: Wayland 95 <wayland95@localhost>
+Build-Depends: debhelper-compat (= 13),
+               cmake,
+               pkgconf,
+               qt6-base-dev,
+               qt6-base-private-dev,
+               qt6-declarative-dev,
+               qt6-wayland-dev,
+               qt6-wayland-dev-tools,
+               wayland-protocols,
+               libwayland-dev,
+               libxkbcommon-dev,
+               libinput-dev,
+               libvterm-dev,
+               libxcb1-dev,
+               libfontconfig-dev,
+               zlib1g-dev
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+
+Package: wayland95
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         libqt6opengl6,
+         qt6-qpa-plugins,
+         qt6-wayland,
+         qml6-module-qtwayland-compositor,
+         qml6-module-qtquick,
+         qml6-module-qtquick-window,
+         qml6-module-qtquick-controls,
+         qml6-module-qtquick-templates,
+         qml6-module-qtquick-layouts,
+         qml6-module-qtqml,
+         qml6-module-qtqml-workerscript,
+         qml6-module-qt-labs-folderlistmodel,
+         xwayland,
+         dbus-user-session,
+         polkitd,
+         libpam-modules-bin,
+         passwd,
+         fontconfig,
+         fonts-liberation,
+         xdg-utils,
+         xdg-desktop-portal
+Recommends: network-manager,
+            pipewire-bin,
+            pipewire-pulse,
+            wireplumber,
+            sound-theme-freedesktop,
+            bluez,
+            upower,
+            cups,
+            cups-client,
+            flatpak,
+            packagekit,
+            xdg-desktop-portal-gtk | xdg-desktop-portal-kde,
+            xdg-user-dirs,
+            udisks2
+Description: Windows 95-style Wayland desktop
+ A complete desktop session in the style of Windows 95: a Wayland
+ compositor with the taskbar, Start menu and window frames, plus its own
+ File Manager, Notepad, Terminal, Control Panel, System Monitor and file
+ dialogs for other programs. Log in to it as "Wayland 95".

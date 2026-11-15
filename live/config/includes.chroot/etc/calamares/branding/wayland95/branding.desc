@@ -1,0 +1,43 @@
+# The installer's (Calamares's) Wayland 95 branding: its stylesheet,
+# QML sidebar and buttons, pictures (from live/calamares/make-images.py)
+# and install slideshow. Chosen by /etc/calamares/settings.conf (set by
+# live/config/hooks/live/0100-wayland95.hook.chroot).
+---
+componentName:  wayland95
+
+welcomeStyleCalamares: false
+welcomeExpandingLogo: false
+
+windowExpanding: normal
+windowSize: 760px,540px
+windowPlacement: center
+
+sidebar: qml
+navigation: qml
+
+strings:
+    productName:         Wayland 95
+    shortProductName:    Wayland 95
+    version:             13
+    shortVersion:        13
+    versionedName:       Wayland 95 (Debian 13)
+    shortVersionedName:  Wayland 95
+    bootloaderEntryName: Wayland 95
+    productUrl:          https://www.debian.org
+    supportUrl:          https://www.debian.org/support
+    knownIssuesUrl:      https://bugs.debian.org
+    releaseNotesUrl:     https://www.debian.org/releases/trixie/releasenotes
+
+images:
+    productLogo:         "logo.png"
+    productIcon:         "logo.png"
+    productWelcome:      "welcome.png"
+
+slideshow:               "show.qml"
+slideshowAPI: 2
+
+style:
+   SidebarBackground:        "#000080"
+   SidebarText:              "#ffffff"
+   SidebarTextCurrent:       "#ffffff"
+   SidebarBackgroundCurrent: "#000080"

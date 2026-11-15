@@ -1,0 +1,2 @@
+release/wayland95.sources etc/apt/sources.list.d/
+release/wayland95-archive-keyring.gpg usr/share/keyrings/

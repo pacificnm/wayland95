@@ -1,0 +1,7 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: wayland95
+
+Files: *
+Copyright: Wayland 95 contributors
+License: unknown
+ The license hasn't been chosen yet.

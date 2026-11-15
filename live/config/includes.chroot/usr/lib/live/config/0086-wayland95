@@ -1,0 +1,21 @@
+#!/bin/sh
+# live-config component: log the live user straight in to Wayland 95.
+# Runs after 0085-sddm, which writes /etc/sddm.conf's autologin but only
+# knows X11 desktops' session names.
+
+for parameter in $(cat /proc/cmdline); do
+    case "$parameter" in
+        noautologin|live-config.noautologin|nox11autologin|live-config.nox11autologin)
+            exit 0 ;;
+    esac
+done
+
+[ -f /var/lib/live/config/wayland95 ] && exit 0
+echo -n " wayland95"
+
+if [ -f /etc/sddm.conf ] && grep -q '^\[Autologin\]' /etc/sddm.conf; then
+    sed -i 's/^Session=.*/Session=wayland95.desktop/' /etc/sddm.conf
+    grep -q '^Session=' /etc/sddm.conf || sed -i 's/^\[Autologin\]$/[Autologin]\nSession=wayland95.desktop/' /etc/sddm.conf
+fi
+
+touch /var/lib/live/config/wayland95

@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DCMAKE_BUILD_TYPE=Release
+
+# nothing to run; the tests need a screen
+override_dh_auto_test:
+
+# The update repository (release/wayland95.sources) goes in only when it
+# exists: an apt source with no repository behind it makes every
+# `apt update` fail. release/build-deb.sh decides (WAYLAND95_UPDATE_SOURCE).
+override_dh_install:
+	dh_install
+	[ "$$WAYLAND95_UPDATE_SOURCE" = 1 ] || rm -f debian/wayland95/etc/apt/sources.list.d/wayland95.sources

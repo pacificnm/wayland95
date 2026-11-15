@@ -1,0 +1,5 @@
+wayland95 (0.1.0) trixie; urgency=medium
+
+  * First Debian package.
+
+ -- Wayland 95 <wayland95@localhost>  Sun, 15 Nov 2026 12:10:46 -0800

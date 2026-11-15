@@ -29,6 +29,9 @@ calamares
 calamares-settings-debian
 btrfs-progs
 squashfs-tools
+# the password check's dictionary (libcrack2 only recommends it; without it
+# the Users page says "error loading dictionary" and won't go on)
+cracklib-runtime
 # calamares-install-debian lets root use the screen with xhost
 x11-xserver-utils
 pkexec

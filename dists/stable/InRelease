@@ -1,0 +1,30 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: amd64
+Codename: stable
+Components: main
+Date: Sun, 15 Nov 2026 23:41:15 +0000
+Description: Wayland 95 updates
+Label: Wayland 95
+Origin: Wayland 95
+Suite: stable
+MD5Sum:
+ d34acfd6f96ac8458adbda0123384d53             2008 main/binary-amd64/Packages
+ 230d6594c15bf0dba951682e7d19bfe4             1047 main/binary-amd64/Packages.gz
+SHA1:
+ 6cad27cbfe648eea00e92957e0c7be982bf2dcea             2008 main/binary-amd64/Packages
+ a192fb7d93e983e3b5296435c5072923f865cccf             1047 main/binary-amd64/Packages.gz
+SHA256:
+ 887ef264771d01b7eedfe7901048f709de522ddb8e764b1c8197976911834769             2008 main/binary-amd64/Packages
+ 53cb21abefa72080c37bba65234ba18d3b091ecb35071d9329234cdf37209fef             1047 main/binary-amd64/Packages.gz
+SHA512:
+ 5e4c9d2a4564cdaa0b0079274659d16546e4f3964367677676a67028cd7bc868b01cb7d9c41c22bfdf41d2c9ec0ca6b606ed176eb58d3c5dec7c2b6aadfbd395             2008 main/binary-amd64/Packages
+ 28be1ece0c7308a2ace17b4ec5fcc5778432ca1ccce36fec50fa8926d142bce902d646d02577964e8dc7b16f3dfc58836add925954e412ee5bb6f4a82d62168e             1047 main/binary-amd64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iHUEARYKAB0WIQTNbdhKhmttJYxxjGOEtq/wPrcFngUCavpDGwAKCRCEtq/wPrcF
+nu9OAQDJJzDUxMGWvIVJ2Ddg4uHuLA4QVYmiWcAWNZHZ3ab/dAD/eOTcYjOBoy0F
+Gv7KEyUlzoxRCz3XiTlUdCa/+jwnTwk=
+=K9fT
+-----END PGP SIGNATURE-----

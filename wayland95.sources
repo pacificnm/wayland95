@@ -1,0 +1,7 @@
+# Wayland 95's updates (the wayland95 package): installed by it, so apt,
+# Add/Remove Programs > Updates and the update notice find new versions.
+Types: deb
+URIs: https://pacificnm.github.io/wayland95
+Suites: stable
+Components: main
+Signed-By: /usr/share/keyrings/wayland95-archive-keyring.gpg

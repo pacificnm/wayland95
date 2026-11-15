@@ -199,3 +199,11 @@ install(FILES ${CMAKE_BINARY_DIR}/org.freedesktop.impl.portal.desktop.wayland95.
 set(WAYLAND95_PORTAL_DIR "/usr/share/xdg-desktop-portal/portals" CACHE PATH
     "Where xdg-desktop-portal looks for backends")
 install(FILES session/wayland95.portal DESTINATION ${WAYLAND95_PORTAL_DIR})
+
+# Control Panel > Services: its root helper, and the polkit action that lets
+# pkexec run it (polkit reads actions only from /usr/share, whatever our prefix)
+install(PROGRAMS session/wayland95-services DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/wayland95)
+set(WAYLAND95_SERVICES_HELPER "${CMAKE_INSTALL_FULL_LIBEXECDIR}/wayland95/wayland95-services")
+configure_file(session/org.wayland95.services.policy.in ${CMAKE_BINARY_DIR}/org.wayland95.services.policy @ONLY)
+set(WAYLAND95_POLKIT_ACTIONS_DIR "/usr/share/polkit-1/actions" CACHE PATH "Where polkit looks for actions")
+install(FILES ${CMAKE_BINARY_DIR}/org.wayland95.services.policy DESTINATION ${WAYLAND95_POLKIT_ACTIONS_DIR})

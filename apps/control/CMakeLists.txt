@@ -26,6 +26,16 @@ qt_add_executable(win95control
     src/printers.cpp
     src/locales.h
     src/locales.cpp
+    src/services.h
+    src/services.cpp
+)
+
+# Services runs session/wayland95-services as root through pkexec: the
+# installed copy, or the one in the source tree before it's installed
+include(GNUInstallDirs)
+target_compile_definitions(win95control PRIVATE
+    WAYLAND95_SERVICES_HELPER="${CMAKE_INSTALL_FULL_LIBEXECDIR}/wayland95/wayland95-services"
+    WAYLAND95_SERVICES_HELPER_SRC="${CMAKE_SOURCE_DIR}/session/wayland95-services"
 )
 
 set_target_properties(win95control PROPERTIES
@@ -73,6 +83,11 @@ qt_add_qml_module(win95control
         PreviewBevel.qml
         PreviewTitle.qml
         ColorButton.qml
+        ServicesApplet.qml
+        SshSettings.qml
+        PostgresSettings.qml
+        PythonSettings.qml
+        NodeSettings.qml
     RESOURCE_PREFIX /qt/qml
 )
 

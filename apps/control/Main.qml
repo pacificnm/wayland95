@@ -47,6 +47,8 @@ Window {
           description: "Adds printers, and shows and changes what they're printing." },
         { id: "regional", name: "Regional Settings", file: "RegionalApplet.qml",
           description: "Changes how numbers, currency, times and dates are shown." },
+        { id: "services", name: "Services", file: "ServicesApplet.qml",
+          description: "Turns servers and programming languages on and off (SSH, PostgreSQL, Python, Node.js), and changes their settings." },
         { id: "sounds", name: "Sounds", file: "SoundsApplet.qml",
           description: "Changes the sounds played for desktop events." },
         { id: "system", name: "System", file: "SystemApplet.qml",

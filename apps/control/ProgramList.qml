@@ -95,7 +95,12 @@ Bevel {
                 x: 4
                 anchors.verticalCenter: parent.verticalCenter
                 checked: !!list.checked[row.modelData.key]
-                onToggled: (on) => list.checkToggled(row.modelData.key, on)
+                onToggled: (on) => {
+                    list.checkToggled(row.modelData.key, on);
+                    // back to showing `checked`, which the handler may have
+                    // left as it was (Services asks first)
+                    checked = Qt.binding(function () { return !!list.checked[row.modelData.key]; });
+                }
             }
 
             Item {

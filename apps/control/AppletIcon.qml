@@ -267,6 +267,80 @@ Canvas {
             rect(2, 3, 3, 21, "#a0a0a0"); // the bracket
             rect(15, 17, 13, 2, "#c0c0c0");
             break;
+        case "services":
+            // two rack servers, lights on, and a cable between them
+            for (var su = 0; su < 2; ++su) {
+                var sy = 4 + su * 12;
+                frame(3, sy, 26, 10, "#c0c0c0");
+                rect(4, sy + 1, 24, 1, "#ffffff");
+                frame(6, sy + 3, 12, 4, "#808080");
+                rect(21, sy + 4, 2, 2, "#00ff00");
+                rect(24, sy + 4, 2, 2, su === 0 ? "#ffff00" : "#00ff00");
+            }
+            rect(15, 26, 2, 4, "#000000");
+            rect(8, 29, 16, 2, "#000000");
+            break;
+        case "ssh":
+            // a terminal with a key in front of it
+            frame(1, 3, 26, 20, "#c0c0c0");
+            frame(3, 5, 22, 16, "#000000");
+            rect(5, 8, 2, 2, "#c0c0c0"); rect(7, 10, 2, 2, "#c0c0c0"); rect(5, 12, 2, 2, "#c0c0c0");
+            rect(11, 13, 6, 1, "#c0c0c0");
+            ctx.strokeStyle = "#000000";
+            ctx.fillStyle = "#ffd800";
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(23, 22, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            rect(22, 21, 2, 2, "#000000");
+            frame(14, 26, 10, 3, "#ffd800");
+            rect(15, 28, 2, 3, "#ffd800"); rect(19, 28, 2, 3, "#ffd800");
+            break;
+        case "postgresql":
+        case "database":
+            // a stack of disks: the usual database drum
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1;
+            for (var dz = 2; dz >= 0; --dz) {
+                var dy = 7 + dz * 7;
+                ctx.fillStyle = "#4a7fc0";
+                ctx.beginPath();
+                ctx.moveTo(5, dy); ctx.lineTo(5, dy + 7);
+                ctx.bezierCurveTo(5, dy + 11, 27, dy + 11, 27, dy + 7);
+                ctx.lineTo(27, dy);
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+            }
+            ctx.fillStyle = "#8fb8ff";
+            ctx.beginPath(); ctx.ellipse(5, 3, 22, 8); ctx.fill(); ctx.stroke();
+            if (kind === "postgresql") {
+                rect(20, 13, 2, 2, "#00ff00");
+                rect(20, 20, 2, 2, "#00ff00");
+            }
+            break;
+        case "python":
+            // a console with the interactive prompt
+            frame(2, 4, 28, 24, "#c0c0c0");
+            rect(3, 5, 26, 3, "#000080");
+            frame(4, 9, 24, 17, "#000000");
+            ctx.fillStyle = "#ffd800";
+            ctx.font = "bold 9px monospace";
+            ctx.fillText(">>>", 6, 18);
+            rect(6, 21, 10, 1, "#30c0ff");
+            break;
+        case "nodejs":
+            // a page of script: braces in a green tile
+            frame(4, 2, 22, 28, "#ffffff");
+            rect(19, 3, 6, 6, "#c0c0c0");
+            frame(7, 11, 18, 14, "#3c8c3c");
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 10px monospace";
+            ctx.fillText("{ }", 8, 21);
+            for (var nl = 0; nl < 3; ++nl)
+                rect(7, 4 + nl * 2, 10, 1, "#808080");
+            break;
+        case "folder":
+            frame(2, 9, 28, 19, "#ffff80");
+            frame(2, 6, 12, 5, "#ffff80");
+            rect(3, 10, 26, 1, "#ffffff");
+            break;
         case "system":
         default:
             monitor("#000080");

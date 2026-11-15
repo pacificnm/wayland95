@@ -505,6 +505,40 @@ up next to the compositor binary first, then on `$PATH`.
       and the list marks the ones they can't use yet. The live system has
       27 common ones. **Use for the whole computer...** makes a region the
       system's default through systemd-localed (it asks for a password).
+  - **Services:** servers and programming languages, each turned on and
+    off with a check box: **SSH Server**, **PostgreSQL**, **Python** and
+    **Node.js**. Checking one that isn't installed installs it first
+    (PackageKit), then starts it and has it start with the computer.
+    Unchecking a server stops it but keeps it, with its settings and data;
+    unchecking a language removes it. **Settings...** opens each one's own
+    property sheet:
+    - **SSH Server:** the port, whether passwords and keys may log on,
+      whether root may, which users may, and X11 forwarding. **Keys** edits
+      `~/.ssh/authorized_keys`; **Connecting** shows the `ssh` command for
+      each of the computer's addresses, and its host key fingerprints.
+    - **PostgreSQL:** this computer only or the network too, password
+      logons from other computers, the port and the connection limit.
+      **Databases** makes you a PostgreSQL account (optionally a
+      superuser), then lists, creates and deletes your databases, opens one
+      in `psql`, and sets the password used over the network.
+    - **Python:** which parts are installed (pip, venv, headers, Tkinter,
+      IDLE), and virtual environments in `~/.virtualenvs`: make or delete
+      one, install and remove its packages, or open a Terminal with it
+      active.
+    - **Node.js:** whether `npm install -g` goes to the system or to
+      `~/.npm-global` (no password needed; set in `~/.npmrc`, added to the
+      `PATH` in `~/.profile`), and the global packages, with Install and
+      Remove.
+    - **How it works:** changes to system files go through one small
+      script, [session/wayland95-services](session/wayland95-services),
+      run as root with `pkexec`. It only starts and stops `ssh` and
+      `postgresql`, writes `/etc/ssh/sshd_config.d/50-wayland95.conf`
+      (checked with `sshd -t` first, put back if it fails), PostgreSQL's
+      `conf.d/50-wayland95.conf` and a marked block in `pg_hba.conf`, and
+      creates your PostgreSQL account. It checks every value it's given.
+      The polkit action `org.wayland95.services` remembers the password
+      for a few minutes. Everything else runs as you
+      ([apps/control/src/services.cpp](apps/control/src/services.cpp)).
   - **Sounds:** a sound for each desktop event, with Browse, None and
     Preview, and two schemes: Wayland 95 Default (freedesktop sounds) and
     No Sounds. The events are start and exit, opening and closing programs,

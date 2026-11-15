@@ -17,7 +17,7 @@ qt6-wayland-dev-tools qml6-module-qtwayland-compositor qml6-module-qtquick
 qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-templates
 qml6-module-qtquick-layouts qml6-module-qtqml qml6-module-qt-labs-folderlistmodel
 qt6-qpa-plugins libxkbcommon-dev libvterm-dev libxcb1-dev libwayland-dev zlib1g-dev
-libfontconfig-dev pkg-config cmake build-essential xwayland"
+libfontconfig-dev pkg-config cmake build-essential xwayland pkexec"
 if command -v dpkg >/dev/null 2>&1; then
     missing=""
     for p in $NEEDED; do

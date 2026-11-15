@@ -1,0 +1,180 @@
+#!/bin/sh
+# wayland95-services: the few things the Services control panel needs root
+# for. win95control runs it through pkexec (polkit asks for the password;
+# org.wayland95.services.policy). It only does the jobs below, and checks
+# every value it is given; settings arrive as KEY=VALUE lines on stdin.
+#
+#   unit enable|disable|start|stop|restart ssh|postgresql
+#   ssh-config            < Port= PasswordAuthentication= PermitRootLogin= ...
+#   pg-config             < listen= port= max_connections= remote=
+#   pg-role NAME [superuser]
+set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+umask 022
+cd /
+
+die() { echo "$*" >&2; exit 1; }
+
+yesno() { case "$2" in yes|no) ;; *) die "$1 must be yes or no";; esac; }
+number() { # name value min max
+    case "$2" in ''|*[!0-9]*) die "$1 must be a number";; esac
+    [ "$2" -ge "$3" ] && [ "$2" -le "$4" ] || die "$1 must be between $3 and $4"
+}
+# writes stdin to FILE through a temporary file in the same folder
+put() {
+    tmp=$(mktemp "$1.XXXXXX")
+    cat >"$tmp"
+    chmod 644 "$tmp"
+    mv -f "$tmp" "$1"
+}
+
+ssh_units() {
+    # Debian starts sshd as ssh.service; Ubuntu through ssh.socket
+    for u in ssh.socket ssh.service; do
+        systemctl cat "$u" >/dev/null 2>&1 && echo "$u"
+    done
+    return 0
+}
+
+pg_cluster() { # newest cluster: "VERSION NAME PORT ..."
+    command -v pg_lsclusters >/dev/null || die "PostgreSQL isn't installed."
+    c=$(pg_lsclusters -h | sort -V | tail -n 1)
+    [ -n "$c" ] || die "PostgreSQL has no database cluster (see pg_createcluster)."
+    echo "$c"
+}
+
+cmd=${1:-}
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+unit)
+    [ $# -eq 2 ] || die "usage: unit ACTION SERVICE"
+    action=$1
+    case "$2" in
+        ssh) units=$(ssh_units) ;;
+        postgresql) units=postgresql.service ;;
+        *) die "Unknown service: $2" ;;
+    esac
+    [ -n "$units" ] || die "$2 isn't installed."
+    case "$action" in
+        enable)
+            if [ "$2" = ssh ] && systemctl is-enabled -q ssh.socket 2>/dev/null; then
+                systemctl start ssh.socket
+            else
+                systemctl enable --now "${units##* }"
+            fi ;;
+        disable) systemctl disable --now $units ;;
+        start) systemctl start "${units##* }" ;;
+        stop) systemctl stop $units ;;
+        restart) systemctl restart "${units##* }" ;;
+        *) die "Unknown action: $action" ;;
+    esac
+    ;;
+
+ssh-config)
+    # the drop-in comes before the rest of sshd_config (Include is at its
+    # top, and sshd takes the first value it reads), so these win
+    out="# Written by the Wayland 95 Services control panel; changes here are overwritten.
+"
+    while IFS='=' read -r key value; do
+        case "$key" in
+            '') continue ;;
+            Port) number Port "$value" 1 65535 ;;
+            PasswordAuthentication|PubkeyAuthentication|X11Forwarding) yesno "$key" "$value" ;;
+            PermitRootLogin)
+                case "$value" in no|prohibit-password|yes) ;; *) die "PermitRootLogin: no, prohibit-password or yes";; esac ;;
+            AllowUsers)
+                case "$value" in *[!A-Za-z0-9._@*?\ -]*) die "AllowUsers: user names separated by spaces";; esac
+                [ -n "$value" ] || continue ;;
+            *) die "Unknown SSH setting: $key" ;;
+        esac
+        out="$out$key $value
+"
+    done
+    conf=/etc/ssh/sshd_config.d/50-wayland95.conf
+    mkdir -p /etc/ssh/sshd_config.d /run/sshd
+    backup=""
+    if [ -e "$conf" ]; then
+        backup=$(mktemp "$conf.old.XXXXXX")
+        cp -p "$conf" "$backup"
+    fi
+    printf '%s' "$out" | put "$conf"
+    if ! check=$(sshd -t 2>&1); then
+        if [ -n "$backup" ]; then mv -f "$backup" "$conf"; else rm -f "$conf"; fi
+        die "SSH didn't accept these settings: $check"
+    fi
+    [ -z "$backup" ] || rm -f "$backup"
+    if systemctl is-active -q ssh.socket 2>/dev/null; then
+        # the socket's port comes from sshd_config (a generator)
+        systemctl daemon-reload
+        systemctl restart ssh.socket
+    elif systemctl is-active -q ssh.service 2>/dev/null; then
+        systemctl reload-or-restart ssh.service
+    fi
+    ;;
+
+pg-config)
+    listen=localhost port="" max="" remote=no
+    while IFS='=' read -r key value; do
+        case "$key" in
+            '') continue ;;
+            listen) case "$value" in localhost|all) listen=$value ;; *) die "listen: localhost or all";; esac ;;
+            port) number port "$value" 1 65535; port=$value ;;
+            max_connections) number max_connections "$value" 1 10000; max=$value ;;
+            remote) yesno remote "$value"; remote=$value ;;
+            *) die "Unknown PostgreSQL setting: $key" ;;
+        esac
+    done
+    cluster=$(pg_cluster)
+    set -- $cluster
+    dir=/etc/postgresql/$1/$2
+    [ -d "$dir" ] || die "No configuration folder for PostgreSQL $1 ($dir)."
+    mkdir -p "$dir/conf.d"
+    {
+        echo "# Written by the Wayland 95 Services control panel; changes here are overwritten."
+        echo "# wayland95: remote=$remote"
+        if [ "$listen" = all ]; then echo "listen_addresses = '*'"; else echo "listen_addresses = 'localhost'"; fi
+        [ -z "$port" ] || echo "port = $port"
+        [ -z "$max" ] || echo "max_connections = $max"
+    } | put "$dir/conf.d/50-wayland95.conf"
+    # other computers may log on with a password (pg_hba.conf)
+    hba=$dir/pg_hba.conf
+    if [ -f "$hba" ]; then
+        tmp=$(mktemp "$hba.XXXXXX")
+        sed '/^# BEGIN wayland95$/,/^# END wayland95$/d' "$hba" >"$tmp"
+        if [ "$remote" = yes ]; then
+            printf '%s\n' "# BEGIN wayland95" \
+                "host    all             all             0.0.0.0/0               scram-sha-256" \
+                "host    all             all             ::/0                    scram-sha-256" \
+                "# END wayland95" >>"$tmp"
+        fi
+        chown --reference="$hba" "$tmp"
+        chmod --reference="$hba" "$tmp"
+        mv -f "$tmp" "$hba"
+    fi
+    systemctl restart postgresql.service
+    ;;
+
+pg-role)
+    [ $# -ge 1 ] || die "usage: pg-role NAME [superuser]"
+    name=$1
+    case "$name" in ''|-*|*[!A-Za-z0-9._-]*) die "Not a usable account name: $name";; esac
+    [ ${#name} -le 63 ] || die "The name is too long."
+    super=no
+    [ "${2:-}" = superuser ] && super=yes
+    cluster=$(pg_cluster)
+    set -- $cluster
+    runuser -u postgres -- psql -X -q -p "$3" -d postgres -v ON_ERROR_STOP=1 -v role="$name" -v super="$super" <<'SQL'
+SELECT format('CREATE ROLE %I LOGIN CREATEDB', :'role')
+ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'role') \gexec
+SELECT format('ALTER ROLE %I SUPERUSER', :'role') WHERE :'super' = 'yes' \gexec
+SELECT format('CREATE DATABASE %I OWNER %I', :'role', :'role')
+ WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'role') \gexec
+SQL
+    ;;
+
+*)
+    die "usage: wayland95-services unit|ssh-config|pg-config|pg-role ..."
+    ;;
+esac

@@ -1,3 +1,9 @@
+wayland95 (0.1.1) trixie; urgency=medium
+
+  * Control Panel: Services (SSH Server, PostgreSQL, Python, Node.js).
+
+ -- Wayland 95 <wayland95@localhost>  Sun, 15 Nov 2026 18:39:38 -0500
+
 wayland95 (0.1.0) trixie; urgency=medium
 
   * First Debian package.

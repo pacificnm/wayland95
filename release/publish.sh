@@ -138,7 +138,8 @@ git commit -q -m "wayland95 $version"
 git push -q -u origin "$BRANCH"
 # GitHub Pages from that branch (once)
 if ! gh api "repos/$GH_REPO/pages" >/dev/null 2>&1; then
-    gh api -X POST "repos/$GH_REPO/pages" -f "source[branch]=$BRANCH" -f "source[path]=/" >/dev/null
+    # GitHub may already have turned it on for the new branch (HTTP 409)
+    gh api -X POST "repos/$GH_REPO/pages" -f "source[branch]=$BRANCH" -f "source[path]=/" >/dev/null 2>&1 || true
     echo "GitHub Pages is on; the first time it takes a few minutes to appear."
 fi
 

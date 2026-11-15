@@ -15,6 +15,7 @@
 #  4. pushes that to the gh-pages branch of github.com/pacificnm/wayland95,
 #     which GitHub Pages serves at https://pacificnm.github.io/wayland95
 #     (the branch holds only the built packages; the source stays on main)
+#  5. commits the changelog, tags the source vVERSION, and pushes both
 #
 # Signing uses the key from release/make-signing-key.sh.
 set -e
@@ -142,6 +143,15 @@ if ! gh api "repos/$GH_REPO/pages" >/dev/null 2>&1; then
     gh api -X POST "repos/$GH_REPO/pages" -f "source[branch]=$BRANCH" -f "source[path]=/" >/dev/null 2>&1 || true
     echo "GitHub Pages is on; the first time it takes a few minutes to appear."
 fi
+
+# the source it was built from: the changelog committed, tagged vVERSION
+say "Tagging v$version"
+cd "$REPO"
+if ! git diff --quiet -- debian/changelog; then
+    git commit -q -m "Release $version" -- debian/changelog
+fi
+git tag -a -f "v$version" -m "Wayland 95 $version" >/dev/null
+git push -q origin HEAD "v$version"
 
 say "Published Wayland 95 $version"
 echo "Repository: $URL"

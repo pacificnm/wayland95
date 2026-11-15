@@ -1,3 +1,9 @@
+wayland95 (0.1.2) trixie; urgency=medium
+
+  * Crash handling: problem reports, the desktop restarts after a crash, Control Panel > Problem Reports.
+
+ -- Wayland 95 <wayland95@localhost>  Sun, 15 Nov 2026 18:57:19 -0500
+
 wayland95 (0.1.1) trixie; urgency=medium
 
   * Control Panel: Services (SSH Server, PostgreSQL, Python, Node.js).

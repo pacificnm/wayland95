@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <time.h>
+#include <wlr/backend/session.h>
 #include <wlr/types/wlr_cursor_shape_v1.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_input_device.h>
@@ -12,6 +13,7 @@
 #include <wlr/types/wlr_keyboard_shortcuts_inhibit_v1.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_primary_selection.h>
+#include <wlr/types/wlr_session_lock_v1.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/util/log.h>
@@ -19,6 +21,7 @@
 #include <wlr/util/region.h>
 
 #include "server.h"
+#include "wayland95-shell-v1-protocol.h"
 
 static void activity(struct server *server)
 {
@@ -261,11 +264,29 @@ void input_key(struct server *server, struct keyboard *keyboard, uint32_t time, 
 		struct xkb_state *state = owned && keyboard->delivered ? keyboard->delivered : keyboard->wlr_keyboard->xkb_state;
 		int nsyms = xkb_state_key_get_syms(state, keycode + 8, &syms);
 		const uint32_t mods = modifier_mask(keyboard);
+		// Ctrl+Alt+F1..F12: another console (a text one, another desktop's
+		// login). Always: it's the way out when something is stuck.
+		for (int i = 0; i < nsyms; ++i) {
+			if (syms[i] >= XKB_KEY_XF86Switch_VT_1 && syms[i] <= XKB_KEY_XF86Switch_VT_12) {
+				unsigned vt = syms[i] - XKB_KEY_XF86Switch_VT_1 + 1;
+				if (server->session) {
+					wlr_log(WLR_INFO, "switching to console %u", vt);
+					wlr_session_change_vt(server->session, vt);
+				}
+				if (keycode < KEY_CNT)
+					swallowed[keycode] = true;
+				return;
+			}
+		}
 		// even over the lock screen or a dialog panel; not while a program
 		// asked for every key (a virtual machine's window)
 		uint32_t shell_key = 0;
 		for (int i = 0; i < nsyms && !shell_key; ++i)
 			shell_key = shell_key_for(syms[i], mods);
+		// locked: the volume, brightness and power keys still work; the
+		// Start menu, System Monitor and screen pictures don't
+		if (server->locked && shell_key >= WAYLAND95_SHELL_V1_KEY_PRINT)
+			shell_key = 0;
 		if (shell_key && keycode < KEY_CNT && !shortcuts_inhibited(server)
 				&& shell_send_key(server, shell_key, true)) {
 			shell_held[keycode] = shell_key;
@@ -458,6 +479,10 @@ static void new_constraint(struct wl_listener *listener, void *data)
 void input_focus_surface(struct server *server, struct wlr_surface *surface)
 {
 	struct wlr_seat *seat = server->seat;
+	// locked: the keyboard is the lock screen's, whatever else appears,
+	// goes away or asks (a panel that wants every key, an X11 menu)
+	if (server->locked && (!surface || !wlr_session_lock_surface_v1_try_from_wlr_surface(surface)))
+		return;
 	if (!surface) {
 		wlr_seat_keyboard_notify_clear_focus(seat);
 		constraint_deactivate(server);
@@ -477,10 +502,29 @@ void input_focus_surface(struct server *server, struct wlr_surface *surface)
 	constraint_activate_for(server, surface);
 }
 
+// the screen locks: whatever was going on with the keyboard and pointer
+// ends (a menu's grab would keep getting keys under the lock screen)
+void input_lock(struct server *server)
+{
+	switch_end(server, false);
+	server->keyboard_grab = false;
+	server->frame_press_view = NULL;
+	server->press_surface = NULL;
+	server->cursor_mode = CURSOR_PASSTHROUGH;
+	server->grabbed_view = NULL;
+	wlr_seat_pointer_end_grab(server->seat);
+	wlr_seat_keyboard_end_grab(server->seat);
+	wlr_seat_pointer_clear_focus(server->seat);
+	wlr_seat_keyboard_notify_clear_focus(server->seat);
+	constraint_deactivate(server);
+}
+
 // ------------------------------------------------------- cursor, pointer
 
 void input_reset_cursor_mode(struct server *server)
 {
+	if (server->grabbed_view && server->cursor_mode == CURSOR_RESIZE)
+		view_resize_flush(server->grabbed_view);
 	server->cursor_mode = CURSOR_PASSTHROUGH;
 	server->grabbed_view = NULL;
 }
@@ -522,7 +566,7 @@ static void process_resize(struct server *server)
 	// (toplevel_commit keeps the opposite edge still)
 	if (view->type == VIEW_XWAYLAND)
 		view_move(view, left, top);
-	view_resize(view, right - left, bottom - top);
+	view_resize_paced(view, right - left, bottom - top);
 }
 
 // pick the surface under the pointer and tell it where the pointer is

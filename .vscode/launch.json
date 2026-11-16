@@ -7,10 +7,9 @@
             "name": "Debug nested desktop",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/win95compositor",
-            "args": ["--wayland-socket-name", "win95-test"],
+            "program": "${workspaceFolder}/build/wayland95-compositor",
+            "args": ["--socket", "win95-test", "--run", "dbus-run-session -- ${workspaceFolder}/build/win95shell"],
             "cwd": "${workspaceFolder}",
-            "environment": [{ "name": "WAYLAND95_TRACE_INPUT", "value": "1" }],
             "MIMode": "gdb",
             "preLaunchTask": "Build",
             "setupCommands": [{ "text": "-enable-pretty-printing", "ignoreFailures": true }]

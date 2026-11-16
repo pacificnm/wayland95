@@ -44,7 +44,9 @@ ProblemReports::ProblemReports(QObject *parent)
 QString ProblemReports::displayName(const QString &program)
 {
     static const QHash<QString, QString> names {
-        { QStringLiteral("win95compositor"), QStringLiteral("Wayland 95 desktop") },
+        { QStringLiteral("wayland95-compositor"), QStringLiteral("Wayland 95 desktop") },
+        { QStringLiteral("win95shell"), QStringLiteral("Taskbar and desktop") },
+        { QStringLiteral("win95compositor"), QStringLiteral("Wayland 95 desktop (Qt)") },
         { QStringLiteral("win95files"), QStringLiteral("File Manager") },
         { QStringLiteral("win95notepad"), QStringLiteral("Notepad") },
         { QStringLiteral("win95control"), QStringLiteral("Control Panel") },

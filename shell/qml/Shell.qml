@@ -247,6 +247,11 @@ QtObject {
         }
     }
     function desktopKey(key) {
+        // behind the screen saver (and its lock) only the level and power
+        // keys act (the compositor doesn't send the others while locked)
+        if (shell.screenSaver.active && (key === DesktopKeys.Print || key === DesktopKeys.StartMenu
+                || key === DesktopKeys.TaskManager || key === DesktopKeys.Capture))
+            return;
         switch (key) {
         case DesktopKeys.BrightnessUp: levelOsd.changeBrightness(5); break;
         case DesktopKeys.BrightnessDown: levelOsd.changeBrightness(-5); break;

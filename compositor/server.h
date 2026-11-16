@@ -98,6 +98,7 @@ struct server {
 	struct wlr_scene_tree *layer_bottom;     // layer-shell bottom
 	struct wlr_scene_tree *layer_windows;    // windows, with their popups
 	struct wlr_scene_tree *layer_top;        // layer-shell top (the taskbar)
+	struct wlr_scene_tree *layer_fullscreen; // the full screen window, while it's in front (view.c)
 	struct wlr_scene_tree *layer_overlay;    // layer-shell overlay (notifications)
 	struct wlr_scene_tree *layer_unmanaged;  // X11 menus and tooltips
 	struct wlr_scene_tree *drag_icons;       // what's being dragged
@@ -252,7 +253,7 @@ struct view {
 	// the Win95 frame, when the program leaves decorations to us
 	bool ssd;
 	struct wlr_scene_tree *frame_tree;
-	struct wlr_scene_buffer *frame;
+	struct wlr_scene_buffer *frame[4]; // top (title bar), bottom, left, right
 	struct wlr_scene_rect *resize_zone;
 	int frame_w, frame_h; // the window size it was drawn for
 	bool frame_active;  // the window is the active one
@@ -264,6 +265,11 @@ struct view {
 	bool mapped, placed, minimized, maximized, fullscreen;
 	int x, y;           // layout position of the window geometry's corner
 	struct wlr_box saved; // size and place before maximize/fullscreen
+	// resizing with the mouse: the next size is sent when the program has
+	// drawn the last one asked for (not one per mouse movement)
+	uint32_t resize_serial;
+	bool resize_waiting;
+	int resize_w, resize_h;
 
 	struct wlr_foreign_toplevel_handle_v1 *ftl;
 	struct wlr_ext_foreign_toplevel_handle_v1 *ext_ftl;
@@ -301,7 +307,7 @@ struct layer_surface {
 struct popup {
 	struct server *server;
 	struct wlr_xdg_popup *xdg_popup;
-	struct wl_listener commit;
+	struct wl_listener commit, reposition;
 	struct wl_listener map, unmap;
 	struct wl_listener destroy;
 };
@@ -352,6 +358,7 @@ void view_frame_insets(struct view *view, int *left, int *top, int *right, int *
 void input_init(struct server *server);
 void input_reset_cursor_mode(struct server *server);
 void input_refresh_pointer(struct server *server); // re-pick the surface under the pointer
+void input_lock(struct server *server); // the screen locks: grabs, drags and focus end
 void input_focus_surface(struct server *server, struct wlr_surface *surface); // keyboard
 
 // view.c
@@ -362,6 +369,9 @@ struct wlr_surface *view_surface(struct view *view);
 void view_geometry(struct view *view, struct wlr_box *box); // size, and offset in the surface
 void view_move(struct view *view, int x, int y);
 void view_resize(struct view *view, int width, int height);
+void view_resize_paced(struct view *view, int width, int height); // while dragging an edge
+void view_resize_drawn(struct view *view);  // the program drew a size: send the next, if one waits
+void view_resize_flush(struct view *view);  // the drag ended: the last size now
 void view_focus(struct view *view);
 void view_close(struct view *view);
 void view_set_minimized(struct view *view, bool minimized);
@@ -384,6 +394,7 @@ void xwayland_init(struct server *server);
 // layers.c
 void layers_init(struct server *server);
 void layers_arrange(struct server *server);
+void layers_focus(struct server *server); // the keyboard to an exclusive panel, else the top window
 
 // protocols.c: everything else (idle, activation, lock, outputs, ...)
 void protocols_init(struct server *server);

@@ -77,6 +77,7 @@ static void toplevel_commit(struct wl_listener *listener, void *data)
 			view_move(view, nx, ny);
 	}
 	frame_update(view); // a new size, if it changed
+	view_resize_drawn(view);
 }
 
 static void toplevel_destroy(struct wl_listener *listener, void *data)
@@ -296,6 +297,13 @@ static void popup_commit(struct wl_listener *listener, void *data)
 	wlr_xdg_surface_schedule_configure(popup->xdg_popup->base);
 }
 
+// the program moved an open popup (a menu that grew): on the screen again
+static void popup_reposition(struct wl_listener *listener, void *data)
+{
+	struct popup *popup = wl_container_of(listener, popup, reposition);
+	popup_unconstrain(popup->server, popup->xdg_popup);
+}
+
 // A menu that grabs (keyboard navigation) gets the keyboard while it's
 // open: xdg-shell says the topmost grabbing popup always has keyboard focus,
 // as GNOME's and KDE's compositors do. wlroots routes keys during the grab
@@ -316,7 +324,7 @@ static void enter_keyboard(struct wlr_seat *seat, struct wlr_surface *surface)
 static void popup_map(struct wl_listener *listener, void *data)
 {
 	struct popup *popup = wl_container_of(listener, popup, map);
-	if (popup->xdg_popup->seat)
+	if (popup->xdg_popup->seat && !popup->server->locked)
 		enter_keyboard(popup->xdg_popup->seat, popup->xdg_popup->base->surface);
 	input_refresh_pointer(popup->server);
 }
@@ -326,7 +334,8 @@ static void popup_unmap(struct wl_listener *listener, void *data)
 	struct popup *popup = wl_container_of(listener, popup, unmap);
 	struct wlr_seat *seat = popup->server->seat;
 	// the keyboard back to what opened it (a parent menu, or the window)
-	if (seat->keyboard_state.focused_surface == popup->xdg_popup->base->surface && popup->xdg_popup->parent)
+	if (!popup->server->locked && seat->keyboard_state.focused_surface == popup->xdg_popup->base->surface
+			&& popup->xdg_popup->parent)
 		enter_keyboard(seat, popup->xdg_popup->parent);
 	input_refresh_pointer(popup->server);
 }
@@ -335,6 +344,7 @@ static void popup_destroy(struct wl_listener *listener, void *data)
 {
 	struct popup *popup = wl_container_of(listener, popup, destroy);
 	wl_list_remove(&popup->commit.link);
+	wl_list_remove(&popup->reposition.link);
 	wl_list_remove(&popup->map.link);
 	wl_list_remove(&popup->unmap.link);
 	wl_list_remove(&popup->destroy.link);
@@ -367,6 +377,8 @@ static void new_xdg_popup(struct wl_listener *listener, void *data)
 
 	popup->commit.notify = popup_commit;
 	wl_signal_add(&xdg_popup->base->surface->events.commit, &popup->commit);
+	popup->reposition.notify = popup_reposition;
+	wl_signal_add(&xdg_popup->events.reposition, &popup->reposition);
 	popup->map.notify = popup_map;
 	wl_signal_add(&xdg_popup->base->surface->events.map, &popup->map);
 	popup->unmap.notify = popup_unmap;

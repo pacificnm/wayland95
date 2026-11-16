@@ -8,7 +8,7 @@ qt_add_executable(win95terminal
     src/terminalitem.cpp
 )
 
-# Put the binary next to win95compositor so the compositor's Launcher finds
+# Put the binary next to win95shell so the shell's Launcher finds
 # it without needing an install step.
 set_target_properties(win95terminal PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}

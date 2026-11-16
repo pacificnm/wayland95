@@ -19,19 +19,7 @@
             "isBackground": true,
             "problemMatcher": {
                 "pattern": { "regexp": "^__never__$" },
-                "background": { "activesBegin": true, "beginsPattern": "Nested desktop on", "endsPattern": "clients connect with" }
-            },
-            "presentation": { "panel": "dedicated", "reveal": "always" }
-        },
-        {
-            "label": "Nested: new wlroots desktop",
-            "type": "shell",
-            "command": "tests/nested/run.sh new-desktop",
-            "dependsOn": "Build",
-            "isBackground": true,
-            "problemMatcher": {
-                "pattern": { "regexp": "^__never__$" },
-                "background": { "activesBegin": true, "beginsPattern": "Nested wlroots desktop on", "endsPattern": "WAYLAND_DISPLAY=" }
+                "background": { "activesBegin": true, "beginsPattern": "Nested desktop on", "endsPattern": "WAYLAND_DISPLAY=" }
             },
             "presentation": { "panel": "dedicated", "reveal": "always" }
         },

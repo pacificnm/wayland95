@@ -1,9 +1,11 @@
 // The Win95 window frame, for programs that leave decorations to the
 // desktop: a raised 3-pixel border, the title bar (gradient, bold title,
 // minimize/maximize/close buttons) and an invisible grab zone just outside
-// the border for resizing. Drawn with cairo and pango into one buffer in
-// the scene, behind the program's surfaces, and redrawn only when its size,
-// title, state or the colour scheme changes.
+// the border for resizing. Drawn with cairo and pango into four strips in
+// the scene (the top with the title bar, the bottom, left and right edges:
+// a picture the size of the window would be megabytes of nothing, redrawn
+// at every step of a resize), and redrawn only when its size, title, state
+// or the colour scheme changes.
 //
 // Layout, in frame coordinates (0,0 is the frame's outer corner; the
 // window's content starts at FRAME_BORDER, FRAME_TOP):
@@ -177,15 +179,12 @@ static void draw_button(cairo_t *cr, const struct settings *s, int fw, enum fram
 	draw_glyph(cr, s, part, maximized, b.x + off, b.y + off);
 }
 
-static void draw(struct view *view, cairo_t *cr, int fw, int fh, const char *title)
+// (in frame coordinates; each strip is drawn through its own window on them)
+static void draw(struct view *view, cairo_t *cr, int fw, int fh, const char *title, bool with_title)
 {
 	const struct settings *s = &view->server->settings;
 	bool active = view->frame_active;
 
-	// clear (the inside stays transparent: the program draws there)
-	cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
-	cairo_paint(cr);
-	cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 	cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
 
 	// the border: bevel, then the face ring inside it
@@ -202,6 +201,8 @@ static void draw(struct view *view, cairo_t *cr, int fw, int fh, const char *tit
 	fill(cr, s->face, 2, fh - 3, fw - 4, 1);                 // bottom
 	fill(cr, s->face, 2, 2, 1, fh - 4);                      // left
 	fill(cr, s->face, fw - 3, 2, 1, fh - 4);                 // right
+	if (!with_title)
+		return;
 
 	// the title bar: a gradient from left to right
 	int tx = FRAME_BORDER, ty = FRAME_BORDER, tw = fw - 2 * FRAME_BORDER, th = FRAME_TITLE;
@@ -247,16 +248,6 @@ static void draw(struct view *view, cairo_t *cr, int fw, int fh, const char *tit
 	}
 }
 
-// presses inside the frame's hole belong to whatever is behind it
-static bool frame_accepts_input(struct wlr_scene_buffer *buffer, double *sx, double *sy)
-{
-	if (!buffer->buffer)
-		return false;
-	int fw = buffer->buffer->width, fh = buffer->buffer->height;
-	bool inside = *sx >= FRAME_BORDER && *sx < fw - FRAME_BORDER && *sy >= FRAME_TOP && *sy < fh - FRAME_BORDER;
-	return !inside;
-}
-
 // ------------------------------------------------------------ create, update
 
 void frame_destroy(struct view *view)
@@ -264,7 +255,8 @@ void frame_destroy(struct view *view)
 	if (view->frame_tree)
 		wlr_scene_node_destroy(&view->frame_tree->node);
 	view->frame_tree = NULL;
-	view->frame = NULL;
+	for (int i = 0; i < 4; ++i)
+		view->frame[i] = NULL;
 	view->resize_zone = NULL;
 	free(view->frame_title);
 	view->frame_title = NULL;
@@ -288,8 +280,8 @@ void frame_update(struct view *view)
 		static const float clear[4] = {0, 0, 0, 0};
 		view->resize_zone = wlr_scene_rect_create(view->frame_tree, 1, 1, clear);
 		wlr_scene_node_set_position(&view->resize_zone->node, -FRAME_RESIZE_MARGIN, -FRAME_RESIZE_MARGIN);
-		view->frame = wlr_scene_buffer_create(view->frame_tree, NULL);
-		view->frame->point_accepts_input = frame_accepts_input;
+		for (int i = 0; i < 4; ++i)
+			view->frame[i] = wlr_scene_buffer_create(view->frame_tree, NULL);
 		view->frame_w = view->frame_h = 0;
 	}
 	wlr_scene_node_set_enabled(&view->frame_tree->node, !view->fullscreen);
@@ -308,6 +300,8 @@ void frame_update(struct view *view)
 			&& view->frame_title && strcmp(view->frame_title, title) == 0;
 	if (same)
 		return;
+	// (the edges only change with the size)
+	bool resized = geo.width != view->frame_w || geo.height != view->frame_h;
 	view->frame_w = geo.width;
 	view->frame_h = geo.height;
 	view->frame_drawn_active = view->frame_active;
@@ -322,21 +316,38 @@ void frame_update(struct view *view)
 	wlr_scene_node_set_enabled(&view->resize_zone->node, !view->maximized);
 	wlr_scene_rect_set_size(view->resize_zone, fw + 2 * FRAME_RESIZE_MARGIN, fh + 2 * FRAME_RESIZE_MARGIN);
 
-	struct frame_buffer *fb = calloc(1, sizeof(*fb));
-	fb->surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, fw, fh);
-	if (cairo_surface_status(fb->surface) != CAIRO_STATUS_SUCCESS) {
-		wlr_log(WLR_ERROR, "can't draw a %dx%d frame", fw, fh);
-		cairo_surface_destroy(fb->surface);
-		free(fb);
-		return;
+	// the strips: top (with the title bar), bottom, left, right
+	const struct wlr_box strips[4] = {
+		{0, 0, fw, FRAME_TOP},
+		{0, fh - FRAME_BORDER, fw, FRAME_BORDER},
+		{0, FRAME_TOP, FRAME_BORDER, fh - FRAME_TOP - FRAME_BORDER},
+		{fw - FRAME_BORDER, FRAME_TOP, FRAME_BORDER, fh - FRAME_TOP - FRAME_BORDER},
+	};
+	for (int i = 0; i < (resized ? 4 : 1); ++i) {
+		const struct wlr_box *b = &strips[i];
+		struct frame_buffer *fb = calloc(1, sizeof(*fb));
+		fb->surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, b->width, b->height);
+		if (cairo_surface_status(fb->surface) != CAIRO_STATUS_SUCCESS) {
+			wlr_log(WLR_ERROR, "can't draw a %dx%d frame", fw, fh);
+			cairo_surface_destroy(fb->surface);
+			free(fb);
+			return;
+		}
+		wlr_buffer_init(&fb->base, &fb_impl, b->width, b->height);
+		cairo_t *cr = cairo_create(fb->surface);
+		cairo_translate(cr, -b->x, -b->y);
+		draw(view, cr, fw, fh, title, i == 0);
+		cairo_destroy(cr);
+		cairo_surface_flush(fb->surface);
+		wlr_scene_node_set_position(&view->frame[i]->node, b->x, b->y);
+		wlr_scene_buffer_set_buffer(view->frame[i], &fb->base);
+		// every pixel of a strip is drawn: nothing behind it shows
+		pixman_region32_t opaque;
+		pixman_region32_init_rect(&opaque, 0, 0, b->width, b->height);
+		wlr_scene_buffer_set_opaque_region(view->frame[i], &opaque);
+		pixman_region32_fini(&opaque);
+		wlr_buffer_drop(&fb->base); // the scene holds it now
 	}
-	wlr_buffer_init(&fb->base, &fb_impl, fw, fh);
-	cairo_t *cr = cairo_create(fb->surface);
-	draw(view, cr, fw, fh, title);
-	cairo_destroy(cr);
-	cairo_surface_flush(fb->surface);
-	wlr_scene_buffer_set_buffer(view->frame, &fb->base);
-	wlr_buffer_drop(&fb->base); // the scene holds it now
 }
 
 void frame_set_pressed(struct view *view, enum frame_part part)

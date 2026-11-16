@@ -82,15 +82,23 @@ static void update_keyboard(struct server *server)
 	if (found == server->exclusive_layer)
 		return;
 	server->exclusive_layer = found;
-	if (found) {
-		input_focus_surface(server, found->layer_surface->surface);
-	} else {
-		struct view *top = view_top(server);
-		if (top)
-			view_focus(top);
-		else
-			input_focus_surface(server, NULL);
+	layers_focus(server);
+}
+
+// the keyboard to the panel that has it to itself, else the top window
+// (not while locked: input_focus_surface and view_focus see to that, and
+// unlocking calls this)
+void layers_focus(struct server *server)
+{
+	if (server->exclusive_layer) {
+		input_focus_surface(server, server->exclusive_layer->layer_surface->surface);
+		return;
 	}
+	struct view *top = view_top(server);
+	if (top)
+		view_focus(top);
+	else
+		input_focus_surface(server, NULL);
 }
 
 static void layer_map(struct wl_listener *listener, void *data)

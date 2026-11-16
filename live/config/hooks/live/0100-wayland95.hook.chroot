@@ -5,11 +5,8 @@ set -e
 
 modules=/etc/calamares/modules
 
-# Wayland 95 reads the keyboard and mouse itself, which needs the input
-# group (and render for the GPU): new accounts get both.
-if ! grep -q '^ *- input$' "$modules/users.conf"; then
-    sed -i 's/^defaultGroups:$/defaultGroups:\n    - input\n    - render/' "$modules/users.conf"
-fi
+# (New accounts need no extra groups: the screen, keyboard and mouse come
+# through the login session, libseat and logind.)
 
 # "Log in automatically" goes to the Wayland 95 session
 if ! grep -q '^defaultDesktopEnvironment:' "$modules/displaymanager.conf"; then

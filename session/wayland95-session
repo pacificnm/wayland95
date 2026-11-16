@@ -1,45 +1,46 @@
 #!/bin/sh
-# Runs the Wayland 95 compositor directly on the display hardware
-# (Qt's eglfs platform on DRM/KMS), with no other desktop underneath.
-# The login screen runs this for the "Wayland 95" session
-# (wayland95.desktop); it can also be run by hand from a text console.
+# Runs the Wayland 95 desktop on the display hardware: wayland95-compositor
+# (wlroots) on DRM/KMS, which starts the taskbar and desktop (win95shell)
+# and keeps it going. The login screen runs this for the "Wayland 95"
+# session (wayland95.desktop); it can also be run by hand from a text
+# console. The screen, keyboard and mouse come through the login session
+# (libseat and logind): no "input" group needed.
 #
 # Its output goes to ~/.wayland95-session.log; the four sessions before
 # are in .log.1 (the last one) to .log.4.
 #
-# If the compositor crashes, it's started again (your programs close, but
+# If the compositor crashes it's started again (your programs close, but
 # you stay logged in), and a problem report is left in
 # ~/.local/state/wayland95/crashes for Control Panel > Problem Reports.
-# Three crashes within two minutes and it gives up, back to the login screen.
+# Three crashes within two minutes and it gives up, back to the login
+# screen. (If only the taskbar crashes, the compositor restarts that
+# itself, and your programs stay.)
 LOG="$HOME/.wayland95-session.log"
 for n in 3 2 1; do
     [ -f "$LOG.$n" ] && mv -f "$LOG.$n" "$LOG.$((n + 1))"
 done
 [ -f "$LOG" ] && mv -f "$LOG" "$LOG.1"
 rm -f "$LOG.old" # the name before there were several
-# the compositor is installed next to this script
+# the compositor and shell are installed next to this script
 BIN=$(dirname "$(readlink -f "$0")")
 
-# Wayland 95 is the desktop here: it manages power (sleep, the lid,
-# turning the display off) itself
-export WAYLAND95_SESSION=1
 export XDG_SESSION_TYPE=wayland
 export XDG_CURRENT_DESKTOP=Wayland95
-export QT_QPA_PLATFORM=eglfs
-export QT_QPA_EGLFS_INTEGRATION=eglfs_kms
-export QT_QPA_EGLFS_ALWAYS_SET_MODE=1
-unset WAYLAND_DISPLAY DISPLAY
+export XDG_SESSION_DESKTOP=wayland95
+unset WAYLAND_DISPLAY DISPLAY WAYLAND_SOCKET
+# the Qt compositor's settings, if this was started from its session
+unset QT_QPA_PLATFORM QT_QPA_EGLFS_INTEGRATION QT_QPA_EGLFS_ALWAYS_SET_MODE QT_QPA_EGLFS_KMS_CONFIG WAYLAND95_SESSION
 
 # Pick the graphics card. The firmware framebuffer (simpledrm) shows up
 # first and is replaced once the real GPU driver loads, so give that a few
-# seconds; with "nomodeset" it's all there is, and Mesa renders in software.
+# seconds; with "nomodeset" it's all there is, and it's drawn in software.
+driver_of() { basename "$(readlink -f "/sys/class/drm/${1##*/}/device/driver")"; }
 pick_card() {
     first=""
     for c in /dev/dri/card*; do
         [ -e "$c" ] || continue
         [ -n "$first" ] || first="$c"
-        driver=$(basename "$(readlink -f "/sys/class/drm/${c##*/}/device/driver")")
-        if [ "$driver" != simple-framebuffer ]; then
+        if [ "$(driver_of "$c")" != simple-framebuffer ]; then
             echo "$c"
             return
         fi
@@ -47,47 +48,41 @@ pick_card() {
     echo "$first"
 }
 card=""
+driver=""
 for _ in 1 2 3 4 5 6 7 8 9 10; do
     card=$(pick_card)
-    case "$card" in
-        "") ;;
-        *) driver=$(basename "$(readlink -f "/sys/class/drm/${card##*/}/device/driver")")
-           [ "$driver" != simple-framebuffer ] && break
-           grep -qw nomodeset /proc/cmdline && break ;;
-    esac
+    if [ -n "$card" ]; then
+        driver=$(driver_of "$card")
+        [ "$driver" != simple-framebuffer ] && break
+        grep -qw nomodeset /proc/cmdline && break
+    fi
     sleep 1
 done
 if [ -z "$card" ]; then
     echo "wayland95-session: no graphics device found (/dev/dri/card*)" >&2
     exit 1
 fi
-
-config="${XDG_RUNTIME_DIR:-/tmp}/wayland95-kms.json"
-# the cursor is drawn by Qt, which works on every card (VMs often lack a
-# hardware cursor plane)
-printf '{ "device": "%s", "hwcursor": false }\n' "$card" > "$config"
-export QT_QPA_EGLFS_KMS_CONFIG="$config"
+# only that card (not the framebuffer it replaced)
+export WLR_DRM_DEVICES="$card"
+# simpledrm can't draw with the GPU
+[ "$driver" = simple-framebuffer ] && export WLR_RENDERER=pixman
 
 CRASHES="${XDG_STATE_HOME:-$HOME/.local/state}/wayland95/crashes"
 VERSION=$(dpkg-query -W -f '${Version}' wayland95 2>/dev/null || echo "installed from source")
 
-# Finishes the problem report for a compositor that died: the one its crash
-# handler wrote (crashhandler.cpp), or a new one when it couldn't (killed,
-# or an exit status). Adds the end of the log and what the computer is.
+# Writes the problem report for a compositor that died (killed, a crash or
+# an exit status), with the end of the log and what the computer is.
 report() { # pid status
     mkdir -p "$CRASHES"
-    file=$(ls -t "$CRASHES"/win95compositor-*-"$1".crash 2>/dev/null | head -n 1)
-    if [ -z "$file" ]; then
-        file="$CRASHES/win95compositor-$(date +%s)-$1.crash"
-        if [ "$2" -gt 128 ]; then
-            how="Signal: $(($2 - 128)) SIG$(kill -l $(($2 - 128)) 2>/dev/null)"
-            [ "$2" = 137 ] && how="$how (killed; out of memory?)"
-        else
-            how="Exit: status $2"
-        fi
-        printf 'Wayland 95 problem report\nProgram: win95compositor\nVersion: %s\nTime: %s\nPID: %s\n%s\n' \
-            "$VERSION" "$(date +%s)" "$1" "$how" > "$file"
+    file="$CRASHES/wayland95-compositor-$(date +%s)-$1.crash"
+    if [ "$2" -gt 128 ]; then
+        how="Signal: $(($2 - 128)) SIG$(kill -l $(($2 - 128)) 2>/dev/null)"
+        [ "$2" = 137 ] && how="$how (killed; out of memory?)"
+    else
+        how="Exit: status $2"
     fi
+    printf 'Wayland 95 problem report\nProgram: wayland95-compositor\nVersion: %s\nTime: %s\nPID: %s\n%s\n' \
+        "$VERSION" "$(date +%s)" "$1" "$how" > "$file"
     {
         printf '\n== System\n'
         printf 'Wayland 95: %s\n' "$VERSION"
@@ -95,7 +90,7 @@ report() { # pid status
         printf 'Kernel: %s\n' "$(uname -r)"
         printf 'Graphics: %s (%s)\n' "$card" "$driver"
         printf 'Memory: %s\n' "$(free -h 2>/dev/null | awk '/^Mem:/ { print $2 " total, " $7 " available" }')"
-        printf 'Qt: %s\n' "$(dpkg-query -W -f '${Version}' libqt6core6t64 2>/dev/null || dpkg-query -W -f '${Version}' libqt6core6 2>/dev/null)"
+        printf 'wlroots: %s\n' "$(dpkg-query -W -f '${Version}' libwlroots-0.18 2>/dev/null)"
         if command -v coredumpctl >/dev/null 2>&1; then
             sleep 2 # systemd-coredump needs a moment
             info=$(timeout 15 coredumpctl --no-pager info "$1" 2>/dev/null | sed -n '/Stack trace/,$p' | head -n 60)
@@ -112,10 +107,10 @@ stopping=""
 pid=""
 trap 'stopping=1; [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null' TERM HUP INT
 
-echo "wayland95-session: starting on $card ($(date))" > "$LOG"
+echo "wayland95-session: starting on $card ($driver) ($(date))" > "$LOG"
 recent=""
 while :; do
-    "$BIN/win95compositor" "$@" >> "$LOG" 2>&1 &
+    "$BIN/wayland95-compositor" --shell "$BIN/win95shell" --session "$@" >> "$LOG" 2>&1 &
     pid=$!
     # wait returns early when a signal comes in; wait again until it's gone
     wait "$pid"

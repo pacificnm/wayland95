@@ -877,6 +877,14 @@ suite_shell() {
     ! kill -0 "$PID_B" 2>/dev/null; expect_true $? "a button's menu: Close" "B still runs"
     ! query list | grep -q "^B|"; expect_true $? "and its button goes" "$(query list | tr '\n' ' ')"
 
+    # full screen (a video, a game): the whole screen, over the taskbar,
+    # no frame; another window made active comes in front with the taskbar
+    query fullscreen A; sleep 0.8; pointer move:900,400; shot fullscreen
+    [ "$(pixel fullscreen 640 790)" = cc0000 ] && [ "$(pixel fullscreen 640 3)" = cc0000 ] && [ "$(pixel fullscreen 3 400)" = cc0000 ]
+    expect_true $? "a full screen window covers the whole screen, the taskbar too" "taskbar $(pixel fullscreen 640 790), top $(pixel fullscreen 640 3), left $(pixel fullscreen 3 400)"
+    query unfullscreen A; sleep 0.8; away; shot unfullscreen
+    expect_pixel "leaving full screen: the taskbar is back" unfullscreen 640 790 c0c0c0
+
     # the Start menu
     pointer click:$START_X,$TASKBAR_Y wait:0.6; away; shot start
     expect_pixel "the Start button opens the Start menu" start 120 600 c0c0c0
@@ -1286,6 +1294,23 @@ suite_screensaver() {
     pointer key:Escape wait:0.6; shot cancelled
     saver_on cancelled && [ "$(pixel cancelled 480 460)" = 000000 ]
     expect_true $? "Escape: the password box goes, the screen saver (and the lock) stays" "$(pixel cancelled 480 460)"
+    # the desktop's own keys while locked: Ctrl+Esc must not open the Start
+    # menu behind the lock (it would take the keyboard: R, a command, Enter)
+    # (a path w95input can type: no capitals. What's typed goes to the
+    # lock screen's password box instead: a wrong password)
+    local escaped=/tmp/w95-lock-escaped-$$
+    rm -f "$escaped"
+    pointer key:ctrl+Escape wait:0.8 key:r wait:0.8 type:"touch $escaped" key:Return wait:3
+    pointer key:ctrl+shift+Escape wait:0.8
+    [ ! -e "$escaped" ] && ! grep -q 'Launcher: started.*\(touch\|win95sysmon\)' "$WORK/$SUITE-shell.log"
+    expect_true $? "locked: Ctrl+Esc (then R, a command) and Ctrl+Shift+Esc start nothing" "$(ls "$escaped" 2>&1 | tail -1); $(grep 'Launcher: started' "$WORK/$SUITE-shell.log" | tail -2)"
+    rm -f "$escaped"
+    # (back to the screen saver alone, whatever those keys left)
+    for _ in 1 2 3; do
+        shot lockkeys
+        [ "$(pixel lockkeys 480 460)" = c0c0c0 ] || break
+        pointer key:Escape wait:0.8
+    done
     pointer key:a wait:0.6 type:right-password key:Return wait:1; shot unlocked
     ! saver_on unlocked && grep -q "\] unlocked$" "$CLOG"
     expect_true $? "the right password unlocks it" "$(pixel unlocked 640 400): $(grep -i lock "$CLOG" | tail -1)"
@@ -1691,12 +1716,16 @@ suite_shellstart() {
 
     # the shell dies: it's started again, without the start-up's sound or autostart
     local sounds; sounds=$(grep -c "service-login" "$FAKE_LOG")
+    start_probe Kept qt cc0000 || return   # a window open across it
     kill -9 "$shell_pid"
     wait_shell_ready 2; expect_true $? "the shell dies: the compositor starts it again" "$(grep -i shell "$CLOG" | tail -3)"
     grep -q "win95shell: ready (the session's desktop) (started again)" "$WORK/$SUITE-shell.log"
     expect_true $? "(saying so: --restarted)" "$(grep ready "$WORK/$SUITE-shell.log")"
     away; shot restarted
     expect_pixel "(the taskbar is back)" restarted 640 790 c0c0c0
+    expect_pixel "(with a button for the window that stayed open)" restarted $(($(task_button 0) - 74)) 769 '!c0c0c0'
+    kill "$PID_Kept"; sleep 1; away; shot kept-closed
+    expect_pixel "the window closes after the shell came back: its button goes" kept-closed $(($(task_button 0) - 74)) 769 c0c0c0
     [ "$(grep -c "service-login" "$FAKE_LOG")" = "$sounds" ]; expect_true $? "(no start-up sound again)" "$(grep sound: "$FAKE_LOG")"
     [ "$(grep -c "Session: would tell systemd" "$WORK/$SUITE-shell.log")" = 1 ]; expect_true $? "(nor the session's start-up again)" "$(grep Session: "$WORK/$SUITE-shell.log")"
     pointer key:ctrl+Escape wait:0.7; away; shot start
@@ -1774,7 +1803,7 @@ screen_compare() { # SCENE: how much differs (percent of the picture, colours mo
 suite_screen() {
     say "screen: the new desktop against today's (scene by scene)"
     local OLD=$BUILD/win95compositor
-    [ -x "$OLD" ] || { bad "win95compositor" "not built"; return; }
+    [ -x "$OLD" ] || { bad "win95compositor" "not built (cmake -DWAYLAND95_QT_COMPOSITOR=ON)"; return; }
     [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
     # today's: the Qt compositor as a window, with the same stand-ins
     fresh 1400x900
@@ -1805,8 +1834,9 @@ suite_screen() {
     done
     # The frame is drawn anew (cairo, not QML), as Win95's: a bevel all
     # round and the title bar inside it, where today's has its title bar
-    # against the edge, a gap under it, and smaller button symbols. Same
-    # size and place; the rest is in the report until it's decided.
+    # against the edge, a gap under it, and smaller button symbols. The
+    # new look was chosen (2026-11-16); its pixels are checked by the
+    # frames suite, so here only the same size and place.
     pct=$(screen_compare window)
     [ "$(cut -d' ' -f1,2 "$WORK/screen-report/classic-window.box")" = "$(cut -d' ' -f1,2 "$WORK/screen-report/new-window.box")" ] \
         && awk -v p="$pct" 'BEGIN { exit !(p <= 3.5) }'
@@ -1822,7 +1852,7 @@ suite_screen() {
 suite_classic() {
     say "classic: the Qt compositor's desktop (shared QML)"
     local OLD=$BUILD/win95compositor
-    [ -x "$OLD" ] || { bad "win95compositor" "not built"; return; }
+    [ -x "$OLD" ] || { bad "win95compositor" "not built (cmake -DWAYLAND95_QT_COMPOSITOR=ON)"; return; }
     fresh 1400x900
     local home=$WORK/home-$SUITE inner=w95inner-$$
     mkdir -p "$home"

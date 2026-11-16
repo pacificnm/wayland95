@@ -113,27 +113,42 @@ taskbar), StickyKeys never holding a key.
 
 ## 2. Nested, on your screen (VS Code)
 
-`tests/nested/run.sh` (VS Code: Terminal > Run Task > "Nested: ...")
-runs the compositor as a window on your desktop, with the GPU, real
-`linux-dmabuf` buffers, your real mouse, wheel and touchpad, and opens
-programs inside it with throwaway profiles. This is where things are
-looked at and tried by hand, and where GPU-only problems show (black or
-torn windows, dmabuf formats). The input trace logs every press, release
-and wheel turn. `tests/nested/run.sh new-desktop` (VS Code task "Nested:
-new wlroots desktop") runs the wlroots compositor the same way, with the
-new shell (win95shell, on a D-Bus session of its own); inside the Qt
+`tests/nested/run.sh desktop` (VS Code: Terminal > Run Task > "Nested:
+desktop") runs the compositor as a window on your desktop, with the shell
+(win95shell, on a D-Bus session of its own), the GPU, real `linux-dmabuf`
+buffers, your real mouse, wheel and touchpad; the other "Nested: ..."
+tasks open programs inside it with throwaway profiles (Chromium and Firefox
+on a test page that logs every mouse event, VS Code, xterm, the Terminal).
+This is where things are looked at and tried by hand, and where GPU-only
+problems show (black or torn windows, dmabuf formats). Inside the old Qt
 compositor's session it nests through Xwayland, since that session can't
 give wlroots the GPU directly.
 
 ## 3. The real session, in a virtual machine
 
-`tests/vm/run.sh` boots the live ISO in QEMU (with a virtio GPU, so DRM/KMS
-and libseat are real), logs in to the Wayland 95 session, and checks it
-came up: the compositor and shell are running, a screenshot (QEMU's
-`screendump`) shows the desktop and taskbar, and the session log has no
-errors. Then it opens programs and repeats a short input check through the
-QEMU monitor's mouse and keyboard. This tests what the other levels can't:
-the login session, the session script, seat access, the installed package.
+`tests/vm/run.sh [--deb PACKAGE.deb] [ISO]` boots the live ISO in QEMU
+with no window (a virtio GPU, so DRM/KMS, logind and libseat are real, and
+software GL as on a machine without a GPU driver), lets it log in to the
+Wayland 95 session through SDDM, and checks the screen through QEMU's
+`screendump`, with QEMU's tablet and keyboard for input
+([tests/vm/check.py](../tests/vm/check.py)):
+
+- the desktop and taskbar come up on their own;
+- the Start menu opens by a click and by Ctrl+Esc, Escape closes it;
+- the desktop's Terminal icon opens a window with an active title bar and
+  a taskbar button;
+- the session is `wayland95-compositor` with `win95shell` (the Terminal
+  closes itself only if so: on today's image with the Qt compositor this
+  fails);
+- killing `win95shell` takes the taskbar away and the compositor brings it
+  back, with the Terminal still open; closing the Terminal then takes its
+  window and button off the screen.
+
+`--deb` installs a package in the live system first and logs in again: a
+new build checked without building an image (which needs root). The last
+check caught the screen keeping earlier frames with GL drawn by the CPU
+(fixed: pixman then); it fails again if `WLR_RENDERER=gles2` is forced.
+Screenshots go to `~/wayland95-build/vm`.
 
 ## 4. Your machines
 
@@ -143,6 +158,7 @@ automated tests before they're fixed, so they stay fixed.
 
 ## Release gate
 
-`release/publish.sh` refuses to publish unless `tests/run.sh` passed on the
-commit being published (it records the result), and `tests/vm/run.sh`
-passed for any change to the compositor, the shell or the session.
+Before publishing: `tests/run.sh` and `tests/selftest.sh` pass on the
+commit being published, and `tests/vm/run.sh` on an image built from it
+(or `--deb` with its package) for any change to the compositor, the shell
+or the session. (`release/publish.sh` doesn't enforce this yet.)

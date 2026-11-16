@@ -245,9 +245,9 @@ static void lock_unlock(struct wl_listener *listener, void *data)
 	lock_finish(server);
 	server->locked = false;
 	wlr_scene_node_set_enabled(&server->lock_cover->node, false);
-	struct view *top = view_top(server);
-	if (top)
-		view_focus(top);
+	wlr_seat_keyboard_notify_clear_focus(server->seat); // (the lock screen's)
+	// the keyboard back to a panel that has it to itself, or the top window
+	layers_focus(server);
 	input_refresh_pointer(server);
 	wlr_log(WLR_INFO, "unlocked");
 }
@@ -269,6 +269,7 @@ static void new_lock(struct wl_listener *listener, void *data)
 		return;
 	}
 	server->lock = lock;
+	input_lock(server); // (before it's locked: nothing else may focus after)
 	server->locked = true;
 	struct wlr_box all;
 	wlr_output_layout_get_box(server->output_layout, NULL, &all);
@@ -276,7 +277,6 @@ static void new_lock(struct wl_listener *listener, void *data)
 	wlr_scene_rect_set_size(server->lock_cover, all.width, all.height);
 	wlr_scene_node_set_enabled(&server->lock_cover->node, true);
 	wlr_scene_node_raise_to_top(&server->lock_cover->node);
-	input_focus_surface(server, NULL);
 	server->lock_new_surface.notify = lock_new_surface;
 	wl_signal_add(&lock->events.new_surface, &server->lock_new_surface);
 	server->lock_unlock.notify = lock_unlock;

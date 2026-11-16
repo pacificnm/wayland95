@@ -4,41 +4,36 @@ Wayland 95 (this repo: `win95-wayland`) is a Windows-95-styled Wayland
 desktop: a compositor with the Win95 taskbar, Start menu and window frames,
 plus its own File Manager, Notepad, Terminal, Control Panel and other apps.
 
-> **Moving to wlroots.** The compositor is being rebuilt on
-> [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots), the library
-> sway and labwc use, because Qt's compositor module lacks much of what
-> desktop programs need (the reasons: [docs/architecture.md](docs/architecture.md)).
-> The new design is two programs: `wayland95-compositor` (C, wlroots) and
-> `win95shell` (the Qt/QML taskbar, Start menu and desktop). Plan and
-> progress: [docs/migration.md](docs/migration.md); how it's tested:
-> [docs/testing.md](docs/testing.md). Until it's finished, the session runs
-> the Qt compositor this README describes, and keeps getting fixes.
-
-The current compositor is built with Qt 6's `QtWaylandCompositor` + QML for
-the compositor and chrome, and a small C++ backend (`WindowManager`) that
-owns the window list the taskbar renders from.
+The desktop is two programs: `wayland95-compositor`, the compositor, in C on
+[wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) (the library sway
+and labwc use), which draws the Win95 window frames; and `win95shell`, the
+taskbar, Start menu, desktop and the desktop's services, in Qt/QML, which the
+compositor starts and keeps going. The design is in
+[docs/architecture.md](docs/architecture.md), how it's tested in
+[docs/testing.md](docs/testing.md), and the move from the first, Qt-based
+compositor in [docs/migration.md](docs/migration.md).
 
 ## What's here
 
-- `src/windowmanager.{h,cpp}` - the single source of truth for "what windows
-  exist right now, in what order, which is active/minimized". A
-  `QAbstractListModel` exposed to QML as the `WindowManager` singleton.
-- `qml/Win95Shell/Main.qml` - the compositor root: a `WaylandCompositor` +
-  `WaylandOutput` hosting the desktop, and an `XdgShell` that wraps every
-  mapped client toplevel in a `WindowFrame`.
-- `qml/Win95Shell/WindowFrame.qml` - the Win95 chrome around one client
-  surface: title bar, minimize/maximize/close, drag-to-move, a basic
-  bottom-right resize handle, and registration with `WindowManager`.
-- `src/xwayland.{h,cpp}` - X11 support: runs Xwayland and is its window
-  manager (see "X11 programs" below). `qml/Win95Shell/XWindowFrame.qml` is
-  the Win95 frame for X11 windows, `XPopup.qml` shows their menus and
-  tooltips.
-- `qml/Win95Shell/Taskbar.qml`, `StartMenu.qml`, `StartButton.qml`,
-  `TaskButton.qml`, `Clock.qml` - the taskbar and Start menu, all driven off
-  the `WindowManager` model.
-- `qml/Win95Shell/Bevel.qml` - the reusable Canvas-drawn 3D border every
-  button/window/taskbar uses for the raised/sunken look.
-- `qml/Win95Shell/Theme.qml` - the color palette and metrics, as a singleton.
+- `compositor/` - `wayland95-compositor` (C, wlroots): windows, input,
+  Xwayland, the Win95 frames (cairo), Alt+Tab, the window menu,
+  accessibility (StickyKeys and the others) and the standard protocols.
+- `shell/` - `win95shell` (Qt): our layer-shell integration for Qt, the
+  window list (foreign-toplevel), the lock screen, screen capture, and the
+  link to the compositor (`protocols/wayland95/wayland95-shell-v1.xml`).
+- `qml/Win95Shell/` - the taskbar, Start menu, desktop icons, tray, dialogs,
+  notifications and the other QML the shell shows.
+- `src/` - the shell's services: launching programs, the Start menu's
+  programs, the polkit agent, NetworkManager passwords, the notification
+  server, the tray watcher, the update check. (The rest of `src/` is the
+  old Qt compositor, kept only for the tests that compare the two until
+  it's removed.)
+- `apps/` - the programs (File Manager, Notepad, Terminal, Control Panel,
+  System Monitor, Volume, the file dialogs portal, Disk Image Writer) and
+  `apps/common`, the shared Win95 controls.
+- `session/` - the login session (`wayland95-session`) and its files.
+- `tests/` - the automated tests: `tests/run.sh` (headless),
+  `tests/selftest.sh`, `tests/vm/run.sh` (the live image in a VM).
 
 Icons and the Start-menu logo are generic placeholder shapes, not Microsoft's
 actual artwork (that's copyrighted/trademarked) - swap in your own if you
@@ -47,33 +42,35 @@ to a generic bold sans-serif stand-in for "MS Sans Serif"/"Tahoma".
 
 ## Building
 
-Needs Qt 6.4+ with the WaylandCompositor module:
+Needs Qt 6.4+ and wlroots 0.18 (Debian 13 "trixie" has both):
 
 ```sh
 sudo apt-get install qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-wayland-dev \
-    qt6-wayland-dev-tools qml6-module-qtwayland-compositor \
+    qt6-wayland-dev-tools qt6-wayland-private-dev \
     qml6-module-qtquick qml6-module-qtquick-window \
     qml6-module-qtquick-controls qml6-module-qtquick-templates \
     qml6-module-qtquick-layouts qml6-module-qtqml \
     qml6-module-qt-labs-folderlistmodel \
-    libxkbcommon-dev libvterm-dev libxcb1-dev libwayland-dev zlib1g-dev libfontconfig-dev \
-    pkg-config cmake build-essential xwayland
+    libwlroots-0.18-dev libcairo2-dev libpango1.0-dev libdrm-dev libpixman-1-dev \
+    libinput-dev libxkbcommon-dev libvterm-dev libxcb1-dev libwayland-dev wayland-protocols \
+    zlib1g-dev libfontconfig-dev pkg-config cmake build-essential xwayland
 
 cmake -B build
 cmake --build build -j$(nproc)
 ```
 
-For the new wlroots compositor ([docs/migration.md](docs/migration.md)) and
-its tests, also:
+For the tests, also:
 
 ```sh
-sudo apt-get install libwlroots-0.18-dev libseat-dev libcairo2-dev libpango1.0-dev \
-    qt6-wayland-private-dev hwdata grim wlrctl wtype imagemagick
+sudo apt-get install hwdata grim wlrctl wtype imagemagick qemu-system-x86 ovmf
 tests/run.sh        # the automated tests (headless; docs/testing.md)
 tests/selftest.sh   # checks the tests catch deliberately broken builds
+tests/vm/run.sh     # the live image in a VM (docs/testing.md)
 ```
 
-Without wlroots the build skips `wayland95-compositor` and the test tools.
+Two of `tests/run.sh`'s suites compare the new desktop with the old Qt
+compositor's; that one is built only with `cmake -B build
+-DWAYLAND95_QT_COMPOSITOR=ON` (and `qml6-module-qtwayland-compositor`).
 
 ## Switching windows
 
@@ -176,10 +173,10 @@ it once it's locked. The password is your login password, checked by PAM's
 ## Programs
 
 Bundled apps live in `apps/<name>/`, each a standalone Wayland client built
-into `build/` next to `win95compositor`. The shell launches them through the
+into `build/` next to `win95shell`. The shell launches them through the
 `Launcher` singleton ([src/launcher.cpp](src/launcher.cpp)), which points the
 child's `WAYLAND_DISPLAY` at *this* compositor's socket. Programs are looked
-up next to the compositor binary first, then on `$PATH`.
+up next to the shell first, then on `$PATH`.
 
 - **Terminal** (`win95terminal`, [apps/terminal/](apps/terminal/)): open it
   from Start > Programs > Terminal or the desktop icon. It runs your `$SHELL`
@@ -614,12 +611,14 @@ To add a program to the Start menu, add an entry to `programs` in
   `addr2line -f -C -e /usr/bin/win95files 0x1e28e` (with the
   `wayland95-dbgsym` package for an installed copy).
 - **The desktop restarts:** if the compositor crashes, `wayland95-session`
-  starts it again, so you stay logged in (open programs do close). It adds
-  the end of the session log, system details (OS, kernel, graphics driver,
-  memory, Qt) and, with systemd-coredump, the core dump's stack trace to
-  the report. Three crashes within two minutes and it gives up and goes
-  back to the login screen. Logging out or shutting down never counts as a
-  crash.
+  starts it again, so you stay logged in (open programs do close), and
+  writes a problem report with the end of the session log, system details
+  (OS, kernel, graphics driver, memory, wlroots) and, with
+  systemd-coredump, the core dump's stack trace. Three crashes within two
+  minutes and it gives up and goes back to the login screen. Logging out or
+  shutting down never counts as a crash. If only the taskbar and desktop
+  (`win95shell`) go, the compositor starts them again a second later and
+  your programs stay open; five times within a minute and it stops trying.
 - **Telling you:** the desktop watches that folder. When a program crashes
   a notification says so, and after a restart it says the desktop
   restarted; clicking it opens Control Panel > Problem Reports.
@@ -629,51 +628,25 @@ To add a program to the Start menu, add an entry to `programs` in
 
 ## Other programs' windows
 
-Qt's Wayland compositor gets out of step with other programs (Chromium,
-Electron, GTK, Qt) in several places, and
-[src/inputfixes.cpp](src/inputfixes.cpp) works around them:
-
-- **Clicking in a popup** (a menu, a drop-down list, the address bar's
-  suggestions) gave the popup the keyboard. Qt then told the program its
-  window wasn't active any more, and Chromium closed the popup and dropped
-  the click. Popups and sub-surfaces now leave the keyboard with their
-  window, as other desktops do.
-- **A popup that closes on the press** (clicking a menu's edge, or the page
-  to dismiss a menu) took the release with it, and the program went on
-  believing the button was held: links and buttons then didn't respond.
-  The release is now sent to the program anyway.
-- **Popups were placed by their surface corner**, not their window
-  geometry, so menus with shadows appeared shifted by the shadow (24 by 12
-  pixels in Chromium). They're placed as xdg-shell says.
-- A window move or resize asked for just after the button went up is
-  ignored, and a drag and drop that starts just after it is cancelled
-  (Qt would otherwise hijack the next drag or keep the next release).
-- Sub-surfaces that existed before their window appeared are put where the
-  program placed them, not at its top left corner.
-- **The mouse wheel**: Qt offers the seat at protocol version 4, without
-  pointer frames, and Chromium-based programs (Chrome, VS Code, other
-  Electron apps) only scroll when a frame arrives. The desktop offers
-  version 5 and ends each group of pointer events with a frame
-  ([src/pointerframes.cpp](src/pointerframes.cpp)).
-
-Each of these is logged as an `input:` line in `~/.wayland95-session.log`.
-To log every press and release too (where, which window, and the position
-the program was sent), create `~/.config/wayland95/trace-input`; delete it
-to stop.
+The first compositor was built on Qt's compositor module, which got out of
+step with other programs (Chromium, Electron, GTK) in many places: popups
+taking the keyboard, lost button releases, misplaced menus, a mouse wheel
+Chromium ignored. wlroots does these as other desktops do, and
+`tests/run.sh` checks them with Chromium, Firefox, VS Code, GTK, Qt and
+xterm (the `input`, `popups`, `windows`, `x11` and `vscode` suites).
 
 ## X11 programs
 
 Programs that only speak X11 (xterm, older toolkits, a lot of games and
 proprietary software) run too, in the same Win95 frames and taskbar as
 everything else. At startup the compositor launches **Xwayland** in rootless
-mode as one of its own clients, and acts as its X11 window manager
-([src/xwayland.cpp](src/xwayland.cpp)): it watches X windows appear, pairs
-each with the Wayland surface Xwayland draws it on, and hands it to the
-shell. Xwayland picks a free display number itself (`:0` and `:1` are
-usually the host's), and the compositor prints it:
+mode, when the first X11 program connects, and acts as its X11 window
+manager ([compositor/xwayland.c](compositor/xwayland.c)). Xwayland picks a
+free display number itself (`:0` and `:1` are usually the host's), and the
+compositor prints it:
 
 ```
-win95compositor: X11 programs connect with DISPLAY=:2
+wayland95-compositor: WAYLAND_DISPLAY=wayland-1 DISPLAY=:2
 ```
 
 Programs started from the shell (Start menu, Run..., desktop icons, the
@@ -703,75 +676,28 @@ What the window manager handles:
   own title bar (`_NET_WM_MOVERESIZE`).
 - Splash screens appear unframed and stay out of the taskbar.
 
-Not supported yet:
-
-- **Copy and paste between X11 and Wayland programs.** It works between
-  two X11 programs, and between two Wayland programs, but not across.
-- Drag and drop between X11 and Wayland programs.
-- Resizing from a program's own window edges (use the frame's grip).
-- "Full screen" covers the window area but leaves the taskbar visible.
-
-Run `win95compositor --no-xwayland` to turn X11 support off. If Xwayland
-isn't installed (`sudo apt-get install xwayland`), the compositor prints a
-warning and runs without it. X11 programs then fail to start, rather than
-opening on the host desktop.
+Copy and paste and the primary selection work between X11 and Wayland
+programs (tested; drag and drop between them isn't yet). If Xwayland isn't installed (`sudo apt-get install xwayland`), X11
+programs fail to start, rather than opening on the host desktop.
 
 ## Running it nested (the way to develop and test this)
 
-(For the wlroots compositor, see [docs/testing.md](docs/testing.md); the
-same `tests/nested/run.sh` and VS Code tasks will run it.)
+**Do this, not the login session, while you're actively working on it.** A
+compositor bug in a login session means no desktop until you log in to
+another one; nested, a crash just closes a window.
 
-
-**Do this, not the login-session install, while you're actively working on
-it.** A compositor bug in a login session means no desktop at all until you
-drop to a TTY and fix it; nested, a crash just closes a window.
-
-You need a host Wayland (or X11) compositor to nest inside. On a normal
-Linux desktop with Wayland already running, you can usually just do:
+Inside a running Wayland or X11 desktop, `wayland95-compositor` opens as a
+window (wlroots picks the backend):
 
 ```sh
-./build/win95compositor
+./build/wayland95-compositor --socket win95-0 --run "dbus-run-session -- ./build/win95shell"
+WAYLAND_DISPLAY=win95-0 ./build/win95terminal     # in another terminal
 ```
 
-and it'll pop up as a window inside your existing session, because Qt
-connects its own window to whatever's in `$WAYLAND_DISPLAY`.
-
-For its *own* clients, the compositor opens a separate socket. At startup it
-tries `wayland-0`, `wayland-1`, ... in `$XDG_RUNTIME_DIR` and takes the
-first one that isn't already locked by another compositor, skipping the
-host's `$WAYLAND_DISPLAY`. It prints the name it picked to stderr:
-
-```
-win95compositor: clients connect with WAYLAND_DISPLAY=wayland-1
-```
-
-Point clients at that name and they'll show up inside the window with
-Win95 chrome:
-
-```sh
-# in another terminal, using the name from the line above
-WAYLAND_DISPLAY=wayland-1 weston-terminal
-```
-
-To use a fixed name instead (handy for scripts), pass it explicitly:
-
-```sh
-./build/win95compositor --wayland-socket-name win95-0
-WAYLAND_DISPLAY=win95-0 weston-terminal
-```
-
-(Why this matters: with no socket name set, Qt names the compositor's
-socket after `$WAYLAND_DISPLAY`. When you're nested, that's the host's own
-socket, and startup fails with `unable to lock lockfile
-/run/user/1000/wayland-0.lock, maybe another compositor is running`.)
-
-If you're on X11, or want a fully isolated test environment (what was used
-to validate this build), run a throwaway nested Weston first:
-
-```sh
-weston --backend=x11-backend.so --width=1280 --height=900 &
-WAYLAND_DISPLAY=weston-0 QT_QPA_PLATFORM=wayland ./build/win95compositor
-```
+`--run` starts the shell on a D-Bus session of its own, so it doesn't take
+over your desktop's notifications and tray. `--headless 1280x800` runs it
+with no screen at all (the automated tests). `tests/nested/run.sh desktop`
+does the above, with the VS Code tasks below.
 
 ## Testing with real programs (VS Code)
 
@@ -851,32 +777,31 @@ It installs anything missing (Debian/Ubuntu packages), builds an optimized
 copy and installs it under `/usr/local` (it asks for your password). Then
 **"Wayland 95"** is in the login screen's session list, next to your other
 desktops, which stay there. `./uninstall.sh` removes everything it
-installed.
+installed. (An old install's Qt compositor, `win95compositor`, is removed.)
 
 What's installed:
 
 - the programs, in `/usr/local/bin`;
 - `wayland95-session` ([session/wayland95-session](session/wayland95-session)),
-  which starts the compositor straight on the screen (Qt's eglfs on
-  DRM/KMS), starts it again if it crashes (see Crashes below), and logs to
-  `~/.wayland95-session.log` (the four sessions before in `.log.1` to
-  `.log.4`);
+  which picks the graphics card, starts `wayland95-compositor` on the screen
+  (DRM/KMS), which starts `win95shell`; it starts the compositor again if it
+  crashes (see Crashes above), and logs to `~/.wayland95-session.log` (the
+  four sessions before in `.log.1` to `.log.4`);
 - `share/wayland-sessions/wayland95.desktop`, the login screen's entry
   (SDDM and GDM read `/usr/local/share/wayland-sessions` too);
 - `win95portal` and `share/xdg-desktop-portal/wayland95-portals.conf`:
   programs that ask the desktop for a file dialog (VS Code, browsers,
   Flatpak apps, through xdg-desktop-portal) get Wayland 95's Open, Save As
   or Select Folder dialog, with their file types and, for Open, several
-  files at once (Ctrl+click, Shift+click). The rest of the portal (settings,
-  opening links) comes from KDE's backend. xdg-desktop-portal only finds
+  files at once (Ctrl+click, Shift+click). xdg-desktop-portal only finds
   backends in `/usr/share/xdg-desktop-portal/portals`, so `wayland95.portal`
   goes there (the one file outside `/usr/local`).
 
-**Keyboard and mouse:** on the real screen the compositor reads them
-itself, which needs your account in the `input` group. `install.sh` asks
-before adding you (it takes effect at your next login).
+**Screen, keyboard and mouse** come through the login session (libseat and
+logind): no `input` group needed. Without a real GPU (a VM without 3D,
+`nomodeset`) the compositor draws with the CPU (pixman).
 
-As the session (`WAYLAND95_SESSION` is set), the compositor also:
+As the session, the shell also:
 
 - tells D-Bus and systemd where the display is
   (`dbus-update-activation-environment`), so programs they start appear
@@ -884,7 +809,7 @@ As the session (`WAYLAND95_SESSION` is set), the compositor also:
 - starts your autostart programs (`~/.config/autostart`, and the system's
   in `/etc/xdg/autostart` unless they're only for another desktop);
 - is the password prompt (polkit agent), the notification server and the
-  screen saver, and handles power, the lid and the power keys.
+  screen saver and lock, and handles power, the lid and the power keys.
 
 **Trying it safely first:** press Ctrl+Alt+F3, log in on that text console
 and run `wayland95-session`. Start > Shut Down > *Exit Wayland 95* ends it,
@@ -898,14 +823,9 @@ VS Code) may ask you to unlock it, or keep them their own way.
 
 ## What's not here yet
 
-The move to wlroots ([docs/migration.md](docs/migration.md)) is the main
-work in progress; it brings what the Qt compositor can't offer: GPU buffer
-sharing (`linux-dmabuf`), current xdg-shell, popups kept on screen, middle-
-click paste, screen sharing, fractional scaling, touchpad gestures, input
-methods and a real lock screen. Beyond that:
-
-- Clipboard and drag-and-drop between X11 and Wayland programs
-- Per-edge resize (only bottom-right corner currently)
-- A real app launcher behind the Start menu's "Programs" entry
-- Window snapping, Alt-Tab style switching, multi-monitor handling
-- Persisted window positions/taskbar state across restarts
+- Input methods (ibus and the like, on-screen keyboards: text-input v3)
+- Explicit GPU sync (linux-drm-syncobj, mostly for NVIDIA)
+- Screen sharing (the portal's ScreenCast): the compositor has what
+  xdg-desktop-portal-wlr needs, but the session doesn't set that portal up
+  yet
+- Remembering window positions across sessions

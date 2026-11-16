@@ -5,10 +5,10 @@ A bootable ISO of Debian 13 (trixie) that starts straight into the Wayland
 It runs from a USB stick, DVD or VM under BIOS or UEFI, and "Install
 Wayland 95" in the Start menu puts it on a disk (Calamares).
 
-The image currently runs the Qt compositor. When the wlroots compositor is
-ready (phase 5 of [../docs/migration.md](../docs/migration.md)) the package
-list gains `libwlroots-0.18`, and `tests/vm/run.sh` boots this image in
-QEMU to check the session before any release.
+The desktop is `wayland95-compositor` (wlroots) with `win95shell`. In a VM
+without 3D (or with `nomodeset`) it draws with the CPU. `tests/vm/run.sh`
+boots the image in QEMU and checks the session (see
+[../docs/testing.md](../docs/testing.md)).
 
 ## Building
 
@@ -41,15 +41,15 @@ The first build downloads about 2 GB of packages; later builds reuse them
 
 - [auto/config](auto/config): live-build's settings: trixie with
   non-free firmware, hybrid ISO, the boot options. The live user is
-  `live` (password `live`), in the `input` group Wayland 95 needs.
+  `live` (password `live`).
 - [config/package-lists/wayland95.list.chroot](config/package-lists/wayland95.list.chroot):
   what's on it besides Debian's base system.
 - [config/includes.chroot/usr/lib/live/config/0086-wayland95](config/includes.chroot/usr/lib/live/config/0086-wayland95):
   logs the live user in to Wayland 95 at boot (through SDDM).
 - [config/hooks/live/0100-wayland95.hook.chroot](config/hooks/live/0100-wayland95.hook.chroot):
-  the installer's settings: new accounts get the `input` and `render`
-  groups, automatic login goes to Wayland 95, and it uses the Wayland 95
-  branding below.
+  the installer's settings: automatic login goes to Wayland 95, and it uses
+  the Wayland 95 branding below. (New accounts need no extra groups: the
+  screen, keyboard and mouse come through logind.)
 - [config/includes.chroot/etc/calamares/branding/wayland95/](config/includes.chroot/etc/calamares/branding/wayland95/):
   the installer in Wayland 95's look. `stylesheet.qss` gives every control
   Win95 bevels, `calamares-sidebar.qml` is the navy step list with a ► at

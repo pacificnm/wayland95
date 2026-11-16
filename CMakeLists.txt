@@ -11,13 +11,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Target Qt 6.4 (what Ubuntu 24.04 "noble" ships). Bump this if you build
 # against a newer Qt - qt_add_qml_module() gains the nicer TARGET-based
 # IMPORTS/DEPENDENCIES syntax (QTP0005) from 6.8 onward.
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick WaylandCompositor DBus)
-# QPlatformScreen::setPowerState: turning the display off (screensaver.cpp).
-# Qt 6.9+ wants the private module asked for; before that Gui provides it.
-find_package(Qt6 QUIET COMPONENTS GuiPrivate)
-if(NOT TARGET Qt6::GuiPrivate)
-    message(FATAL_ERROR "Qt's private Gui headers are needed (Debian/Ubuntu: qt6-base-private-dev)")
-endif()
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick DBus)
+find_package(PkgConfig REQUIRED)
 
 qt_standard_project_setup(REQUIRES 6.4)
 
@@ -36,6 +31,19 @@ add_compile_definitions(
 )
 # debian/changelog decides the version: rerun cmake when it changes
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/debian/changelog)
+
+# --- the old Qt compositor ----------------------------------------------------
+# Replaced by wayland95-compositor (wlroots) and win95shell. Built only for
+# the tests that compare the two (tests/run.sh's classic and screen
+# suites), and never installed; it goes in phase 6 (docs/migration.md).
+option(WAYLAND95_QT_COMPOSITOR "build the old Qt compositor (for the comparison tests)" OFF)
+if(WAYLAND95_QT_COMPOSITOR)
+# QPlatformScreen::setPowerState: turning the display off (screensaver.cpp).
+# Qt 6.9+ wants the private module asked for; before that Gui provides it.
+find_package(Qt6 QUIET COMPONENTS GuiPrivate)
+if(NOT TARGET Qt6::GuiPrivate)
+    message(FATAL_ERROR "Qt's private Gui headers are needed (Debian/Ubuntu: qt6-base-private-dev)")
+endif()
 
 qt_add_executable(win95compositor
     src/main.cpp
@@ -80,7 +88,6 @@ qt_add_executable(win95compositor
 )
 
 # X11 programs: we run Xwayland and are its window manager (src/xwayland.*)
-find_package(PkgConfig REQUIRED)
 pkg_check_modules(XWM REQUIRED IMPORTED_TARGET xcb wayland-server)
 
 # Touchpads: src/touchpad.cpp catches libinput_get_event(), which Qt's
@@ -90,7 +97,7 @@ pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
 set_target_properties(win95compositor PROPERTIES ENABLE_EXPORTS ON)
 
 # xdg-activation-v1 (Qt doesn't provide it for compositors)
-find_package(Qt6 REQUIRED COMPONENTS WaylandScannerTools)
+find_package(Qt6 REQUIRED COMPONENTS WaylandCompositor WaylandScannerTools)
 qt6_generate_wayland_protocol_server_sources(win95compositor PRIVATE_CODE
     FILES /usr/share/wayland-protocols/staging/xdg-activation/xdg-activation-v1.xml
 )
@@ -179,27 +186,18 @@ target_link_libraries(win95compositor PRIVATE
     win95uiplugin # shared Win95Ui controls (dialogs, buttons) from apps/common
 )
 
-install(TARGETS win95compositor RUNTIME DESTINATION bin)
+endif()
 
 # --- bundled programs --------------------------------------------------------
 # Each lives in apps/<name>/ as its own Wayland client executable, built into
-# the same output directory as win95compositor so the shell can launch it.
+# the same output directory as win95shell so its Launcher finds it.
 
-# the wlroots compositor (being built: docs/migration.md)
-# (built only when everything it needs is there, so the Qt session's build
-# never fails for its sake until it replaces it)
-pkg_check_modules(WLROOTS_FOUND_CHECK QUIET wlroots-0.18 cairo pangocairo libdrm libinput)
-if(WLROOTS_FOUND_CHECK_FOUND)
-    add_subdirectory(compositor)    # wayland95-compositor
-    add_subdirectory(tests/tools)   # w95input... (tests/run.sh)
-else()
-    message(STATUS "skipping wayland95-compositor: it needs libwlroots-0.18-dev libcairo2-dev libpango1.0-dev libdrm-dev libinput-dev")
-endif()
+# the compositor (wlroots, C) and the test tools (w95input...)
+add_subdirectory(compositor)    # wayland95-compositor
+add_subdirectory(tests/tools)   # w95input... (tests/run.sh; not installed)
 
 add_subdirectory(apps/common)   # Win95Ui shared QML controls
-if(WLROOTS_FOUND_CHECK_FOUND)
-    add_subdirectory(shell)     # win95shell, the desktop for wayland95-compositor
-endif()
+add_subdirectory(shell)         # win95shell: the taskbar, desktop and Start menu
 add_subdirectory(apps/files)    # win95files
 add_subdirectory(apps/notepad)  # win95notepad
 add_subdirectory(apps/control)  # win95control

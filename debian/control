@@ -10,6 +10,12 @@ Build-Depends: debhelper-compat (= 13),
                qt6-declarative-dev,
                qt6-wayland-dev,
                qt6-wayland-dev-tools,
+               qt6-wayland-private-dev,
+               libwlroots-0.18-dev,
+               libcairo2-dev,
+               libpango1.0-dev,
+               libdrm-dev,
+               libpixman-1-dev,
                wayland-protocols,
                libwayland-dev,
                libxkbcommon-dev,
@@ -28,7 +34,6 @@ Depends: ${shlibs:Depends},
          libqt6opengl6,
          qt6-qpa-plugins,
          qt6-wayland,
-         qml6-module-qtwayland-compositor,
          qml6-module-qtquick,
          qml6-module-qtquick-window,
          qml6-module-qtquick-controls,
@@ -63,6 +68,7 @@ Recommends: network-manager,
             udisks2
 Description: Windows 95-style Wayland desktop
  A complete desktop session in the style of Windows 95: a Wayland
- compositor with the taskbar, Start menu and window frames, plus its own
- File Manager, Notepad, Terminal, Control Panel, System Monitor and file
- dialogs for other programs. Log in to it as "Wayland 95".
+ compositor (wlroots) with Win95 window frames, a taskbar, Start menu and
+ desktop, plus its own File Manager, Notepad, Terminal, Control Panel,
+ System Monitor and file dialogs for other programs. Log in to it as
+ "Wayland 95".

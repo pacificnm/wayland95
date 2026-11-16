@@ -10,7 +10,7 @@
 // WAYLAND_DISPLAY pointed at our socket and is told to prefer Wayland, and
 // DISPLAY pointed at our own Xwayland for X11-only programs.
 //
-// Programs are looked up next to the win95compositor binary first (so the
+// Programs are looked up next to the win95shell binary first (so the
 // bundled apps in the build directory are found), then on $PATH.
 //
 // Exposed to QML as the singleton `Launcher`.

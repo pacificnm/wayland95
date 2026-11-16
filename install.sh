@@ -13,11 +13,13 @@ say() { printf '\n== %s\n' "$*"; }
 
 # --- what it needs to build and run (Debian/Ubuntu package names) ---------
 NEEDED="qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-wayland-dev
-qt6-wayland-dev-tools qml6-module-qtwayland-compositor qml6-module-qtquick
+qt6-wayland-dev-tools qt6-wayland-private-dev qml6-module-qtquick
 qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-templates
 qml6-module-qtquick-layouts qml6-module-qtqml qml6-module-qt-labs-folderlistmodel
-qt6-qpa-plugins libxkbcommon-dev libvterm-dev libxcb1-dev libwayland-dev zlib1g-dev
-libfontconfig-dev pkg-config cmake build-essential xwayland pkexec"
+qt6-qpa-plugins qt6-wayland libwlroots-0.18-dev libcairo2-dev libpango1.0-dev
+libdrm-dev libpixman-1-dev libinput-dev libxkbcommon-dev libvterm-dev libxcb1-dev
+libwayland-dev wayland-protocols zlib1g-dev libfontconfig-dev pkg-config cmake
+build-essential xwayland pkexec"
 if command -v dpkg >/dev/null 2>&1; then
     missing=""
     for p in $NEEDED; do
@@ -37,20 +39,11 @@ cmake --build build-release -j"$(nproc)"
 say "Installing to $PREFIX (asks for your password)"
 sudo cmake --install build-release
 
-# --- keyboard and mouse ------------------------------------------------------
-# On the real screen the compositor reads the keyboard and mouse itself
-# (Qt's libinput support), which needs the "input" group.
-if ! id -nG "$USER" | tr ' ' '\n' | grep -qx input; then
-    say "Keyboard and mouse access"
-    echo "Wayland 95 reads the keyboard and mouse directly, which needs your account"
-    echo "in the 'input' group. (Programs you run could then read input devices too.)"
-    printf "Add %s to the input group? [y/N] " "$USER"
-    read -r answer
-    case "$answer" in
-        [yY]*) sudo usermod -aG input "$USER"
-               echo "Done. It takes effect the next time you log in." ;;
-        *) echo "Skipped: without it, Wayland 95 starts but the keyboard and mouse won't work." ;;
-    esac
+# The old Qt compositor (wayland95-compositor replaced it; an older install.sh
+# put it here)
+if [ -e "$PREFIX/bin/win95compositor" ]; then
+    say "Removing the old Qt compositor"
+    sudo rm -f "$PREFIX/bin/win95compositor"
 fi
 
 say "Installed"
@@ -63,6 +56,7 @@ there and run:  wayland95-session
 (Start > Shut Down > "Exit Wayland 95" ends it; Ctrl+Alt+F1 or F2 gets
 you back to your usual desktop.)
 
-If it doesn't start, its log is ~/.wayland95-session.log.
+If it doesn't start, its log is ~/.wayland95-session.log (the session
+before is in .log.1).
 To remove it: ./uninstall.sh
 TXT

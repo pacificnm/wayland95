@@ -8,6 +8,8 @@
 // all (the automated tests, tests/run.sh). It prints the socket programs
 // connect to, as "wayland95-compositor: WAYLAND_DISPLAY=NAME", once ready.
 #define _POSIX_C_SOURCE 200809L
+#include <EGL/egl.h>
+#include <GLES2/gl2.h>
 #include <getopt.h>
 #include <signal.h>
 #include <stdio.h>
@@ -16,6 +18,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <wlr/backend/headless.h>
+#include <wlr/render/egl.h>
+#include <wlr/render/gles2.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_data_control_v1.h>
 #include <wlr/types/wlr_data_device.h>
@@ -32,6 +36,31 @@
 #include <wlr/xwayland.h>
 
 #include "server.h"
+
+// The GL the renderer got, when it's drawn by the CPU (Mesa's llvmpipe or
+// softpipe: a VM without 3D, "nomodeset", a GPU Mesa has no driver for);
+// NULL for a real GPU. On the screen, GL drawn that way isn't finished when
+// the frame is shown: parts of the screen showed an earlier frame (a
+// closed window's taskbar button, the pointer a step behind).
+static const char *software_gl(struct wlr_renderer *renderer)
+{
+	if (!wlr_renderer_is_gles2(renderer))
+		return NULL;
+	struct wlr_egl *egl = wlr_gles2_renderer_get_egl(renderer);
+	EGLDisplay display = wlr_egl_get_display(egl);
+	EGLContext previous = eglGetCurrentContext();
+	if (!eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, wlr_egl_get_context(egl)))
+		return NULL;
+	const char *name = (const char *)glGetString(GL_RENDERER);
+	static char found[128];
+	const char *result = NULL;
+	if (name && (strstr(name, "llvmpipe") || strstr(name, "softpipe") || strstr(name, "Software Rasterizer"))) {
+		snprintf(found, sizeof found, "%s", name);
+		result = found;
+	}
+	eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, previous);
+	return result;
+}
 
 static void usage(const char *argv0)
 {
@@ -136,6 +165,20 @@ int main(int argc, char *argv[])
 		wlr_log(WLR_ERROR, "no renderer");
 		return 1;
 	}
+	// no real GPU: draw with pixman (the CPU, finished before it's shown),
+	// unless WLR_RENDERER asked for something
+	const char *software = getenv("WLR_RENDERER") ? NULL : software_gl(server.renderer);
+	if (software) {
+		wlr_log(WLR_INFO, "GL is drawn by the CPU here (%s): drawing with pixman instead", software);
+		wlr_renderer_destroy(server.renderer);
+		setenv("WLR_RENDERER", "pixman", true);
+		server.renderer = wlr_renderer_autocreate(server.backend);
+		unsetenv("WLR_RENDERER"); // (not for the programs started from here)
+		if (!server.renderer) {
+			wlr_log(WLR_ERROR, "no renderer");
+			return 1;
+		}
+	}
 	// wl_shm, and linux-dmabuf when the renderer can import GPU buffers
 	wlr_renderer_init_wl_display(server.renderer, server.display);
 
@@ -164,6 +207,7 @@ int main(int argc, char *argv[])
 	server.layer_bottom = wlr_scene_tree_create(&server.scene->tree);
 	server.layer_windows = wlr_scene_tree_create(&server.scene->tree);
 	server.layer_top = wlr_scene_tree_create(&server.scene->tree);
+	server.layer_fullscreen = wlr_scene_tree_create(&server.scene->tree);
 	server.layer_overlay = wlr_scene_tree_create(&server.scene->tree);
 	server.layer_unmanaged = wlr_scene_tree_create(&server.scene->tree);
 	server.drag_icons = wlr_scene_tree_create(&server.scene->tree);

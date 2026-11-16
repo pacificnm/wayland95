@@ -2,7 +2,8 @@
 
 The design is in [architecture.md](architecture.md), the tests in
 [testing.md](testing.md). The Qt compositor stays the session until the
-new one has passed every gate; you're never without a working desktop.
+new one has passed every gate; you're never without a working desktop
+(on this machine KDE Plasma is the other login).
 
 Each phase ends with its gate: the listed tests pass (run, not assumed),
 and the results are recorded here.
@@ -13,9 +14,9 @@ and the results are recorded here.
 | 1 | Test harness with a first, minimal `wayland95-compositor` (headless backend, xdg-shell, plain windows): `grim` screenshots, virtual pointer/keyboard, `tests/run.sh`, test pages and test programs | the harness opens Chromium in it, clicks and scrolls, and checks both the page's event log and a screenshot; a deliberately broken build is caught | **done** (2026-11-16) |
 | 2 | `wayland95-compositor` core: outputs, input, xdg-shell, popups, Xwayland, all standard protocols; plain frames | input, popups, windows, X11, clipboard suites pass with Chromium, Firefox, VS Code, GTK, Qt, xterm | **done** (2026-11-16, see below) |
 | 3 | Win95 window frames (cairo/pango), move/resize/maximize/minimize, Alt+Tab keys, settings.ini | frames, alttab and settings suites (frame screenshots checked pixel by pixel); everything before still passes | **done** (2026-11-16, see below) |
-| 4 | `win95shell`: layer-shell integration for Qt, the existing QML moved over, foreign-toplevel taskbar, `wayland95-shell-v1`, services | shell suite; screen suite vs. reference images of today's desktop | done 2026-11-16 (frame look to decide) |
-| 5 | Session, package, ISO: session script, libseat, `.deb`, live image; "Wayland 95 (classic)" kept as a second session | VM boot test; full `tests/run.sh`; nested check by hand | not started |
-| 6 | Switch: the wlroots desktop becomes "Wayland 95"; publish; then remove the Qt compositor | a release with both sessions has been used on the Optiplex and this machine without regressions | not started |
+| 4 | `win95shell`: layer-shell integration for Qt, the existing QML moved over, foreign-toplevel taskbar, `wayland95-shell-v1`, services | shell suite; screen suite vs. reference images of today's desktop | **done** (2026-11-16, see below) |
+| 5 | Session, package, ISO: the session script on wlroots (libseat), the `.deb` and live image with only the wlroots desktop (decided 2026-11-16: no "classic" session; the Qt compositor isn't shipped) | VM boot test (`tests/vm/run.sh`); full `tests/run.sh`; nested check by hand | in progress (see below) |
+| 6 | Switch: install it on this machine (`install.sh`; KDE stays as the other login) and the Optiplex; publish; then remove the Qt compositor's code | used on the Optiplex and this machine without regressions | not started |
 
 ### Phase 4 in steps
 
@@ -289,7 +290,8 @@ keeps it going; the new desktop compared with today's.
   The window frame differs (2.7% of it): the new one is drawn as Win95's
   (a bevel all round, the title bar inside it, Win95's button symbols),
   today's has its title bar against the top and side edges with a gap
-  under it, and smaller symbols. Which one to keep is open.
+  under it, and smaller symbols. The new look is kept (decided
+  2026-11-16).
 - The test harness: everything a test started (programs, and what they
   and the shell started) now ends with it; before, hundreds of helpers
   were left running from earlier test runs (now cleaned up). A test shell
@@ -301,17 +303,20 @@ keeps it going; the new desktop compared with today's.
 
 ## What changes for users
 
-- Nothing until phase 5: the update channel keeps delivering the Qt
-  compositor (with its fixes).
-- Phase 5 adds "Wayland 95 (new)" to the login screen next to "Wayland 95";
-  phase 6 makes it the default and the old one goes away a release later.
+- Nothing until it's published (phase 6): the update channel keeps
+  delivering the Qt compositor until then.
+- Then "Wayland 95" in the login screen is the wlroots desktop; there's no
+  second, "classic" session (decided 2026-11-16). On this machine KDE
+  Plasma stays as the other login.
 - Settings, apps, the Control Panel and the update channel stay as they
   are. The `input` group isn't needed any more (libseat).
 
 ## Build dependencies added
 
 `libwlroots-0.18-dev`, `libseat-dev` (pulled in by it), `libcairo2-dev`,
-`libpango1.0-dev`, `libdrm-dev`, `libinput-dev`, `qt6-wayland-private-dev` (the shell's layer-shell
-integration), `wayland-protocols`, `hwdata`; for the tests `grim`, `wlrctl`
-and `wtype`. `debian/control`, `install.sh` and the build instructions in the
+`libpango1.0-dev`, `libdrm-dev`, `libpixman-1-dev`, `libinput-dev`,
+`qt6-wayland-private-dev` (the shell's layer-shell integration),
+`wayland-protocols`, `hwdata`; for the tests `grim`, `wlrctl`, `wtype`,
+`qemu-system-x86` and `ovmf`. `qml6-module-qtwayland-compositor` is no
+longer needed (only for the old compositor's comparison tests). `debian/control`, `install.sh` and the build instructions in the
 README are updated in the phase that first needs each.

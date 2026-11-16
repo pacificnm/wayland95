@@ -56,6 +56,47 @@ void view_resize(struct view *view, int width, int height)
 		wlr_xwayland_surface_configure(view->xsurface, view->x, view->y, width, height);
 }
 
+static bool resize_outstanding(struct view *view)
+{
+	// (serials only grow; the difference survives their wrapping round)
+	return view->resize_serial
+			&& (int32_t)(view->resize_serial - view->xdg_toplevel->base->current.configure_serial) > 0;
+}
+
+void view_resize_paced(struct view *view, int width, int height)
+{
+	if (width < 1 || height < 1)
+		return;
+	if (view->type != VIEW_XDG) {
+		view_resize(view, width, height);
+		return;
+	}
+	if (resize_outstanding(view)) {
+		view->resize_waiting = true;
+		view->resize_w = width;
+		view->resize_h = height;
+		return;
+	}
+	view->resize_waiting = false;
+	view->resize_serial = wlr_xdg_toplevel_set_size(view->xdg_toplevel, width, height);
+}
+
+void view_resize_drawn(struct view *view)
+{
+	if (view->type == VIEW_XDG && view->resize_waiting && !resize_outstanding(view)) {
+		view->resize_waiting = false;
+		view->resize_serial = wlr_xdg_toplevel_set_size(view->xdg_toplevel, view->resize_w, view->resize_h);
+	}
+}
+
+void view_resize_flush(struct view *view)
+{
+	if (view->type == VIEW_XDG && view->resize_waiting)
+		wlr_xdg_toplevel_set_size(view->xdg_toplevel, view->resize_w, view->resize_h);
+	view->resize_waiting = false;
+	view->resize_serial = 0;
+}
+
 void view_close(struct view *view)
 {
 	if (view->type == VIEW_XDG)
@@ -85,6 +126,22 @@ struct view *view_top(struct server *server)
 	return NULL;
 }
 
+// A full screen window covers the panels too (the taskbar) while it's the
+// one in front: it moves to a layer above them, and back among the windows
+// when another comes forward.
+static void fullscreen_restack(struct server *server)
+{
+	struct view *top = view_top(server), *view;
+	wl_list_for_each(view, &server->views, link) {
+		if (!view->scene_tree)
+			continue;
+		struct wlr_scene_tree *want = view->fullscreen && view == top
+				? server->layer_fullscreen : server->layer_windows;
+		if (view->scene_tree->node.parent != want)
+			wlr_scene_node_reparent(&view->scene_tree->node, want);
+	}
+}
+
 // ----------------------------------------------------------------- focus
 
 void view_focus(struct view *view)
@@ -102,9 +159,10 @@ void view_focus(struct view *view)
 		if (other != view && other->mapped)
 			set_activated(other, false);
 
-	wlr_scene_node_raise_to_top(&view->scene_tree->node);
 	wl_list_remove(&view->link);
 	wl_list_insert(&server->views, &view->link);
+	fullscreen_restack(server); // (before raising: one that leaves its layer lands on top)
+	wlr_scene_node_raise_to_top(&view->scene_tree->node);
 	if (view->type == VIEW_XWAYLAND)
 		wlr_xwayland_surface_restack(view->xsurface, NULL, XCB_STACK_MODE_ABOVE);
 	set_activated(view, true);
@@ -139,6 +197,7 @@ void view_set_minimized(struct view *view, bool minimized)
 				view->server->seat->keyboard_state.focused_surface == view_surface(view))
 			focus_next(view->server);
 	}
+	fullscreen_restack(view->server);
 	input_refresh_pointer(view->server);
 }
 
@@ -232,6 +291,8 @@ void view_set_fullscreen(struct view *view, bool fullscreen)
 	}
 	apply_state(view);
 	frame_update(view);
+	fullscreen_restack(view->server);
+	input_refresh_pointer(view->server);
 }
 
 // panels came or went: maximized windows follow the usable area
@@ -381,6 +442,8 @@ void view_mapped(struct view *view)
 void view_unmapped(struct view *view)
 {
 	struct server *server = view->server;
+	view->resize_waiting = false; // (nothing more to ask of a window that's going)
+	view->resize_serial = 0;
 	if (view == server->grabbed_view)
 		input_reset_cursor_mode(server);
 	view->mapped = false;

@@ -1,8 +1,7 @@
 # Wayland 95 architecture (wlroots)
 
-Status: **planned; being built** (see [migration.md](migration.md)). Until it
-replaces it, the Qt compositor described in the [README](../README.md) is
-what the session runs.
+Status: **built**; the session runs it (see [migration.md](migration.md)).
+It replaced a first compositor built on Qt's compositor module.
 
 ## Why the change
 
@@ -230,14 +229,21 @@ that, and the argument after it, for X11 session management). Without
 
 ## Sessions and packaging
 
-- The session script starts `wayland95-compositor`, which starts
-  `win95shell`. Seat access goes through libseat (logind under SDDM), so no
-  `input` group is needed any more.
-- The `.deb` depends on `libwlroots-0.18`; the ISO's package list gains it.
-  Nothing from KDE.
-- During the move, the Qt compositor stays installed as a second session,
-  "Wayland 95 (classic)", until the new one passes every test (see
-  [testing.md](testing.md)), then it's removed.
+- `wayland95-session` picks the graphics card (waiting a few seconds for
+  the real driver to replace the firmware framebuffer, simpledrm), sets
+  `WLR_DRM_DEVICES` to it, and runs `wayland95-compositor --shell win95shell
+  --session`; it restarts the compositor after a crash, with a problem
+  report, three times in two minutes at most. Seat access goes through
+  libseat (logind under SDDM), so no `input` group is needed.
+- Without a real GPU (Mesa's llvmpipe or softpipe: a VM without 3D,
+  `nomodeset`, a GPU Mesa has no driver for) the compositor draws with
+  pixman: GL drawn by the CPU wasn't finished when frames were shown, and
+  parts of the screen kept an earlier frame (found in the VM test).
+- The `.deb` depends on `libwlroots-0.18` and ships only the wlroots
+  desktop: there's one session, "Wayland 95". The Qt compositor isn't
+  built by default (`-DWAYLAND95_QT_COMPOSITOR=ON`, for the tests that
+  compare the two) and never installed; it's removed in phase 6.
+- Nothing from KDE.
 
 ## What stays the same
 

@@ -16,6 +16,6 @@ lb config noauto \
     --iso-application "Wayland 95" \
     --iso-volume "Wayland 95" \
     --iso-publisher "Wayland 95" \
-    --bootappend-live "boot=live components quiet splash hostname=wayland95 username=live user-fullname=Live user-default-groups=audio,cdrom,dip,floppy,video,render,input,plugdev,netdev,bluetooth,lpadmin,scanner,sudo" \
-    --bootappend-live-failsafe "boot=live components nomodeset nosplash hostname=wayland95 username=live user-fullname=Live user-default-groups=audio,cdrom,dip,floppy,video,render,input,plugdev,netdev,bluetooth,lpadmin,scanner,sudo" \
+    --bootappend-live "boot=live components quiet splash hostname=wayland95 username=live user-fullname=Live user-default-groups=audio,cdrom,dip,floppy,video,render,plugdev,netdev,bluetooth,lpadmin,scanner,sudo" \
+    --bootappend-live-failsafe "boot=live components nomodeset nosplash hostname=wayland95 username=live user-fullname=Live user-default-groups=audio,cdrom,dip,floppy,video,render,plugdev,netdev,bluetooth,lpadmin,scanner,sudo" \
     "${@}"

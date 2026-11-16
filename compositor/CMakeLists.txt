@@ -10,6 +10,8 @@ pkg_check_modules(CAIRO REQUIRED IMPORTED_TARGET cairo)
 pkg_check_modules(PANGOCAIRO REQUIRED IMPORTED_TARGET pangocairo)
 pkg_check_modules(DRM REQUIRED IMPORTED_TARGET libdrm)
 pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
+# asking GL which it is (main.c: no real GPU, draw with pixman)
+pkg_check_modules(EGL REQUIRED IMPORTED_TARGET egl glesv2)
 pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
 find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
 
@@ -50,7 +52,7 @@ set(SOURCES main.c output.c input.c view.c xdg.c xwayland.c layers.c protocols.c
     decoration.c settings.c shell.c accessibility.c server.h ${PROTOCOL_HEADERS}
     ${GEN}/wayland95-shell-v1-protocol.c ${GEN}/wlr-foreign-toplevel-management-unstable-v1-protocol.c)
 set(LIBS PkgConfig::WLROOTS PkgConfig::WL_SERVER PkgConfig::XKB PkgConfig::PIXMAN PkgConfig::XCB
-    PkgConfig::CAIRO PkgConfig::PANGOCAIRO PkgConfig::DRM PkgConfig::LIBINPUT m)
+    PkgConfig::CAIRO PkgConfig::PANGOCAIRO PkgConfig::DRM PkgConfig::LIBINPUT PkgConfig::EGL m)
 
 add_executable(wayland95-compositor ${SOURCES})
 set_target_properties(wayland95-compositor PROPERTIES

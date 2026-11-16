@@ -1,11 +1,10 @@
 #!/bin/bash
 # Test Wayland 95 with real programs, in a window on your own desktop.
 #
-#   tests/nested/run.sh desktop         start the nested desktop (stays running)
-#   tests/nested/run.sh new-desktop     the same with the new wlroots compositor
-#                                       and its shell, win95shell (docs/migration.md);
-#                                       same socket, so the
-#                                       commands below work with either
+#   tests/nested/run.sh desktop         start the nested desktop (stays running):
+#                                       wayland95-compositor and win95shell
+#   tests/nested/run.sh qt-desktop      the old Qt compositor instead (built only
+#                                       with cmake -DWAYLAND95_QT_COMPOSITOR=ON)
 #   tests/nested/run.sh chromium        open Chromium in it, on the test page
 #   tests/nested/run.sh firefox         Firefox (GTK, Wayland)
 #   tests/nested/run.sh vscode          VS Code (Electron)
@@ -43,30 +42,30 @@ inside() { # NAME COMMAND...
 }
 
 case "${1:-}" in
-desktop)
-    [ -x "$REPO/build/win95compositor" ] || { echo "Build first: cmake --build $REPO/build" >&2; exit 1; }
+desktop|new-desktop)
+    [ -x "$REPO/build/wayland95-compositor" ] || { echo "Build first: cmake --build $REPO/build" >&2; exit 1; }
     echo "Nested desktop on $SOCKET; log: $DIR/desktop.log"
     # the script becomes the compositor (stopping the task stops it), its
     # output shown and logged
     exec > >(tee "$DIR/desktop.log") 2>&1
-    exec env WAYLAND95_TRACE_INPUT=1 "$REPO/build/win95compositor" --wayland-socket-name "$SOCKET"
-    ;;
-new-desktop)
-    [ -x "$REPO/build/wayland95-compositor" ] || { echo "Build first: cmake --build $REPO/build" >&2; exit 1; }
-    echo "Nested wlroots desktop on $SOCKET; log: $DIR/desktop.log"
-    # Inside the Qt compositor's session, nest through its X11 server: that
-    # session has no GPU buffer sharing (linux-dmabuf) for wlroots to use,
-    # and through X11 it gets the GPU (DRI3). Elsewhere, the Wayland way.
-    exec > >(tee "$DIR/desktop.log") 2>&1
-    # with the new shell (taskbar, Start menu, desktop), on a D-Bus session
-    # of its own, so it doesn't fight your desktop over notifications and
-    # the tray
+    # with the shell (taskbar, Start menu, desktop), on a D-Bus session of
+    # its own, so it doesn't fight your desktop over notifications and the
+    # tray
     SHELL_ARGS=()
     [ -x "$REPO/build/win95shell" ] && SHELL_ARGS=(--run "dbus-run-session -- $REPO/build/win95shell")
-    if [ -n "${DISPLAY:-}" ] && [ "${XDG_CURRENT_DESKTOP:-}" = Wayland95 ]; then
+    # Inside the old Qt compositor's session, nest through its X11 server:
+    # it has no GPU buffer sharing (linux-dmabuf) for wlroots to use, and
+    # through X11 it gets the GPU (DRI3). Elsewhere, the Wayland way.
+    if [ -n "${DISPLAY:-}" ] && pidof win95compositor >/dev/null; then
         exec env -u WAYLAND_DISPLAY "$REPO/build/wayland95-compositor" --socket "$SOCKET" "${SHELL_ARGS[@]}"
     fi
     exec "$REPO/build/wayland95-compositor" --socket "$SOCKET" "${SHELL_ARGS[@]}"
+    ;;
+qt-desktop)
+    [ -x "$REPO/build/win95compositor" ] || { echo "Build it first: cmake -B build -DWAYLAND95_QT_COMPOSITOR=ON && cmake --build build" >&2; exit 1; }
+    echo "Nested Qt desktop on $SOCKET; log: $DIR/desktop.log"
+    exec > >(tee "$DIR/desktop.log") 2>&1
+    exec env WAYLAND95_TRACE_INPUT=1 "$REPO/build/win95compositor" --wayland-socket-name "$SOCKET"
     ;;
 chromium)
     inside chromium chromium --ozone-platform=wayland --user-data-dir="$DIR/chromium-profile" \

@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <wlr/backend/headless.h>
 #include <wlr/types/wlr_compositor.h>
@@ -28,6 +29,7 @@
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/util/log.h>
+#include <wlr/xwayland.h>
 
 #include "server.h"
 
@@ -68,8 +70,7 @@ int main(int argc, char *argv[])
 	}
 
 	wlr_log_init(debug ? WLR_DEBUG : WLR_INFO, NULL);
-	// programs started with --run are reaped automatically
-	signal(SIGCHLD, SIG_IGN);
+	// (SIGCHLD stays default: wlroots waits for Xwayland's start-up fork)
 
 	struct server server = {0};
 	server.display = wl_display_create();
@@ -102,7 +103,7 @@ int main(int argc, char *argv[])
 	}
 
 	// the core and buffer protocols
-	wlr_compositor_create(server.display, 6, server.renderer);
+	server.compositor = wlr_compositor_create(server.display, 6, server.renderer);
 	wlr_subcompositor_create(server.display);
 	wlr_data_device_manager_create(server.display);
 	wlr_primary_selection_v1_device_manager_create(server.display);
@@ -115,17 +116,31 @@ int main(int argc, char *argv[])
 	server.output_layout = wlr_output_layout_create(server.display);
 	server.scene = wlr_scene_create();
 	server.scene_layout = wlr_scene_attach_output_layout(server.scene, server.output_layout);
+	// bottom to top (server.h)
+	server.layer_background = wlr_scene_tree_create(&server.scene->tree);
+	server.layer_bottom = wlr_scene_tree_create(&server.scene->tree);
 	server.layer_windows = wlr_scene_tree_create(&server.scene->tree);
-	server.layer_popups = wlr_scene_tree_create(&server.scene->tree);
+	server.layer_top = wlr_scene_tree_create(&server.scene->tree);
+	server.layer_overlay = wlr_scene_tree_create(&server.scene->tree);
+	server.layer_unmanaged = wlr_scene_tree_create(&server.scene->tree);
+	server.drag_icons = wlr_scene_tree_create(&server.scene->tree);
+	server.layer_lock = wlr_scene_tree_create(&server.scene->tree);
 
 	// screenshots and screen recording (grim, the tests, screen sharing)
 	wlr_screencopy_manager_v1_create(server.display);
 	wlr_export_dmabuf_manager_v1_create(server.display);
 	wlr_xdg_output_manager_v1_create(server.display, server.output_layout);
 
+	// the window list for other programs (the taskbar)
+	server.foreign_toplevels = wlr_foreign_toplevel_manager_v1_create(server.display);
+	server.ext_toplevels = wlr_ext_foreign_toplevel_list_v1_create(server.display, 1);
+
 	output_init(&server);
 	xdg_init(&server);
+	layers_init(&server);
 	input_init(&server);
+	protocols_init(&server);
+	xwayland_init(&server);
 
 	if (headless_w > 0)
 		wlr_headless_add_output(server.backend, headless_w, headless_h);
@@ -151,17 +166,29 @@ int main(int argc, char *argv[])
 	}
 
 	setenv("WAYLAND_DISPLAY", socket, true);
-	unsetenv("DISPLAY"); // X11 programs get Xwayland's (phase 2)
-	fprintf(stderr, "wayland95-compositor: WAYLAND_DISPLAY=%s\n", socket);
+	// DISPLAY is Xwayland's (xwayland.c), started when an X11 program connects
+	fprintf(stderr, "wayland95-compositor: WAYLAND_DISPLAY=%s DISPLAY=%s\n", socket,
+			getenv("DISPLAY") ? getenv("DISPLAY") : "");
 	fflush(stderr);
 
-	if (run && fork() == 0) {
-		execl("/bin/sh", "/bin/sh", "-c", run, (char *)NULL);
-		_exit(127);
+	if (run) {
+		// double fork: the program belongs to init, so it leaves no zombie
+		pid_t child = fork();
+		if (child == 0) {
+			if (fork() == 0) {
+				execl("/bin/sh", "/bin/sh", "-c", run, (char *)NULL);
+				_exit(127);
+			}
+			_exit(0);
+		}
+		if (child > 0)
+			waitpid(child, NULL, 0);
 	}
 
 	wl_display_run(server.display);
 
+	if (server.xwayland)
+		wlr_xwayland_destroy(server.xwayland);
 	wl_display_destroy_clients(server.display);
 	wlr_scene_node_destroy(&server.scene->tree.node);
 	wlr_xcursor_manager_destroy(server.cursor_mgr);

@@ -17,14 +17,17 @@ check() { # NAME COMPOSITOR MUST-FAIL-REGEX (empty: everything must pass)
         [ -z "$failed" ] && { echo "PASS  $1: every check passed"; ok=$((ok+1)); return; }
         echo "FAIL  $1: these failed:"; echo "$failed" | sed 's/^/      /'; bad=$((bad+1)); return
     fi
-    if echo "$failed" | grep -qE "$3" && ! echo "$failed" | grep -vqE "$3"; then
-        echo "PASS  $1: caught by"; echo "$failed" | sed 's/^/      /'; ok=$((ok+1))
+    # the break must be caught by the checks meant for it (others may fail
+    # too: a missing pointer frame stops whole programs reacting)
+    if echo "$failed" | grep -qE "$3"; then
+        echo "PASS  $1: caught by $(echo "$failed" | grep -cE '.') failed checks, including:"
+        echo "$failed" | grep -E "$3" | sed 's/^/      /'; ok=$((ok+1))
     else
-        echo "FAIL  $1: expected only /$3/ to fail, failed:"; echo "${failed:-(nothing)}" | sed 's/^/      /'; bad=$((bad+1))
+        echo "FAIL  $1: expected /$3/ among the failures, failed:"; echo "${failed:-(nothing)}" | sed 's/^/      /'; bad=$((bad+1))
     fi
 }
 check "the real build" "$BUILD/wayland95-compositor" ""
-check "broken: no pointer frames" "$BUILD/tests/wayland95-compositor-broken-frames" "wheel"
-check "broken: no keyboard focus" "$BUILD/tests/wayland95-compositor-broken-focus" "typing"
+check "broken: no pointer frames" "$BUILD/tests/wayland95-compositor-broken-frames" "\[input\] wheel down scrolls"
+check "broken: no keyboard focus" "$BUILD/tests/wayland95-compositor-broken-focus" "\[windows\] keys go to the active window|\[qt\] typing"
 echo "== $ok passed, $bad failed"
 [ "$bad" -eq 0 ]

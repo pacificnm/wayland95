@@ -1,28 +1,45 @@
-// w95input: drives the pointer of a wlroots compositor for the tests, through
-// the virtual-pointer protocol (the same path as a real mouse inside the
-// compositor). Keyboard input is wtype's job.
+// w95input: drives the pointer and keyboard of a wlroots compositor for the
+// tests, through the virtual-pointer and virtual-keyboard protocols (the same
+// path as a real mouse and keyboard inside the compositor). Keys use the
+// standard keymap with real keycodes and timestamps, like a physical
+// keyboard (wtype sends its own keymap with every key, and time 0).
 //
 //   w95input ACTION...
 //
-//   move:X,Y            move to X,Y (layout pixels)
+//   move:X,Y            move to X,Y (layout pixels; the pixel's centre, so
+//                       programs that round down get exactly X,Y)
 //   down:BUTTON         press left, right or middle
 //   up:BUTTON           release it
 //   click:X,Y[,BUTTON]  move there, press, release (default left)
 //   wheel:N             turn the wheel N notches (negative: up, positive: down)
+//   key:NAME[+NAME...]  press and release keys (xkb names: Down, Return, a,
+//                       ctrl+c, alt+Tab...); modifiers held while the last goes
+//   keydown:NAME        (and keyup:NAME) hold or release one key
+//   type:TEXT           type lowercase letters, digits and spaces
 //   wait:SECONDS        pause (default after every action: 0.05 s)
 //
 // e.g. w95input click:200,300 wait:0.5 move:250,320 wheel:3
-#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE // memfd_create
 #include <linux/input-event-codes.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <wayland-client.h>
+#include <xkbcommon/xkbcommon.h>
 
+#include "virtual-keyboard-unstable-v1-client-protocol.h"
 #include "wlr-virtual-pointer-unstable-v1-client-protocol.h"
 
+static uint32_t now_ms(void);
 static struct zwlr_virtual_pointer_manager_v1 *manager;
+static struct zwp_virtual_keyboard_manager_v1 *kb_manager;
+static struct zwp_virtual_keyboard_v1 *kb;
+static struct xkb_keymap *keymap;
+static struct xkb_state *kb_state;
 static struct wl_seat *seat;
 static struct wl_output *output;
 static int out_w, out_h;
@@ -46,6 +63,8 @@ static void global(void *data, struct wl_registry *registry, uint32_t name, cons
 {
 	if (strcmp(interface, zwlr_virtual_pointer_manager_v1_interface.name) == 0)
 		manager = wl_registry_bind(registry, name, &zwlr_virtual_pointer_manager_v1_interface, version < 2 ? version : 2);
+	else if (strcmp(interface, zwp_virtual_keyboard_manager_v1_interface.name) == 0)
+		kb_manager = wl_registry_bind(registry, name, &zwp_virtual_keyboard_manager_v1_interface, 1);
 	else if (strcmp(interface, wl_seat_interface.name) == 0 && !seat)
 		seat = wl_registry_bind(registry, name, &wl_seat_interface, 1);
 	else if (strcmp(interface, wl_output_interface.name) == 0 && !output) {
@@ -67,6 +86,70 @@ static void pause_s(double s)
 {
 	struct timespec ts = { (time_t)s, (long)((s - (time_t)s) * 1e9) };
 	nanosleep(&ts, NULL);
+}
+
+// the keyboard, created the first time a key is used: the default keymap
+// (the compositor's), sent once
+static bool keyboard_ready(struct wl_display *display)
+{
+	if (kb)
+		return true;
+	if (!kb_manager || !seat) {
+		fprintf(stderr, "w95input: the compositor has no virtual keyboard\n");
+		return false;
+	}
+	struct xkb_context *ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+	keymap = xkb_keymap_new_from_names(ctx, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
+	kb_state = xkb_state_new(keymap);
+	char *text = xkb_keymap_get_as_string(keymap, XKB_KEYMAP_FORMAT_TEXT_V1);
+	size_t size = strlen(text) + 1;
+	int fd = memfd_create("w95input-keymap", MFD_CLOEXEC);
+	if (fd < 0 || write(fd, text, size) != (ssize_t)size) {
+		fprintf(stderr, "w95input: can't share the keymap\n");
+		return false;
+	}
+	kb = zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(kb_manager, seat);
+	zwp_virtual_keyboard_v1_keymap(kb, WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1, fd, size);
+	close(fd);
+	free(text);
+	wl_display_roundtrip(display);
+	return true;
+}
+
+// the keycode that gives this keysym at level 0 (no Shift)
+static xkb_keycode_t keycode_for(const char *name)
+{
+	char lower[64];
+	snprintf(lower, sizeof lower, "%s", name);
+	// friendly modifier names
+	if (strcmp(lower, "ctrl") == 0) snprintf(lower, sizeof lower, "Control_L");
+	else if (strcmp(lower, "alt") == 0) snprintf(lower, sizeof lower, "Alt_L");
+	else if (strcmp(lower, "shift") == 0) snprintf(lower, sizeof lower, "Shift_L");
+	else if (strcmp(lower, "super") == 0) snprintf(lower, sizeof lower, "Super_L");
+	else if (strcmp(lower, " ") == 0) snprintf(lower, sizeof lower, "space");
+	xkb_keysym_t sym = xkb_keysym_from_name(lower, XKB_KEYSYM_NO_FLAGS);
+	if (sym == XKB_KEY_NoSymbol)
+		sym = xkb_keysym_from_name(lower, XKB_KEYSYM_CASE_INSENSITIVE);
+	for (xkb_keycode_t kc = xkb_keymap_min_keycode(keymap); kc <= xkb_keymap_max_keycode(keymap); ++kc) {
+		const xkb_keysym_t *syms;
+		int n = xkb_keymap_key_get_syms_by_level(keymap, kc, 0, 0, &syms);
+		for (int i = 0; i < n; ++i)
+			if (syms[i] == sym)
+				return kc;
+	}
+	return 0;
+}
+
+static void send_key(xkb_keycode_t kc, bool down)
+{
+	zwp_virtual_keyboard_v1_key(kb, now_ms(), kc - 8,
+			down ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED);
+	xkb_state_update_key(kb_state, kc, down ? XKB_KEY_DOWN : XKB_KEY_UP);
+	zwp_virtual_keyboard_v1_modifiers(kb,
+			xkb_state_serialize_mods(kb_state, XKB_STATE_MODS_DEPRESSED),
+			xkb_state_serialize_mods(kb_state, XKB_STATE_MODS_LATCHED),
+			xkb_state_serialize_mods(kb_state, XKB_STATE_MODS_LOCKED),
+			xkb_state_serialize_layout(kb_state, XKB_STATE_LAYOUT_EFFECTIVE));
 }
 
 static int button_code(const char *name)
@@ -103,7 +186,7 @@ int main(int argc, char *argv[])
 		int x, y;
 		char name[32] = "";
 		if (sscanf(a, "move:%d,%d", &x, &y) == 2) {
-			zwlr_virtual_pointer_v1_motion_absolute(ptr, now_ms(), x, y, out_w, out_h);
+			zwlr_virtual_pointer_v1_motion_absolute(ptr, now_ms(), x * 16 + 8, y * 16 + 8, out_w * 16, out_h * 16);
 			zwlr_virtual_pointer_v1_frame(ptr);
 		} else if (sscanf(a, "down:%31s", name) == 1 || sscanf(a, "up:%31s", name) == 1) {
 			int code = button_code(name);
@@ -115,7 +198,7 @@ int main(int argc, char *argv[])
 			const char *comma = strchr(strchr(a, ',') + 1, ',');
 			int code = button_code(comma ? comma + 1 : NULL);
 			if (code < 0) { fprintf(stderr, "w95input: unknown button in %s\n", a); return 2; }
-			zwlr_virtual_pointer_v1_motion_absolute(ptr, now_ms(), x, y, out_w, out_h);
+			zwlr_virtual_pointer_v1_motion_absolute(ptr, now_ms(), x * 16 + 8, y * 16 + 8, out_w * 16, out_h * 16);
 			zwlr_virtual_pointer_v1_frame(ptr);
 			wl_display_flush(display);
 			pause_s(0.03);
@@ -136,6 +219,39 @@ int main(int argc, char *argv[])
 				wl_display_flush(display);
 				pause_s(0.05);
 			}
+		} else if (strncmp(a, "key:", 4) == 0 || strncmp(a, "keydown:", 8) == 0 || strncmp(a, "keyup:", 6) == 0) {
+			if (!keyboard_ready(display))
+				return 1;
+			const char *names = strchr(a, ':') + 1;
+			char buf[128];
+			snprintf(buf, sizeof buf, "%s", names);
+			xkb_keycode_t codes[8];
+			int n = 0;
+			for (char *tok = strtok(buf, "+"); tok && n < 8; tok = strtok(NULL, "+")) {
+				codes[n] = keycode_for(tok);
+				if (!codes[n]) { fprintf(stderr, "w95input: no key \"%s\"\n", tok); return 2; }
+				++n;
+			}
+			bool press = a[3] == ':' || a[3] == 'd'; // key: or keydown:
+			bool release = a[3] == ':' || a[3] == 'u';
+			if (press)
+				for (int k = 0; k < n; ++k) { send_key(codes[k], true); wl_display_flush(display); pause_s(0.02); }
+			if (release)
+				for (int k = n - 1; k >= 0; --k) { send_key(codes[k], false); wl_display_flush(display); pause_s(0.02); }
+		} else if (strncmp(a, "type:", 5) == 0) {
+			if (!keyboard_ready(display))
+				return 1;
+			for (const char *c = a + 5; *c; ++c) {
+				char one[2] = {*c, 0};
+				xkb_keycode_t kc = keycode_for(one);
+				if (!kc) { fprintf(stderr, "w95input: can't type \"%c\"\n", *c); return 2; }
+				send_key(kc, true);
+				wl_display_flush(display);
+				pause_s(0.02);
+				send_key(kc, false);
+				wl_display_flush(display);
+				pause_s(0.02);
+			}
 		} else if (strncmp(a, "wait:", 5) == 0) {
 			wl_display_flush(display);
 			pause_s(atof(a + 5));
@@ -148,6 +264,8 @@ int main(int argc, char *argv[])
 		pause_s(0.05);
 	}
 	wl_display_roundtrip(display);
+	if (kb)
+		zwp_virtual_keyboard_v1_destroy(kb);
 	zwlr_virtual_pointer_v1_destroy(ptr);
 	wl_display_roundtrip(display);
 	wl_display_disconnect(display);

@@ -1,6 +1,9 @@
 // Input: keyboards, pointers (mice, touchpads, and the virtual ones the
-// tests drive), the cursor, and the seat that hands events to programs.
+// tests drive), the cursor, gestures, pointer constraints (games), drag and
+// drop, and the seat that hands it all to programs.
 #include <stdlib.h>
+#include <time.h>
+#include <wlr/types/wlr_cursor_shape_v1.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
@@ -9,8 +12,15 @@
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/util/log.h>
+#include <wlr/util/region.h>
 
 #include "server.h"
+
+static void activity(struct server *server)
+{
+	// input resets the idle timer (screen saver, display off)
+	wlr_idle_notifier_v1_notify_activity(server->idle_notifier, server->seat);
+}
 
 // ------------------------------------------------------------ keyboards
 
@@ -25,6 +35,7 @@ static void keyboard_key(struct wl_listener *listener, void *data)
 {
 	struct keyboard *keyboard = wl_container_of(listener, keyboard, key);
 	struct wlr_keyboard_key_event *event = data;
+	activity(keyboard->server);
 	// desktop shortcuts (Alt+Tab...) come in phase 3; everything goes to
 	// the focused program
 	wlr_seat_set_keyboard(keyboard->server->seat, keyboard->wlr_keyboard);
@@ -129,6 +140,68 @@ static void new_virtual_pointer(struct wl_listener *listener, void *data)
 	wlr_cursor_attach_input_device(server->cursor, &event->new_pointer->pointer.base);
 }
 
+// --------------------------------------------- keyboard focus, constraints
+
+static void constraint_deactivate(struct server *server)
+{
+	if (!server->active_constraint)
+		return;
+	wlr_pointer_constraint_v1_send_deactivated(server->active_constraint);
+	wl_list_remove(&server->active_constraint_destroy.link);
+	server->active_constraint = NULL;
+}
+
+static void active_constraint_destroy(struct wl_listener *listener, void *data)
+{
+	struct server *server = wl_container_of(listener, server, active_constraint_destroy);
+	wl_list_remove(&server->active_constraint_destroy.link);
+	server->active_constraint = NULL;
+}
+
+// a lock or confinement is active while its surface has the keyboard
+static void constraint_activate_for(struct server *server, struct wlr_surface *surface)
+{
+	struct wlr_pointer_constraint_v1 *constraint = surface
+			? wlr_pointer_constraints_v1_constraint_for_surface(server->constraints, surface, server->seat)
+			: NULL;
+	if (constraint == server->active_constraint)
+		return;
+	constraint_deactivate(server);
+	if (!constraint)
+		return;
+	server->active_constraint = constraint;
+	server->active_constraint_destroy.notify = active_constraint_destroy;
+	wl_signal_add(&constraint->events.destroy, &server->active_constraint_destroy);
+	wlr_pointer_constraint_v1_send_activated(constraint);
+}
+
+static void new_constraint(struct wl_listener *listener, void *data)
+{
+	struct server *server = wl_container_of(listener, server, new_constraint);
+	struct wlr_pointer_constraint_v1 *constraint = data;
+	if (constraint->surface == server->seat->keyboard_state.focused_surface)
+		constraint_activate_for(server, constraint->surface);
+}
+
+void input_focus_surface(struct server *server, struct wlr_surface *surface)
+{
+	struct wlr_seat *seat = server->seat;
+	if (!surface) {
+		wlr_seat_keyboard_notify_clear_focus(seat);
+		constraint_deactivate(server);
+		return;
+	}
+	// keyboard focus even before a keyboard is plugged in (the tests'
+	// virtual one, a USB keyboard later): the program is ready for keys
+	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
+	if (keyboard)
+		wlr_seat_keyboard_notify_enter(seat, surface, keyboard->keycodes, keyboard->num_keycodes,
+				&keyboard->modifiers);
+	else
+		wlr_seat_keyboard_notify_enter(seat, surface, NULL, 0, NULL);
+	constraint_activate_for(server, surface);
+}
+
 // ------------------------------------------------------- cursor, pointer
 
 void input_reset_cursor_mode(struct server *server)
@@ -139,9 +212,7 @@ void input_reset_cursor_mode(struct server *server)
 
 static void process_move(struct server *server)
 {
-	struct view *view = server->grabbed_view;
-	wlr_scene_node_set_position(&view->scene_tree->node,
-			server->cursor->x - server->grab_x, server->cursor->y - server->grab_y);
+	view_move(server->grabbed_view, server->cursor->x - server->grab_x, server->cursor->y - server->grab_y);
 }
 
 static void process_resize(struct server *server)
@@ -169,22 +240,16 @@ static void process_resize(struct server *server)
 		if (right <= left)
 			right = left + 1;
 	}
-	struct wlr_box geo_box;
-		wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, &geo_box);
-		struct wlr_box *geo = &geo_box;
-	wlr_scene_node_set_position(&view->scene_tree->node, left - geo->x, top - geo->y);
-	wlr_xdg_toplevel_set_size(view->xdg_toplevel, right - left, bottom - top);
+	// X11 windows move now; xdg windows when they've drawn the new size
+	// (toplevel_commit keeps the opposite edge still)
+	if (view->type == VIEW_XWAYLAND)
+		view_move(view, left, top);
+	view_resize(view, right - left, bottom - top);
 }
 
-static void process_motion(struct server *server, uint32_t time)
+// pick the surface under the pointer and tell it where the pointer is
+static void pointer_focus(struct server *server, uint32_t time)
 {
-	if (server->cursor_mode == CURSOR_MOVE) {
-		process_move(server);
-		return;
-	} else if (server->cursor_mode == CURSOR_RESIZE) {
-		process_resize(server);
-		return;
-	}
 	// a button is held: everything goes to the surface it was pressed on,
 	// even outside it (dragging a scroll bar, selecting text)
 	if (server->press_surface && server->seat->pointer_state.button_count > 0
@@ -197,22 +262,68 @@ static void process_motion(struct server *server, uint32_t time)
 
 	double sx, sy;
 	struct wlr_surface *surface = NULL;
-	struct view *view = view_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-	if (!view)
-		wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, "default");
+	view_from_surface_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy, NULL);
 	if (surface) {
 		wlr_seat_pointer_notify_enter(server->seat, surface, sx, sy);
 		wlr_seat_pointer_notify_motion(server->seat, time, sx, sy);
 	} else {
+		wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, "default");
 		wlr_seat_pointer_clear_focus(server->seat);
 	}
+}
+
+static uint32_t now_ms(void)
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+// something appeared or went away under a still pointer
+void input_refresh_pointer(struct server *server)
+{
+	if (server->cursor_mode == CURSOR_PASSTHROUGH) {
+		pointer_focus(server, now_ms());
+		wlr_seat_pointer_notify_frame(server->seat);
+	}
+}
+
+static void process_motion(struct server *server, uint32_t time)
+{
+	activity(server);
+	if (server->cursor_mode == CURSOR_MOVE) {
+		process_move(server);
+		return;
+	} else if (server->cursor_mode == CURSOR_RESIZE) {
+		process_resize(server);
+		return;
+	}
+	pointer_focus(server, time);
 }
 
 static void cursor_motion(struct wl_listener *listener, void *data)
 {
 	struct server *server = wl_container_of(listener, server, cursor_motion);
 	struct wlr_pointer_motion_event *event = data;
-	wlr_cursor_move(server->cursor, &event->pointer->base, event->delta_x, event->delta_y);
+	double dx = event->delta_x, dy = event->delta_y;
+	// games and remote desktops get the raw movement too
+	wlr_relative_pointer_manager_v1_send_relative_motion(server->relative_pointers, server->seat,
+			(uint64_t)event->time_msec * 1000, dx, dy, event->unaccel_dx, event->unaccel_dy);
+	struct wlr_pointer_constraint_v1 *c = server->active_constraint;
+	if (c && server->seat->pointer_state.focused_surface == c->surface) {
+		if (c->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
+			activity(server);
+			return; // the pointer stays put
+		}
+		// confined: stop at the region's edge
+		double sx = server->seat->pointer_state.sx, sy = server->seat->pointer_state.sy;
+		double cx, cy;
+		if (wlr_region_confine(&c->region, sx, sy, sx + dx, sy + dy, &cx, &cy)) {
+			dx = cx - sx;
+			dy = cy - sy;
+		}
+	}
+	wlr_cursor_move(server->cursor, &event->pointer->base, dx, dy);
 	process_motion(server, event->time_msec);
 }
 
@@ -228,34 +339,45 @@ static void cursor_button(struct wl_listener *listener, void *data)
 {
 	struct server *server = wl_container_of(listener, server, cursor_button);
 	struct wlr_pointer_button_event *event = data;
+	activity(server);
 	wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
 	if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
 		input_reset_cursor_mode(server);
 		if (server->seat->pointer_state.button_count == 0) {
 			// the grab ends: the pointer goes to whatever is under it now
 			server->press_surface = NULL;
-			process_motion(server, event->time_msec);
+			pointer_focus(server, event->time_msec);
 		}
 		return;
 	}
 	double sx, sy;
 	struct wlr_surface *surface = NULL;
-	struct view *view = view_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+	struct node_tag *owner = NULL;
+	struct view *view = view_from_surface_at(server, server->cursor->x, server->cursor->y,
+			&surface, &sx, &sy, &owner);
 	if (surface && server->seat->pointer_state.button_count == 1) {
 		// the first button down starts the implicit grab
 		server->press_surface = surface;
 		server->press_ox = server->cursor->x - sx;
 		server->press_oy = server->cursor->y - sy;
 	}
-	// a press raises and focuses the window under it
-	if (view)
-		view_focus(view, surface);
+	// a press raises and focuses what's under it
+	if (view) {
+		view_focus(view);
+	} else if (owner && owner->kind == NODE_LAYER) {
+		struct layer_surface *ls = (struct layer_surface *)owner;
+		if (ls->layer_surface->current.keyboard_interactive != ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE)
+			input_focus_surface(server, ls->layer_surface->surface);
+	} else if (owner && owner->kind == NODE_LOCK) {
+		input_focus_surface(server, surface);
+	}
 }
 
 static void cursor_axis(struct wl_listener *listener, void *data)
 {
 	struct server *server = wl_container_of(listener, server, cursor_axis);
 	struct wlr_pointer_axis_event *event = data;
+	activity(server);
 	wlr_seat_pointer_notify_axis(server->seat, event->time_msec, event->orientation, event->delta,
 			event->delta_discrete, event->source, event->relative_direction);
 }
@@ -268,6 +390,33 @@ static void cursor_frame(struct wl_listener *listener, void *data)
 #endif
 }
 
+// touchpad gestures, passed to the program under the pointer
+#define GESTURE(name, type, call) \
+	static void name(struct wl_listener *listener, void *data) \
+	{ \
+		struct server *server = wl_container_of(listener, server, name); \
+		type *e = data; \
+		activity(server); \
+		call; \
+	}
+GESTURE(swipe_begin, struct wlr_pointer_swipe_begin_event,
+	wlr_pointer_gestures_v1_send_swipe_begin(server->gestures, server->seat, e->time_msec, e->fingers))
+GESTURE(swipe_update, struct wlr_pointer_swipe_update_event,
+	wlr_pointer_gestures_v1_send_swipe_update(server->gestures, server->seat, e->time_msec, e->dx, e->dy))
+GESTURE(swipe_end, struct wlr_pointer_swipe_end_event,
+	wlr_pointer_gestures_v1_send_swipe_end(server->gestures, server->seat, e->time_msec, e->cancelled))
+GESTURE(pinch_begin, struct wlr_pointer_pinch_begin_event,
+	wlr_pointer_gestures_v1_send_pinch_begin(server->gestures, server->seat, e->time_msec, e->fingers))
+GESTURE(pinch_update, struct wlr_pointer_pinch_update_event,
+	wlr_pointer_gestures_v1_send_pinch_update(server->gestures, server->seat, e->time_msec, e->dx, e->dy,
+		e->scale, e->rotation))
+GESTURE(pinch_end, struct wlr_pointer_pinch_end_event,
+	wlr_pointer_gestures_v1_send_pinch_end(server->gestures, server->seat, e->time_msec, e->cancelled))
+GESTURE(hold_begin, struct wlr_pointer_hold_begin_event,
+	wlr_pointer_gestures_v1_send_hold_begin(server->gestures, server->seat, e->time_msec, e->fingers))
+GESTURE(hold_end, struct wlr_pointer_hold_end_event,
+	wlr_pointer_gestures_v1_send_hold_end(server->gestures, server->seat, e->time_msec, e->cancelled))
+
 // ------------------------------------------------------------- the seat
 
 static void request_set_cursor(struct wl_listener *listener, void *data)
@@ -277,6 +426,14 @@ static void request_set_cursor(struct wl_listener *listener, void *data)
 	// only the program the pointer is over may set it
 	if (server->seat->pointer_state.focused_client == event->seat_client)
 		wlr_cursor_set_surface(server->cursor, event->surface, event->hotspot_x, event->hotspot_y);
+}
+
+static void request_set_shape(struct wl_listener *listener, void *data)
+{
+	struct server *server = wl_container_of(listener, server, request_set_shape);
+	struct wlr_cursor_shape_manager_v1_request_set_shape_event *event = data;
+	if (server->seat->pointer_state.focused_client == event->seat_client)
+		wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, wlr_cursor_shape_v1_name(event->shape));
 }
 
 static void request_set_selection(struct wl_listener *listener, void *data)
@@ -291,6 +448,59 @@ static void request_set_primary_selection(struct wl_listener *listener, void *da
 	struct server *server = wl_container_of(listener, server, request_set_primary_selection);
 	struct wlr_seat_request_set_primary_selection_event *event = data;
 	wlr_seat_set_primary_selection(server->seat, event->source, event->serial);
+}
+
+// drag and drop: allowed while the button that started it is down
+static void request_start_drag(struct wl_listener *listener, void *data)
+{
+	struct server *server = wl_container_of(listener, server, request_start_drag);
+	struct wlr_seat_request_start_drag_event *event = data;
+	if (wlr_seat_validate_pointer_grab_serial(server->seat, event->origin, event->serial))
+		wlr_seat_start_pointer_drag(server->seat, event->drag, event->serial);
+	else
+		wlr_data_source_destroy(event->drag->source);
+}
+
+struct drag_icon {
+	struct wlr_scene_tree *tree;
+	struct server *server;
+	struct wl_listener motion, destroy;
+};
+
+static void drag_icon_follow(struct drag_icon *icon)
+{
+	wlr_scene_node_set_position(&icon->tree->node, icon->server->cursor->x, icon->server->cursor->y);
+}
+
+static void drag_icon_motion(struct wl_listener *listener, void *data)
+{
+	struct drag_icon *icon = wl_container_of(listener, icon, motion);
+	drag_icon_follow(icon);
+}
+
+static void drag_icon_destroy(struct wl_listener *listener, void *data)
+{
+	struct drag_icon *icon = wl_container_of(listener, icon, destroy);
+	wl_list_remove(&icon->motion.link);
+	wl_list_remove(&icon->destroy.link);
+	free(icon);
+}
+
+static void start_drag(struct wl_listener *listener, void *data)
+{
+	struct server *server = wl_container_of(listener, server, start_drag);
+	struct wlr_drag *drag = data;
+	if (!drag->icon)
+		return;
+	// the dragged thing's picture follows the pointer
+	struct drag_icon *icon = calloc(1, sizeof(*icon));
+	icon->server = server;
+	icon->tree = wlr_scene_drag_icon_create(server->drag_icons, drag->icon);
+	drag_icon_follow(icon);
+	icon->motion.notify = drag_icon_motion;
+	wl_signal_add(&server->cursor->events.motion, &icon->motion);
+	icon->destroy.notify = drag_icon_destroy;
+	wl_signal_add(&drag->icon->events.destroy, &icon->destroy);
 }
 
 void input_init(struct server *server)
@@ -312,6 +522,11 @@ void input_init(struct server *server)
 	wl_signal_add(&server->cursor->events.axis, &server->cursor_axis);
 	server->cursor_frame.notify = cursor_frame;
 	wl_signal_add(&server->cursor->events.frame, &server->cursor_frame);
+#define LISTEN(name) server->name.notify = name; wl_signal_add(&server->cursor->events.name, &server->name)
+	LISTEN(swipe_begin); LISTEN(swipe_update); LISTEN(swipe_end);
+	LISTEN(pinch_begin); LISTEN(pinch_update); LISTEN(pinch_end);
+	LISTEN(hold_begin); LISTEN(hold_end);
+#undef LISTEN
 
 	server->new_input.notify = new_input;
 	wl_signal_add(&server->backend->events.new_input, &server->new_input);
@@ -322,6 +537,12 @@ void input_init(struct server *server)
 	struct wlr_virtual_keyboard_manager_v1 *vk = wlr_virtual_keyboard_manager_v1_create(server->display);
 	server->new_virtual_keyboard.notify = new_virtual_keyboard;
 	wl_signal_add(&vk->events.new_virtual_keyboard, &server->new_virtual_keyboard);
+
+	server->relative_pointers = wlr_relative_pointer_manager_v1_create(server->display);
+	server->gestures = wlr_pointer_gestures_v1_create(server->display);
+	server->constraints = wlr_pointer_constraints_v1_create(server->display);
+	server->new_constraint.notify = new_constraint;
+	wl_signal_add(&server->constraints->events.new_constraint, &server->new_constraint);
 
 	server->seat = wlr_seat_create(server->display, "seat0");
 	server->kbd_group = wlr_keyboard_group_create();
@@ -336,5 +557,13 @@ void input_init(struct server *server)
 	wl_signal_add(&server->seat->events.request_set_selection, &server->request_set_selection);
 	server->request_set_primary_selection.notify = request_set_primary_selection;
 	wl_signal_add(&server->seat->events.request_set_primary_selection, &server->request_set_primary_selection);
+	server->request_start_drag.notify = request_start_drag;
+	wl_signal_add(&server->seat->events.request_start_drag, &server->request_start_drag);
+	server->start_drag.notify = start_drag;
+	wl_signal_add(&server->seat->events.start_drag, &server->start_drag);
+
+	struct wlr_cursor_shape_manager_v1 *shapes = wlr_cursor_shape_manager_v1_create(server->display, 1);
+	server->request_set_shape.notify = request_set_shape;
+	wl_signal_add(&shapes->events.request_set_shape, &server->request_set_shape);
 	update_capabilities(server);
 }

@@ -73,6 +73,8 @@ static void new_output(struct wl_listener *listener, void *data)
 	struct wlr_scene_output *scene_output = wlr_scene_output_create(server->scene, wlr_output);
 	wlr_scene_output_layout_add_output(server->scene_layout, l_output, scene_output);
 	wlr_log(WLR_INFO, "output %s: %dx%d", wlr_output->name, wlr_output->width, wlr_output->height);
+	// the usable area starts as the whole layout (panels shrink it)
+	layers_arrange(server);
 }
 
 void output_init(struct server *server)

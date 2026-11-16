@@ -1,136 +1,62 @@
-// xdg-shell: windows (toplevels) and their popups (menus, drop-down lists,
-// tooltips). Popups are placed by wlroots from the program's positioner and
-// kept on the screen (wlr_xdg_popup_unconstrain_from_box).
+// xdg-shell: windows (toplevels) and popups (menus, drop-down lists,
+// tooltips), for windows and for panels (layer-shell). Popups are placed by
+// wlroots from the program's positioner and kept on the screen.
 #include <stdlib.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/util/log.h>
 
 #include "server.h"
 
-// ---------------------------------------------------------------- focus
-
-void view_focus(struct view *view, struct wlr_surface *surface)
-{
-	if (!view)
-		return;
-	struct server *server = view->server;
-	struct wlr_seat *seat = server->seat;
-	struct wlr_surface *prev = seat->keyboard_state.focused_surface;
-	struct wlr_surface *target = view->xdg_toplevel->base->surface;
-	if (prev != target) {
-		// the previous window is told it isn't active any more
-		struct wlr_xdg_toplevel *prev_toplevel = prev ? wlr_xdg_toplevel_try_from_wlr_surface(prev) : NULL;
-		if (prev_toplevel)
-			wlr_xdg_toplevel_set_activated(prev_toplevel, false);
-	}
-	// to the top, front of the list
-	wlr_scene_node_raise_to_top(&view->scene_tree->node);
-	wl_list_remove(&view->link);
-	wl_list_insert(&server->views, &view->link);
-	wlr_xdg_toplevel_set_activated(view->xdg_toplevel, true);
-
-	// keyboard focus even before a keyboard is plugged in (the tests' virtual
-	// one, a USB keyboard later): the program is ready when keys arrive
-	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
-	if (keyboard)
-		wlr_seat_keyboard_notify_enter(seat, target, keyboard->keycodes, keyboard->num_keycodes,
-				&keyboard->modifiers);
-	else
-		wlr_seat_keyboard_notify_enter(seat, target, NULL, 0, NULL);
-	(void)surface;
-}
-
-// the window (and the exact surface: sub-surface or popup) at a layout point
-struct view *view_at(struct server *server, double lx, double ly,
-		struct wlr_surface **surface, double *sx, double *sy)
-{
-	struct wlr_scene_node *node = wlr_scene_node_at(&server->scene->tree.node, lx, ly, sx, sy);
-	if (!node || node->type != WLR_SCENE_NODE_BUFFER)
-		return NULL;
-	struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
-	struct wlr_scene_surface *scene_surface = wlr_scene_surface_try_from_buffer(scene_buffer);
-	if (!scene_surface)
-		return NULL;
-	*surface = scene_surface->surface;
-	// up the tree to the window's own node, which carries the view
-	struct wlr_scene_tree *tree = node->parent;
-	while (tree && !tree->node.data)
-		tree = tree->node.parent;
-	return tree ? tree->node.data : NULL;
-}
-
-// ----------------------------------------------------- moving, resizing
-
-void view_begin_interactive(struct view *view, enum cursor_mode mode, uint32_t edges)
-{
-	struct server *server = view->server;
-	server->grabbed_view = view;
-	server->cursor_mode = mode;
-	if (mode == CURSOR_MOVE) {
-		server->grab_x = server->cursor->x - view->scene_tree->node.x;
-		server->grab_y = server->cursor->y - view->scene_tree->node.y;
-	} else {
-		struct wlr_box geo_box;
-		wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, &geo_box);
-		struct wlr_box *geo = &geo_box;
-		double border_x = (view->scene_tree->node.x + geo->x) + ((edges & WLR_EDGE_RIGHT) ? geo->width : 0);
-		double border_y = (view->scene_tree->node.y + geo->y) + ((edges & WLR_EDGE_BOTTOM) ? geo->height : 0);
-		server->grab_x = server->cursor->x - border_x;
-		server->grab_y = server->cursor->y - border_y;
-		server->grab_geobox = *geo;
-		server->grab_geobox.x += view->scene_tree->node.x;
-		server->grab_geobox.y += view->scene_tree->node.y;
-		server->resize_edges = edges;
-	}
-}
-
 // ------------------------------------------------------------- toplevels
-
-// the usable area of the output the window is on (whole layout for now;
-// the shell's taskbar reserves its edge in phase 4)
-static void usable_area(struct server *server, struct wlr_box *box)
-{
-	wlr_output_layout_get_box(server->output_layout, NULL, box);
-}
 
 static void toplevel_map(struct wl_listener *listener, void *data)
 {
 	struct view *view = wl_container_of(listener, view, map);
-	if (!view->placed) {
-		// cascade new windows from the top left of the screen
-		struct wlr_box area;
-		usable_area(view->server, &area);
-		int n = wl_list_length(&view->server->views) % 8;
-		struct wlr_box geo_box;
-		wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, &geo_box);
-		struct wlr_box *geo = &geo_box;
-		wlr_scene_node_set_position(&view->scene_tree->node,
-				area.x + 40 + n * 30 - geo->x, area.y + 30 + n * 30 - geo->y);
-		view->placed = true;
-	}
-	wl_list_insert(&view->server->views, &view->link);
-	view_focus(view, view->xdg_toplevel->base->surface);
+	view_mapped(view);
 }
 
 static void toplevel_unmap(struct wl_listener *listener, void *data)
 {
 	struct view *view = wl_container_of(listener, view, unmap);
-	if (view == view->server->grabbed_view)
-		input_reset_cursor_mode(view->server);
-	wl_list_remove(&view->link);
-	// the keyboard goes to the window that's now on top
-	if (!wl_list_empty(&view->server->views)) {
-		struct view *next = wl_container_of(view->server->views.next, next, link);
-		view_focus(next, next->xdg_toplevel->base->surface);
-	}
+	view_unmapped(view);
 }
 
 static void toplevel_commit(struct wl_listener *listener, void *data)
 {
 	struct view *view = wl_container_of(listener, view, commit);
-	if (view->xdg_toplevel->base->initial_commit) {
-		// let the program pick its size; Win95 frames come in phase 3
-		wlr_xdg_toplevel_set_size(view->xdg_toplevel, 0, 0);
+	struct wlr_xdg_toplevel *toplevel = view->xdg_toplevel;
+	if (toplevel->base->initial_commit) {
+		// Win95 frames (server side) come in phase 3; until then programs
+		// draw their own
+		if (view->decoration)
+			wlr_xdg_toplevel_decoration_v1_set_mode(view->decoration,
+					WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
+		// the program chooses its size, unless it asked to start
+		// maximized or fullscreen
+		if (toplevel->requested.fullscreen)
+			view_set_fullscreen(view, true);
+		else if (toplevel->requested.maximized)
+			view_set_maximized(view, true);
+		else
+			wlr_xdg_toplevel_set_size(toplevel, 0, 0);
+		return;
+	}
+	if (!view->mapped)
+		return;
+	// (the scene helper keeps the window geometry's corner at the tree's
+	// origin when the shadow changes)
+	struct wlr_box geo;
+	view_geometry(view, &geo);
+	// resizing from the left or top edge: the right/bottom edge stays put
+	struct server *server = view->server;
+	if (server->grabbed_view == view && server->cursor_mode == CURSOR_RESIZE) {
+		int nx = view->x, ny = view->y;
+		if (server->resize_edges & WLR_EDGE_LEFT)
+			nx = server->grab_geobox.x + server->grab_geobox.width - geo.width;
+		if (server->resize_edges & WLR_EDGE_TOP)
+			ny = server->grab_geobox.y + server->grab_geobox.height - geo.height;
+		if (nx != view->x || ny != view->y)
+			view_move(view, nx, ny);
 	}
 }
 
@@ -144,7 +70,14 @@ static void toplevel_destroy(struct wl_listener *listener, void *data)
 	wl_list_remove(&view->request_move.link);
 	wl_list_remove(&view->request_resize.link);
 	wl_list_remove(&view->request_maximize.link);
+	wl_list_remove(&view->request_minimize.link);
 	wl_list_remove(&view->request_fullscreen.link);
+	wl_list_remove(&view->set_title.link);
+	wl_list_remove(&view->set_app_id.link);
+	if (view->decoration) {
+		wl_list_remove(&view->decoration_mode.link);
+		wl_list_remove(&view->decoration_destroy.link);
+	}
 	free(view);
 }
 
@@ -153,7 +86,7 @@ static void toplevel_destroy(struct wl_listener *listener, void *data)
 // release would otherwise hijack the next drag.
 static bool button_still_down(struct view *view, uint32_t serial)
 {
-	return wlr_seat_validate_pointer_grab_serial(view->server->seat, view->xdg_toplevel->base->surface, serial);
+	return wlr_seat_validate_pointer_grab_serial(view->server->seat, view_surface(view), serial);
 }
 
 static void toplevel_request_move(struct wl_listener *listener, void *data)
@@ -174,17 +107,40 @@ static void toplevel_request_resize(struct wl_listener *listener, void *data)
 
 static void toplevel_request_maximize(struct wl_listener *listener, void *data)
 {
-	// phase 3; xdg-shell needs an answer to every request
 	struct view *view = wl_container_of(listener, view, request_maximize);
-	if (view->xdg_toplevel->base->initialized)
-		wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
+	if (!view->xdg_toplevel->base->initialized)
+		return; // handled at the initial commit
+	view_set_maximized(view, view->xdg_toplevel->requested.maximized);
+	// xdg-shell needs a configure for every request
+	wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
 }
 
 static void toplevel_request_fullscreen(struct wl_listener *listener, void *data)
 {
 	struct view *view = wl_container_of(listener, view, request_fullscreen);
-	if (view->xdg_toplevel->base->initialized)
-		wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
+	if (!view->xdg_toplevel->base->initialized)
+		return;
+	view_set_fullscreen(view, view->xdg_toplevel->requested.fullscreen);
+	wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
+}
+
+static void toplevel_request_minimize(struct wl_listener *listener, void *data)
+{
+	struct view *view = wl_container_of(listener, view, request_minimize);
+	if (view->mapped)
+		view_set_minimized(view, true);
+}
+
+static void toplevel_set_title(struct wl_listener *listener, void *data)
+{
+	struct view *view = wl_container_of(listener, view, set_title);
+	view_update_title(view);
+}
+
+static void toplevel_set_app_id(struct wl_listener *listener, void *data)
+{
+	struct view *view = wl_container_of(listener, view, set_app_id);
+	view_update_title(view);
 }
 
 static void new_xdg_toplevel(struct wl_listener *listener, void *data)
@@ -193,12 +149,11 @@ static void new_xdg_toplevel(struct wl_listener *listener, void *data)
 	struct wlr_xdg_toplevel *xdg_toplevel = data;
 
 	struct view *view = calloc(1, sizeof(*view));
-	view->server = server;
+	view_init_common(view, server, VIEW_XDG);
 	view->xdg_toplevel = xdg_toplevel;
 	view->scene_tree = wlr_scene_xdg_surface_create(server->layer_windows, xdg_toplevel->base);
-	view->scene_tree->node.data = view;
+	view->scene_tree->node.data = &view->tag;
 	xdg_toplevel->base->data = view->scene_tree; // popups attach under it
-	wl_list_init(&view->link);
 
 	view->map.notify = toplevel_map;
 	wl_signal_add(&xdg_toplevel->base->surface->events.map, &view->map);
@@ -214,62 +169,168 @@ static void new_xdg_toplevel(struct wl_listener *listener, void *data)
 	wl_signal_add(&xdg_toplevel->events.request_resize, &view->request_resize);
 	view->request_maximize.notify = toplevel_request_maximize;
 	wl_signal_add(&xdg_toplevel->events.request_maximize, &view->request_maximize);
+	view->request_minimize.notify = toplevel_request_minimize;
+	wl_signal_add(&xdg_toplevel->events.request_minimize, &view->request_minimize);
 	view->request_fullscreen.notify = toplevel_request_fullscreen;
 	wl_signal_add(&xdg_toplevel->events.request_fullscreen, &view->request_fullscreen);
+	view->set_title.notify = toplevel_set_title;
+	wl_signal_add(&xdg_toplevel->events.set_title, &view->set_title);
+	view->set_app_id.notify = toplevel_set_app_id;
+	wl_signal_add(&xdg_toplevel->events.set_app_id, &view->set_app_id);
+}
+
+// ------------------------------------------------------------ decorations
+
+static void decoration_request_mode(struct wl_listener *listener, void *data)
+{
+	struct view *view = wl_container_of(listener, view, decoration_mode);
+	if (view->xdg_toplevel->base->initialized)
+		wlr_xdg_toplevel_decoration_v1_set_mode(view->decoration,
+				WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
+}
+
+static void decoration_destroy(struct wl_listener *listener, void *data)
+{
+	struct view *view = wl_container_of(listener, view, decoration_destroy);
+	wl_list_remove(&view->decoration_mode.link);
+	wl_list_remove(&view->decoration_destroy.link);
+	view->decoration = NULL;
+}
+
+static void new_xdg_decoration(struct wl_listener *listener, void *data)
+{
+	struct wlr_xdg_toplevel_decoration_v1 *decoration = data;
+	struct wlr_scene_tree *tree = decoration->toplevel->base->data;
+	if (!tree || !tree->node.data)
+		return;
+	struct view *view = (struct view *)tree->node.data;
+	view->decoration = decoration;
+	view->decoration_mode.notify = decoration_request_mode;
+	wl_signal_add(&decoration->events.request_mode, &view->decoration_mode);
+	view->decoration_destroy.notify = decoration_destroy;
+	wl_signal_add(&decoration->events.destroy, &view->decoration_destroy);
+	decoration_request_mode(&view->decoration_mode, NULL);
 }
 
 // ---------------------------------------------------------------- popups
+
+// Keep a popup on screen: the box is the output's area, in the coordinates
+// of the popup's root (a window's geometry, or a panel).
+static void popup_unconstrain(struct server *server, struct wlr_xdg_popup *popup)
+{
+	struct wlr_surface *root = popup->parent;
+	struct wlr_xdg_surface *xdg;
+	while ((xdg = wlr_xdg_surface_try_from_wlr_surface(root)) && xdg->role == WLR_XDG_SURFACE_ROLE_POPUP)
+		root = xdg->popup->parent;
+	struct wlr_scene_tree *tree = NULL;
+	if (xdg && xdg->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+		tree = xdg->data; // its origin is the window geometry's corner
+	} else {
+		struct wlr_layer_surface_v1 *ls = wlr_layer_surface_v1_try_from_wlr_surface(root);
+		if (ls && ls->data)
+			tree = ((struct layer_surface *)ls->data)->scene->tree;
+	}
+	if (!tree)
+		return;
+	int lx, ly;
+	wlr_scene_node_coords(&tree->node, &lx, &ly);
+	int ox = lx, oy = ly; // the root's corner in the layout
+	struct wlr_output *output = wlr_output_layout_output_at(server->output_layout,
+			ox + popup->scheduled.geometry.x, oy + popup->scheduled.geometry.y);
+	if (!output)
+		output = wlr_output_layout_output_at(server->output_layout, ox, oy);
+	struct wlr_box area;
+	wlr_output_layout_get_box(server->output_layout, output, &area);
+	area.x -= ox;
+	area.y -= oy;
+	wlr_xdg_popup_unconstrain_from_box(popup, &area);
+}
 
 static void popup_commit(struct wl_listener *listener, void *data)
 {
 	struct popup *popup = wl_container_of(listener, popup, commit);
 	if (!popup->xdg_popup->base->initial_commit)
 		return;
-	// keep it on the screen: the box is the output area in the coordinates
-	// of the popup's toplevel
-	struct wlr_xdg_surface *parent = wlr_xdg_surface_try_from_wlr_surface(popup->xdg_popup->parent);
-	struct wlr_xdg_surface *top = parent;
-	while (top && top->role == WLR_XDG_SURFACE_ROLE_POPUP)
-		top = wlr_xdg_surface_try_from_wlr_surface(top->popup->parent);
-	if (top && top->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL && top->data) {
-		struct wlr_scene_tree *tree = top->data;
-		int lx, ly;
-		wlr_scene_node_coords(&tree->node, &lx, &ly);
-		struct wlr_box area;
-		wlr_output_layout_get_box(((struct view *)tree->node.data)->server->output_layout, NULL, &area);
-		area.x -= lx;
-		area.y -= ly;
-		wlr_xdg_popup_unconstrain_from_box(popup->xdg_popup, &area);
-	}
+	popup_unconstrain(popup->server, popup->xdg_popup);
+	// the popup's first configure (it doesn't appear without one)
 	wlr_xdg_surface_schedule_configure(popup->xdg_popup->base);
+}
+
+// A menu that grabs (keyboard navigation) gets the keyboard while it's
+// open: xdg-shell says the topmost grabbing popup always has keyboard focus,
+// as GNOME's and KDE's compositors do. wlroots routes keys during the grab
+// but leaves moving the focus to us; its grab ignores focus changes, so the
+// focus is set directly. (GTK 3, Chromium and Firefox menus also work
+// without it, as tested; it's here for the protocol's sake and for programs
+// that rely on it.)
+static void enter_keyboard(struct wlr_seat *seat, struct wlr_surface *surface)
+{
+	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
+	if (keyboard)
+		wlr_seat_keyboard_enter(seat, surface, keyboard->keycodes, keyboard->num_keycodes,
+				&keyboard->modifiers);
+	else
+		wlr_seat_keyboard_enter(seat, surface, NULL, 0, NULL);
+}
+
+static void popup_map(struct wl_listener *listener, void *data)
+{
+	struct popup *popup = wl_container_of(listener, popup, map);
+	if (popup->xdg_popup->seat)
+		enter_keyboard(popup->xdg_popup->seat, popup->xdg_popup->base->surface);
+	input_refresh_pointer(popup->server);
+}
+
+static void popup_unmap(struct wl_listener *listener, void *data)
+{
+	struct popup *popup = wl_container_of(listener, popup, unmap);
+	struct wlr_seat *seat = popup->server->seat;
+	// the keyboard back to what opened it (a parent menu, or the window)
+	if (seat->keyboard_state.focused_surface == popup->xdg_popup->base->surface && popup->xdg_popup->parent)
+		enter_keyboard(seat, popup->xdg_popup->parent);
+	input_refresh_pointer(popup->server);
 }
 
 static void popup_destroy(struct wl_listener *listener, void *data)
 {
 	struct popup *popup = wl_container_of(listener, popup, destroy);
 	wl_list_remove(&popup->commit.link);
+	wl_list_remove(&popup->map.link);
+	wl_list_remove(&popup->unmap.link);
 	wl_list_remove(&popup->destroy.link);
 	free(popup);
 }
 
 static void new_xdg_popup(struct wl_listener *listener, void *data)
 {
+	struct server *server = wl_container_of(listener, server, new_xdg_popup);
 	struct wlr_xdg_popup *xdg_popup = data;
-	struct popup *popup = calloc(1, sizeof(*popup));
-	popup->xdg_popup = xdg_popup;
 
-	// in the scene under its parent, so it moves and stacks with it
+	// under its parent in the scene, so it moves and stacks with it
+	struct wlr_scene_tree *parent_tree = NULL;
 	struct wlr_xdg_surface *parent = wlr_xdg_surface_try_from_wlr_surface(xdg_popup->parent);
-	if (!parent || !parent->data) {
+	if (parent) {
+		parent_tree = parent->data;
+	} else {
+		struct wlr_layer_surface_v1 *ls = wlr_layer_surface_v1_try_from_wlr_surface(xdg_popup->parent);
+		if (ls && ls->data)
+			parent_tree = ((struct layer_surface *)ls->data)->scene->tree;
+	}
+	if (!parent_tree) {
 		wlr_log(WLR_ERROR, "popup without a known parent");
-		free(popup);
 		return;
 	}
-	struct wlr_scene_tree *parent_tree = parent->data;
+	struct popup *popup = calloc(1, sizeof(*popup));
+	popup->server = server;
+	popup->xdg_popup = xdg_popup;
 	xdg_popup->base->data = wlr_scene_xdg_surface_create(parent_tree, xdg_popup->base);
 
 	popup->commit.notify = popup_commit;
 	wl_signal_add(&xdg_popup->base->surface->events.commit, &popup->commit);
+	popup->map.notify = popup_map;
+	wl_signal_add(&xdg_popup->base->surface->events.map, &popup->map);
+	popup->unmap.notify = popup_unmap;
+	wl_signal_add(&xdg_popup->base->surface->events.unmap, &popup->unmap);
 	popup->destroy.notify = popup_destroy;
 	wl_signal_add(&xdg_popup->events.destroy, &popup->destroy);
 }
@@ -282,4 +343,8 @@ void xdg_init(struct server *server)
 	wl_signal_add(&server->xdg_shell->events.new_toplevel, &server->new_xdg_toplevel);
 	server->new_xdg_popup.notify = new_xdg_popup;
 	wl_signal_add(&server->xdg_shell->events.new_popup, &server->new_xdg_popup);
+
+	struct wlr_xdg_decoration_manager_v1 *decorations = wlr_xdg_decoration_manager_v1_create(server->display);
+	server->new_xdg_decoration.notify = new_xdg_decoration;
+	wl_signal_add(&decorations->events.new_toplevel_decoration, &server->new_xdg_decoration);
 }

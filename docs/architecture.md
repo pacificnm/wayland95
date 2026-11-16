@@ -81,20 +81,32 @@ Window frames are server-side (`xdg-decoration`): programs that can leave
 decorations to the desktop get the Win95 frame, as now. Programs that draw
 their own keep doing so.
 
-Standard protocols offered (implemented by wlroots 0.18; each is checked
-against its headers when the compositor is written, and the list here kept
-true): xdg-shell 6,
-xdg-decoration, xdg-activation, xdg-output, xdg-foreign v1/v2, layer-shell,
-wl_seat 9 with pointer frames, linux-dmabuf, linux-drm-syncobj (explicit
-sync), wl_data_device 3, primary selection, viewporter, fractional-scale,
-single-pixel-buffer, presentation-time, cursor-shape, content-type,
-tearing-control, idle-inhibit, ext-idle-notify, ext-session-lock,
-pointer-constraints, relative-pointer, pointer-gestures, text-input v3 +
-input-method, virtual-keyboard and virtual-pointer (used by the tests),
-screencopy and export-dmabuf (screen sharing through
-xdg-desktop-portal-wlr), foreign-toplevel-management, ext-foreign-toplevel-list,
-output-management, gamma-control, security-context, data-control (clipboard
-managers).
+Standard protocols offered (implemented by wlroots 0.18, checked against its
+headers; the compositor handles each one, and the tests in
+[testing.md](testing.md) exercise the ones programs depend on most):
+xdg-shell 6, xdg-decoration, xdg-activation, xdg-output, xdg-foreign v1/v2,
+layer-shell, wl_seat 9 with pointer frames, linux-dmabuf, wl_data_device 3,
+primary selection, data-control (clipboard managers), viewporter,
+fractional-scale, single-pixel-buffer, presentation-time, cursor-shape,
+content-type, tearing-control, alpha-modifier, idle-inhibit,
+ext-idle-notify, ext-session-lock, pointer-constraints, relative-pointer,
+pointer-gestures, keyboard-shortcuts-inhibit, virtual-keyboard and
+virtual-pointer (used by the tests), screencopy and export-dmabuf (screen
+sharing through xdg-desktop-portal-wlr), wlr-foreign-toplevel-management,
+ext-foreign-toplevel-list, wlr-output-management, wlr-output-power-management,
+gamma-control, security-context.
+
+Not yet, and why:
+- **linux-drm-syncobj** (explicit GPU sync, mostly for NVIDIA): wlroots 0.18
+  has no way to ask whether the renderer and backend support it, and
+  offering it when they don't breaks drawing. Later, with a capability check
+  of our own or wlroots 0.19.
+- **text-input v3 / input-method v2** (input methods such as ibus, on-screen
+  keyboards): the relay between them is a sizeable piece of its own; phase 4.
+
+Popups that grab (menus) get the keyboard while open, as xdg-shell says
+and GNOME's and KDE's compositors do; GTK, Chromium and Firefox menus work
+either way (tested).
 
 ### win95shell (`shell/`)
 

@@ -13,43 +13,35 @@ the compositor's own code:
 
 | Tool | Protocol | Used for |
 |---|---|---|
-| `wlrctl` / `tests/tools/w95input` | virtual-pointer, virtual-keyboard | moving, clicking (any button), dragging, scrolling (wheel and smooth), typing, modifiers |
-| `grim` | screencopy | screenshots of the whole screen or a region, compared against expected pixels |
-| `tests/tools/w95query` | foreign-toplevel, `wayland95-shell-v1` | which windows exist, their titles, positions, states, focus |
-| client logs | (the programs' own) | what each program received: the test pages log every mouse, wheel and key event (`EVT ...`), `WAYLAND_DEBUG` shows the protocol |
+| `tests/tools/w95input` | virtual-pointer, virtual-keyboard | moving, clicking (any button), dragging, the wheel; keys and key combinations with the standard keymap, real keycodes and timestamps, like a physical keyboard |
+| `tests/tools/w95query` | wlr-foreign-toplevel-management | the window list (titles, active/maximized/minimized), and activating, closing, minimizing, maximizing windows as the taskbar will |
+| `grim` | screencopy | screenshots, checked pixel by pixel (ImageMagick) |
+| `tests/tools/w95probe-gtk`, `w95probe-qt` | (GTK 3 and Qt windows) | log every press, release, wheel turn, key, focus change, size and state change and menu choice; copy, paste and select on command |
+| the test page `tests/nested/clicktest.html` | (Chromium, Firefox) | logs every mouse, wheel and key event the browser gets |
 
-Every test states what it does and checks the outcome from the program's
-side (what it received and did) and from the screen (what is drawn), not
-just that no error appeared. Suites:
+(`wtype` isn't used for keys: it sends its own keymap before every key and
+time 0, which no real keyboard does, and GTK menus ignore keys sent that
+way. That was found by these tests.)
 
-- **input**: clicks, double clicks, right and middle clicks, drags, wheel
-  and smooth scrolling, keyboard focus and typing, in Chromium, Firefox,
-  VS Code, a GTK 3/4 test program, a Qt test program, xterm (X11) and
-  Wayland 95's own apps. The 10 click scenarios from the Qt compositor's
-  fixes (popups, menus, drop-down lists, stuck buttons, link drags,
-  tooltips) carry over, plus scrolling, which that harness couldn't do.
-- **popups**: menus, sub-menus, drop-down lists, the address bar's
-  suggestions; placement next to their parent and kept on screen at every
-  edge; clicking outside closes them; keyboard navigation.
-- **windows**: open, close, move, resize from every edge, maximize/restore,
-  minimize/restore from the taskbar, stacking and focus, Alt+Tab,
-  client-side and Win95 frames, a window bigger than the screen.
-- **X11**: the same window and input checks for X11 programs (xterm, xeyes,
-  an X11 GTK program), their menus and tooltips.
-- **clipboard and drag and drop**: copy/paste between Wayland programs, X11
-  and Wayland, primary selection (middle-click paste), dragging text and
-  files between programs.
-- **shell**: taskbar buttons follow windows, Start menu opens programs, tray
-  icons, notifications, Run, Shut Down dialog, screen saver and unlock,
-  password prompts (with a stand-in polkit agent), the taskbar's reserved
-  edge.
-- **screen**: screenshots of the desktop, a window frame (active and
-  inactive), the taskbar and the Start menu compared with reference images
-  (pixel tolerance for anti-aliased text).
-- **settings**: keyboard layout and repeat, mouse and touchpad settings,
-  accessibility keys, all applied from `settings.ini` while running.
-- **robustness**: a program that crashes, one that stops answering, many
-  windows, rapid open/close, the shell crashing and being restarted.
+Every check states what it does and checks the outcome from the program's
+side (what it received and did) and, where it matters, from the screen
+(what is drawn), not just that no error appeared. Each suite runs in a
+fresh compositor. The suites (`tests/run.sh SUITE`):
+
+| Suite | What |
+|---|---|
+| `input` | Chromium: clicks, wheel both ways, a link after a shaky click (link drag), the drop-down list by mouse, hover and keyboard and drawn under its box, the page menu (Back), no stuck button after a menu's edge is clicked or a menu is dismissed, Escape, a link while a tooltip shows, typing, the page drawn where its clicks land |
+| `firefox` | the same scenarios in Firefox |
+| `windows` | two GTK windows: placement, the new window gets the keyboard, clicking one behind raises it and gives it the keyboard, keys go only to the active one, maximize and restore (size and pixels), minimize and restore, dragging the title bar, resizing from the corner, closing from the window list |
+| `popups` | GTK menus: by mouse and keyboard, the keyboard back to the window afterwards, Escape and clicking outside close them, a menu at the screen's corner opens inward and works |
+| `x11` | GTK under Xwayland: clicks land where drawn, the wheel, typing, its menus, focus moving between X11 and Wayland windows both ways; xterm: typing reaches its program |
+| `clipboard` | copy and paste Wayland to Wayland, Wayland to X11, X11 to Wayland; the primary selection, Wayland to Wayland and to X11 |
+| `qt` | a Qt window: clicks, wheel, typing, menus by mouse and keyboard, clipboard and primary selection with GTK |
+| `vscode` | VS Code: opens the file, the wheel scrolls the editor, typing and Ctrl+S save it |
+
+Still to come (phase 3 and 4): Win95 frames and their buttons, Alt+Tab,
+settings.ini, the shell's taskbar and Start menu, the lock screen, drag and
+drop between programs, robustness (crashing and hung programs).
 
 `tests/run.sh` runs everything and prints PASS/FAIL per check with what was
 expected and what happened; `tests/run.sh input` runs one suite.

@@ -603,21 +603,32 @@ To add a program to the Start menu, add an entry to `programs` in
 
 ## Other programs' windows
 
-Qt's Wayland compositor gets out of step with some programs (Chromium,
-Electron, GTK) in a few places, and [src/inputfixes.cpp](src/inputfixes.cpp)
-works around them:
+Qt's Wayland compositor gets out of step with other programs (Chromium,
+Electron, GTK, Qt) in several places, and
+[src/inputfixes.cpp](src/inputfixes.cpp) works around them:
 
-- A window move or resize asked for just after the button went up (Qt
-  would then move the window on your next drag inside it) is ignored.
-- A drag and drop that starts just after the button went up (Qt would then
-  keep the next click's release from the program, so links stop opening)
-  is cancelled.
-- Parts of a window drawn separately (sub-surfaces) that existed before
-  the window appeared are put where the program placed them, instead of
-  at its top left corner, so clicks land on what you see.
+- **Clicking in a popup** (a menu, a drop-down list, the address bar's
+  suggestions) gave the popup the keyboard. Qt then told the program its
+  window wasn't active any more, and Chromium closed the popup and dropped
+  the click. Popups and sub-surfaces now leave the keyboard with their
+  window, as other desktops do.
+- **A popup that closes on the press** (clicking a menu's edge, or the page
+  to dismiss a menu) took the release with it, and the program went on
+  believing the button was held: links and buttons then didn't respond.
+  The release is now sent to the program anyway.
+- **Popups were placed by their surface corner**, not their window
+  geometry, so menus with shadows appeared shifted by the shadow (24 by 12
+  pixels in Chromium). They're placed as xdg-shell says.
+- A window move or resize asked for just after the button went up is
+  ignored, and a drag and drop that starts just after it is cancelled
+  (Qt would otherwise hijack the next drag or keep the next release).
+- Sub-surfaces that existed before their window appeared are put where the
+  program placed them, not at its top left corner.
 
-Each of these, and every move, resize and drag a program starts, is
-logged as an `input:` line in `~/.wayland95-session.log`.
+Each of these is logged as an `input:` line in `~/.wayland95-session.log`.
+To log every press and release too (where, which window, and the position
+the program was sent), create `~/.config/wayland95/trace-input`; delete it
+to stop.
 
 ## X11 programs
 

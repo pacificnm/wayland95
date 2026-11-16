@@ -1,6 +1,10 @@
 #include "inputfixes.h"
 
+#include <algorithm>
+
 #include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QMouseEvent>
 #include <QPointingDevice>
@@ -11,6 +15,8 @@
 #include <QWaylandDrag>
 #include <QWaylandOutput>
 #include <QWaylandQuickItem>
+#include <QWaylandQuickShellSurfaceItem>
+#include <QWaylandXdgShell>
 #include <QWaylandSeat>
 #include <QWaylandSurface>
 #include <QWaylandView>
@@ -31,6 +37,127 @@ QString describe(QWaylandSurface *surface)
 InputFixes::InputFixes(QObject *parent)
     : QObject(parent)
 {
+    // sees each mouse event before the window delivers it
+    qGuiApp->installEventFilter(this);
+}
+
+bool InputFixes::tracing() const
+{
+    static const bool env = qEnvironmentVariableIntValue("WAYLAND95_TRACE_INPUT") == 1;
+    static const QString file = QDir::homePath() + QStringLiteral("/.config/wayland95/trace-input");
+    return env || QFileInfo::exists(file);
+}
+
+// the program's item that's topmost at a scene position: every item is
+// searched (a window's frame has items above the program's own, and
+// popups and shadows reach outside their parents)
+static QWaylandQuickItem *findSurfaceItem(QQuickItem *item, const QPointF &scenePos)
+{
+    QList<QQuickItem *> children = item->childItems();
+    std::stable_sort(children.begin(), children.end(), [](QQuickItem *a, QQuickItem *b) { return a->z() < b->z(); });
+    for (auto it = children.crbegin(); it != children.crend(); ++it) {
+        QQuickItem *child = *it;
+        if (!child->isVisible() || child->opacity() <= 0)
+            continue;
+        if (QWaylandQuickItem *found = findSurfaceItem(child, scenePos))
+            return found;
+        auto *q = qobject_cast<QWaylandQuickItem *>(child);
+        if (q && q->surface() && q->contains(q->mapFromScene(scenePos)))
+            return q;
+    }
+    return nullptr;
+}
+
+static QWaylandQuickItem *surfaceItemAt(QQuickWindow *window, const QPointF &scenePos)
+{
+    return window && window->contentItem() ? findSurfaceItem(window->contentItem(), scenePos) : nullptr;
+}
+
+bool InputFixes::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() != QEvent::MouseButtonPress && event->type() != QEvent::MouseButtonRelease)
+        return false;
+    auto *window = qobject_cast<QQuickWindow *>(watched);
+    if (!window)
+        return false;
+    auto *mouse = static_cast<QMouseEvent *>(event);
+
+    if (event->type() == QEvent::MouseButtonPress) {
+        QWaylandQuickItem *target = surfaceItemAt(window, mouse->scenePosition());
+        m_pressSurface = target ? target->surface() : nullptr;
+        m_pressClient = m_pressSurface ? m_pressSurface->client() : nullptr;
+        m_pressButton = mouse->button();
+    } else if (mouse->button() == m_pressButton) {
+        // The surface the press went to is gone (a popup that closed on the
+        // press): Qt has nowhere to deliver this release and drops it. The
+        // program still has the button down, so tell it the button is up.
+        // (Qt keeps a destroyed surface's object around for a while.)
+        const bool gone = !m_pressSurface || m_pressSurface->isDestroyed() || !m_pressSurface->hasContent();
+        if (m_pressClient && gone && m_compositor && m_compositor->defaultSeat()) {
+            QTimer::singleShot(0, this, [this, window = QPointer<QQuickWindow>(window), pos = mouse->scenePosition(),
+                                         client = m_pressClient, button = m_pressButton] {
+                QWaylandSeat *seat = m_compositor ? m_compositor->defaultSeat() : nullptr;
+                if (!seat || !client || !window)
+                    return;
+                // the pointer on the program's window under it, if that's
+                // where it is, so the release goes to a surface it knows
+                QWaylandQuickItem *under = surfaceItemAt(window, pos);
+                if (under && under->surface() && under->surface()->client() == client)
+                    seat->sendMouseMoveEvent(under->view(), under->mapToSurface(under->mapFromScene(pos)), pos);
+                QWaylandView *focus = seat->mouseFocus();
+                if (!focus || !focus->surface() || focus->surface()->client() != client)
+                    return;
+                qInfo().noquote() << "input: the popup that was clicked closed before the release; sent the release to pid"
+                                  << client->processId();
+                seat->sendMouseReleaseEvent(button);
+            });
+        }
+        m_pressSurface = nullptr;
+        m_pressClient = nullptr;
+        m_pressButton = Qt::NoButton;
+    }
+
+    if (!tracing())
+        return false;
+    const QString what = QStringLiteral("%1 %2")
+            .arg(event->type() == QEvent::MouseButtonPress ? QStringLiteral("press") : QStringLiteral("release"))
+            .arg(mouse->button() == Qt::LeftButton ? QStringLiteral("left")
+                 : mouse->button() == Qt::RightButton ? QStringLiteral("right") : QStringLiteral("other"));
+    // who took it is known once the window has delivered it
+    QTimer::singleShot(0, this, [this, window = QPointer<QQuickWindow>(window), what, pos = mouse->scenePosition()] {
+        if (window)
+            traceDelivered(window, what, pos);
+    });
+    return false;
+}
+
+void InputFixes::traceDelivered(QQuickWindow *window, const QString &what, const QPointF &scenePos)
+{
+    QString target = QStringLiteral("the desktop");
+    QQuickItem *grabber = window->mouseGrabberItem();
+    // the program's item under the pointer, whether or not it grabbed
+    QWaylandQuickItem *surfaceItem = qobject_cast<QWaylandQuickItem *>(grabber);
+    if (!surfaceItem)
+        surfaceItem = surfaceItemAt(window, scenePos);
+    if (grabber)
+        target = QString::fromLatin1(grabber->metaObject()->className());
+    QString sent;
+    if (surfaceItem && surfaceItem->surface()) {
+        const QPointF local = surfaceItem->mapFromScene(scenePos);
+        const QPointF surf = surfaceItem->mapToSurface(local);
+        sent = QStringLiteral(" | under it: %1, item at %2,%3 size %4x%5, surface %6x%7, point in surface %8,%9")
+                .arg(describe(surfaceItem->surface()))
+                .arg(surfaceItem->mapToScene(QPointF()).x()).arg(surfaceItem->mapToScene(QPointF()).y())
+                .arg(surfaceItem->width()).arg(surfaceItem->height())
+                .arg(surfaceItem->surface()->destinationSize().width()).arg(surfaceItem->surface()->destinationSize().height())
+                .arg(surf.x(), 0, 'f', 1).arg(surf.y(), 0, 'f', 1);
+    }
+    QString focus = QStringLiteral("none");
+    if (m_compositor && m_compositor->defaultSeat() && m_compositor->defaultSeat()->mouseFocus()
+        && m_compositor->defaultSeat()->mouseFocus()->surface())
+        focus = describe(m_compositor->defaultSeat()->mouseFocus()->surface());
+    qInfo().noquote() << QStringLiteral("input: %1 at %2,%3 -> %4 (pointer focus: %5)%6")
+                         .arg(what).arg(scenePos.x()).arg(scenePos.y()).arg(target, focus, sent);
 }
 
 void InputFixes::setCompositor(QWaylandCompositor *compositor)
@@ -132,6 +259,16 @@ void InputFixes::fixPositions(QQuickItem *item)
     const auto children = item->childItems();
     for (QQuickItem *child : children) {
         auto *quickItem = qobject_cast<QWaylandQuickItem *>(child);
+        // A popup (menu, list, address bar suggestions) or sub-surface
+        // mustn't take the keyboard when clicked: Qt would then tell the
+        // window it isn't active any more, and Chromium closes its popups
+        // on that, dropping the click (the release never arrives). Real
+        // desktops keep the keyboard on the window.
+        if (quickItem && quickItem->focusOnClick()) {
+            quickItem->setFocusOnClick(false);
+            qInfo().noquote() << "input: a popup or sub-surface of" << describe(quickItem->surface())
+                              << "will leave the keyboard with its window";
+        }
         if (quickItem && quickItem->surface()) {
             const QVariant pos = quickItem->surface()->property(PositionProperty);
             // only sub-surfaces have one (set_position); popups don't
@@ -149,8 +286,53 @@ void InputFixes::fixPositions(QQuickItem *item)
                 }
             }
         }
+        // popups: placed by their window geometry
+        if (auto *shellItem = qobject_cast<QWaylandQuickShellSurfaceItem *>(child)) {
+            auto *xdg = qobject_cast<QWaylandXdgSurface *>(shellItem->shellSurface());
+            if (xdg && xdg->popup() && !shellItem->property("wayland95Placed").toBool()) {
+                shellItem->setProperty("wayland95Placed", true);
+                QPointer<QQuickItem> guard(shellItem);
+                auto later = [this, guard] {
+                    // after Qt's own placement, which this corrects
+                    QTimer::singleShot(0, this, [this, guard] { if (guard) placePopup(guard); });
+                };
+                connect(xdg->popup(), &QWaylandXdgPopup::configuredGeometryChanged, this, later);
+                connect(xdg, &QWaylandXdgSurface::windowGeometryChanged, this, later);
+                if (QWaylandXdgSurface *parentXdg = xdg->popup()->parentXdgSurface())
+                    connect(parentXdg, &QWaylandXdgSurface::windowGeometryChanged, this, later);
+                placePopup(shellItem);
+            }
+        }
         // popups and sub-surfaces of sub-surfaces
         if (qobject_cast<QWaylandQuickItem *>(child))
             watch(child);
+    }
+}
+
+void InputFixes::placePopup(QQuickItem *popupItem)
+{
+    auto *shellItem = qobject_cast<QWaylandQuickShellSurfaceItem *>(popupItem);
+    auto *xdg = shellItem ? qobject_cast<QWaylandXdgSurface *>(shellItem->shellSurface()) : nullptr;
+    QWaylandXdgPopup *popup = xdg ? xdg->popup() : nullptr;
+    if (!popup || !popup->parentXdgSurface())
+        return;
+    // xdg-shell: the configured position is where the popup's window
+    // geometry goes, relative to the parent's window geometry. Qt leaves out
+    // the popup's own geometry offset (its shadow).
+    const QPoint surfacePos = popup->configuredGeometry().topLeft()
+            + popup->parentXdgSurface()->windowGeometry().topLeft()
+            - xdg->windowGeometry().topLeft();
+    qreal scale = 1;
+    if (shellItem->view() && shellItem->view()->output())
+        scale = shellItem->view()->output()->scaleFactor();
+    if (shellItem->window())
+        scale /= shellItem->window()->devicePixelRatio();
+    QQuickItem *target = shellItem->moveItem() ? shellItem->moveItem() : shellItem;
+    const QPointF want = QPointF(surfacePos) * scale;
+    if (target->position() != want) {
+        if (tracing())
+            qInfo().noquote() << "input: placed a popup of" << describe(xdg->surface()) << "at" << want
+                              << "(Qt had" << target->position() << ")";
+        target->setPosition(want);
     }
 }

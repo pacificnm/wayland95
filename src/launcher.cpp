@@ -24,23 +24,42 @@ void Launcher::setSocketName(const QString &name)
     s_socketName = name;
 }
 
-namespace {
-// the login session: started as one (WAYLAND95_SESSION) and on the screen
-// itself, not a window inside another desktop (a test copy started from a
-// terminal in the session inherits WAYLAND95_SESSION, and mustn't act as it)
-bool isSession()
+bool Launcher::s_session = false;
+
+void Launcher::setSession(bool session)
 {
+    s_session = session;
+}
+
+bool Launcher::isSession()
+{
+    if (s_session)
+        return true;
+    // the Qt compositor: started as the session and on the screen itself,
+    // not a window inside another desktop (a test copy started from a
+    // terminal in the session inherits WAYLAND95_SESSION, and mustn't act
+    // as it)
     const QString platform = QGuiApplication::platformName();
     return qEnvironmentVariableIsSet("WAYLAND95_SESSION")
            && (platform == QLatin1String("eglfs") || platform == QLatin1String("linuxfb"));
 }
 
-// systemd's user manager and D-Bus activation: programs they start get these
+namespace {
+// systemd's user manager and D-Bus activation: programs they start get
+// these. Never from the automated tests: their desktops run inside your
+// session, whose systemd this would change (tests/run.sh sets
+// WAYLAND95_NO_SYSTEM_AGENTS)
 void exportEnvironment(const QStringList &assignments)
 {
-    if (isSession())
-        QProcess::startDetached(QStringLiteral("dbus-update-activation-environment"),
-                                QStringList{ QStringLiteral("--systemd") } + assignments);
+    if (!Launcher::isSession())
+        return;
+    if (qEnvironmentVariableIsSet("WAYLAND95_NO_SYSTEM_AGENTS")) {
+        qInfo().noquote() << "Session: would tell systemd and D-Bus" << assignments.join(QLatin1Char(' '))
+                          << "(WAYLAND95_NO_SYSTEM_AGENTS)";
+        return;
+    }
+    QProcess::startDetached(QStringLiteral("dbus-update-activation-environment"),
+                            QStringList{ QStringLiteral("--systemd") } + assignments);
 }
 }
 

@@ -41,6 +41,8 @@ fresh compositor. The suites (`tests/run.sh SUITE`):
 | `alttab` | three Qt windows: Alt+Tab to the previous window, twice for two back, Alt+Shift+Tab the other way, Escape stays, the Tab never reaches the program, a minimized window can be picked (and is restored), typing afterwards, Alt+F4 closes only the active window |
 | `shell` | win95shell (with a throwaway home, settings and D-Bus session): the desktop and taskbar drawn; a maximized window stops above the taskbar; a button per window, the active one pressed in; a button activates, minimizes and restores its window (and the keyboard follows); a button's menu opens at the pointer, Maximize and Close by key; the Start menu opens, closes by Escape (keyboard back to the window) and by a click outside, a submenu by its letter, an entry starts its program; double-clicking My Computer opens it; the clock's tooltip shows above it, stays while the pointer moves (its layer takes no pointer) and goes |
 | `dialogs` | Start > Run: opens centred, a program by name starts and the dialog closes; a name that doesn't exist: a message over the dialog, with the keyboard, then back to the dialog; Help shows and closes; Shut Down darkens the screen, Escape cancels, "shut down" and "restart" ask the system (only logged, see below), "close all programs and exit" ends the desktop cleanly (exit status 0, no failed assertion) |
+| `notifications` | win95shell's notifications (sent with `win95notify`, our notify-send, and D-Bus): a crash from before the desktop started gets one notice, at the bottom right 8 pixels clear of the taskbar, marked seen, and clicking it opens Problem Reports; a crash while running gets one at once; a program's notification shows (logged by program, never by what it says), with its sound, clicking runs its default action, its close box closes it, it expires by itself (the program is told which), at most four at once, the program can close them; Do Not Disturb keeps them (a critical one still shows); the active window keeps the keyboard throughout. The volume keys: without a shell they're a program's; with one, Volume Up/Down and Mute change the volume (55%, 50%, muted), the level shows above the taskbar with the right number of blocks, a held key repeats, it goes by itself, no program sees the keys; Brightness Up (where there's a backlight) asks for a brighter screen. Autostart doesn't run when the shell isn't the session's |
+| `session` | `win95shell --session`: autostart starts its programs (not one turned off, nor one only for another desktop) and would tell systemd where the display is; the update check (against a stand-in PackageKit) refreshes, lists, never interactively, and gives its notice; polkit's password prompt (called as polkit would): the password goes to polkit's helper with the cookie, typing goes to the prompt, a wrong one keeps it up, the right one says yes, Escape says no and the keyboard goes back; NetworkManager's network password: shown, the password goes back, would be saved, Escape cancels; a second shell is refused |
 | `classic` | the Qt compositor's desktop as a window in the new one, since the taskbar QML is shared: its desktop and taskbar, its Start menu just above the taskbar, Escape, the clock's tooltip, a taskbar button's menu at the pointer |
 | `settings` | settings.ini changes apply at once: title and face colours (written as QSettings does, and edited in place), the double-click time (a slow double-click counts only with a long interval), an unknown keyboard layout is reported and typing still works |
 | `vscode` | VS Code: opens the file, the wheel scrolls the editor, typing and Ctrl+S save it |
@@ -53,14 +55,27 @@ NetworkManager for your real session, and `WAYLAND95_NO_POWER_ACTIONS=1`,
 so Shut Down's choices (power off, restart, stand by, hibernate, ending
 the session) only log what they would do: a test desktop inherits your
 session's id, and must never end it or turn the computer off. The tests
-refuse to start a shell without both.
+refuse to start a shell without both. With them the desktop also never
+changes the screen's brightness or power profile, saves a network password
+into NetworkManager, or changes systemd's environment.
+
+The rest of the system has stand-ins (`tests/fakes/`, first on the shell's
+`PATH`): the sound players (the tests' desktops make no sound; the
+stand-ins log what would have played), PipeWire's `pw-dump` and `wpctl`
+(one pretend output at 50%; volume changes are only logged), polkit's
+password checker (`right-password` is right; no PAM involved), and
+PackageKit (on the test's own D-Bus). The shell's D-Bus session is the
+test's own `dbus-daemon`, which the tests reach too: with
+`WAYLAND95_TEST_AGENTS_ON_SESSION_BUS=1` the polkit and NetworkManager
+agents answer there, so the tests call them as polkit and NetworkManager
+would, and nothing reaches the real ones.
 
 Not covered headless: the keyboard layout and repeat (they apply to real
 keyboards; the tests' virtual keyboard brings its own keymap) and touchpad
 settings (no touchpad). Those are checked nested, with your real keyboard
-and touchpad. Still to come (phase 4): the shell's taskbar and Start menu,
-the lock screen, drag and drop between programs, robustness (crashing and
-hung programs).
+and touchpad. Still to come (phase 4): the Alt+Tab box and the desktop's
+own keys, the lock screen and screen saver, the power policy, drag and drop
+between programs, robustness (crashing and hung programs).
 
 `tests/run.sh` runs everything and prints PASS/FAIL per check with what was
 expected and what happened; `tests/run.sh input` runs one suite.
@@ -71,7 +86,9 @@ fails exactly the checks meant to catch it, and that the real build passes.
 A new kind of check gets a broken build to prove it, where that's possible.
 The breaks: no pointer frames (the wheel in Chromium), no keyboard until
 one is plugged in (typing lost), no Win95 frames, panels' exclusive zones
-ignored (windows under the taskbar).
+ignored (windows under the taskbar), the volume and brightness keys never
+sent to the shell, panels arranged in one pass (notifications over the
+taskbar).
 
 ## 2. Nested, on your screen (VS Code)
 

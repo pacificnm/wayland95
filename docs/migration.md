@@ -26,9 +26,9 @@ working in both).
 | Step | What | Tests |
 |---|---|---|
 | 4a | `shell/`: our Qt layer-shell integration (`LayerWindow`, no KDE library), the window list from foreign-toplevel behind the same `WindowManager` interface, the desktop (background layer), the taskbar (top layer, reserves its edge), the Start menu, tray and window menu on a pop-up layer shown only while one is open | `shell` suite: the taskbar shows, maximized windows stop above it, a button per window (title, active, minimized), clicking a button activates/minimizes/restores, its menu, the Start menu opens by click and launches a program, clicking outside closes it, the desktop's icons open |
-| 4b | dialogs (Run, Shut Down, message boxes, polkit and network passwords) as layer surfaces; notifications and the volume/brightness display; the services (polkit agent, NetworkManager secrets, notification server, tray watcher, update check, trash, problem reports, autostart) | dialogs suite; notifications suite (notify-send) |
-| 4c | `wayland95-shell-v1`: the Alt+Tab box, the desktop's own keys (Ctrl+Esc, Ctrl+Shift+Esc, Print, Ctrl+Shift+5), the window menu (right-click on a title bar, Alt+Space), End Task (the program's process) | alttab suite with the box; keys suite |
-| 4d | screen saver and lock (ext-idle-notify, ext-session-lock), display off, Print Screen and the capture tool (screencopy), accessibility options (StickyKeys, FilterKeys, MouseKeys: in the compositor, where keys arrive) | lock suite; accessibility suite |
+| 4b | dialogs (Run, Shut Down, message boxes, polkit and network passwords) as layer surfaces; notifications and the volume/brightness display; the services (polkit agent, NetworkManager secrets, notification server, tray watcher, update check, trash, problem reports, autostart) | dialogs suite; notifications suite (win95notify, our notify-send); session suite |
+| 4c | `wayland95-shell-v1` (begun in 4b with the volume and brightness keys): the Alt+Tab box, the desktop's own keys (Ctrl+Esc, Ctrl+Shift+Esc, Print, Ctrl+Shift+5), the window menu (right-click on a title bar, Alt+Space), End Task (the program's process) | alttab suite with the box; keys suite |
+| 4d | screen saver and lock (ext-idle-notify, ext-session-lock), display off, the power policy (lid, power and sleep buttons, critical battery, sleeping when idle), Print Screen and the capture tool (screencopy), accessibility options (StickyKeys, FilterKeys, MouseKeys: in the compositor, where keys arrive) | lock suite; accessibility suite |
 | 4e | the compositor starts the shell and restarts it if it dies; the whole desktop compared with reference screenshots of today's | screen suite |
 
 ## Phase results
@@ -173,6 +173,52 @@ darkens the screen; a Run error appears over the Run dialog).
 - `tests/run.sh`: new `dialogs` suite, 16 checks; 193 of 193 pass, three
   full runs in a row (two, plus the self-test's). `tests/selftest.sh`: the
   real build passes everything, and all four breaks are caught.
+
+**Phase 4, step 4b, the rest** (2026-11-16): everything the Qt
+compositor's desktop did besides windows and keys is now in win95shell.
+- Notifications: the same server and pop-ups, in a panel at the bottom
+  right just above the taskbar, sized to them, never taking the keyboard.
+  The desktop's own notices (network, Bluetooth, battery, updates found,
+  problem reports) moved from `Main.qml` into `SystemNotices.qml`, shared
+  by both desktops.
+- The volume and brightness keys: the compositor catches them and sends
+  them to the shell over `wayland95-shell-v1`
+  (`protocols/wayland95/`, pulled forward from 4c), only while a shell is
+  bound (without one they reach programs as before). The shell repeats a
+  held key at the keyboard's rate and shows the level in an overlay panel.
+  Only one shell can bind it; a second is refused.
+- The password prompts (polkit, and NetworkManager's network passwords) in
+  dialog panels.
+- `win95shell --session`: the login session's desktop (as the Qt compositor
+  is on eglfs with `WAYLAND95_SESSION`): autostart, telling systemd and
+  D-Bus where the display is, NetworkManager's agent and the update check
+  run only then. Until 4e nothing starts it so.
+- Found and fixed by the new tests:
+  - the compositor arranged panels in one pass, so one configured before
+    the taskbar (in the same layer, or a higher one) was placed as if
+    there were no taskbar: notifications were drawn over it. Panels that
+    keep an edge are now arranged first, as sway does
+  - the level display showed the level from before the key (the mixer
+    reports a change a moment later): one step behind on both desktops.
+    It's now worked out where the key is handled (`LevelOsd.qml`)
+- Safety, so a test never changes this computer (`tests/fakes/`): the
+  tests' desktops play no sound and change no volume (stand-ins for
+  `pw-play`, `pw-dump`, `wpctl`; before this every test desktop played its
+  startup sound on the real speakers), never change the screen's
+  brightness or power profile, never save a network password into
+  NetworkManager or update systemd's environment
+  (`WAYLAND95_NO_POWER_ACTIONS`, `WAYLAND95_NO_SYSTEM_AGENTS`). The agents
+  and the update check are tested on the test's own D-Bus
+  (`WAYLAND95_TEST_AGENTS_ON_SESSION_BUS`), against a stand-in for polkit's
+  password checker (no PAM involved) and for PackageKit.
+- `tests/run.sh`: new `notifications` (35 checks) and `session` (20
+  checks) suites; 249 of 249 pass in two full runs (one, plus the
+  self-test's). `tests/selftest.sh`: the real build passes everything, and
+  all six breaks are caught, including two new ones (the keys never sent
+  to the shell; panels arranged in one pass).
+- Not yet: the power policy (lid, power button, critical battery, sleeping
+  when idle) goes with the screen saver in 4d; until then logind's defaults
+  apply under the new compositor.
 
 ## What changes for users
 

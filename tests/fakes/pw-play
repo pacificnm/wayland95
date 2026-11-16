@@ -1,0 +1,5 @@
+#!/bin/sh
+# Stand-in for PipeWire's pw-play (also paplay, aplay: see README.md): the
+# tests' desktops make no sound; this says what they'd have played.
+for a; do last=$a; done
+echo "sound: $(basename "$0") ${last:-}" >>"${W95_FAKE_LOG:-/dev/null}"

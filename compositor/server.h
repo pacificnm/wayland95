@@ -172,6 +172,10 @@ struct server {
 	struct wlr_keyboard_shortcuts_inhibit_manager_v1 *shortcuts_inhibit;
 	struct wl_listener new_shortcuts_inhibitor;
 
+	// the shell (wayland95-shell-v1, shell.c): the one bound, if any
+	struct wl_global *shell_global;
+	struct wl_resource *shell_resource;
+
 	struct wlr_idle_notifier_v1 *idle_notifier;
 	struct wlr_idle_inhibit_manager_v1 *idle_inhibit;
 	struct wl_listener new_idle_inhibitor;
@@ -356,3 +360,7 @@ void layers_arrange(struct server *server);
 // protocols.c: everything else (idle, activation, lock, outputs, ...)
 void protocols_init(struct server *server);
 void protocols_finish(struct server *server);
+void shell_init(struct server *server);
+void shell_finish(struct server *server);
+uint32_t shell_key_for(xkb_keysym_t sym); // 0: not one of the shell's keys
+bool shell_send_key(struct server *server, uint32_t key, bool pressed); // false: no shell

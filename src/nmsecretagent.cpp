@@ -1,4 +1,5 @@
 #include "nmsecretagent.h"
+#include "launcher.h"
 
 #include <QDBusMetaType>
 #include <QDBusObjectPath>
@@ -15,6 +16,16 @@ const QString UserCanceled = QStringLiteral("org.freedesktop.NetworkManager.Secr
 // GetSecrets flags
 constexpr uint AllowInteraction = 0x1;
 constexpr uint RequestNew = 0x2;
+
+// The automated tests run desktops inside your session, which must never
+// answer NetworkManager for it (WAYLAND95_NO_SYSTEM_AGENTS). With
+// WAYLAND95_TEST_AGENTS_ON_SESSION_BUS as well, the agent answers on the
+// test's own session bus, where the tests call it as NetworkManager would.
+bool testMode()
+{
+    return qEnvironmentVariableIsSet("WAYLAND95_NO_SYSTEM_AGENTS")
+           && qEnvironmentVariableIsSet("WAYLAND95_TEST_AGENTS_ON_SESSION_BUS");
+}
 }
 
 // ---------------------------------------------------------------------------
@@ -48,12 +59,19 @@ void NetworkSecretAgentAdaptor::DeleteSecrets(const NMSettings &, const QDBusObj
 
 NetworkSecretAgent::NetworkSecretAgent(QObject *parent)
     : QObject(parent)
-    , m_bus(QDBusConnection::systemBus())
+    , m_bus(testMode() ? QDBusConnection::sessionBus() : QDBusConnection::systemBus())
 {
-    // only as the session on the screen itself (see Launcher's isSession)
-    const QString platform = QGuiApplication::platformName();
-    setup(qEnvironmentVariableIsSet("WAYLAND95_SESSION")
-          && (platform == QLatin1String("eglfs") || platform == QLatin1String("linuxfb")));
+    if (testMode()) {
+        qInfo() << "Network passwords: a test agent, on the session bus (WAYLAND95_TEST_AGENTS_ON_SESSION_BUS)";
+        setup(false);
+        return;
+    }
+    if (qEnvironmentVariableIsSet("WAYLAND95_NO_SYSTEM_AGENTS")) {
+        qInfo() << "Network passwords: no agent (WAYLAND95_NO_SYSTEM_AGENTS)";
+        return;
+    }
+    // only as the session on the screen itself
+    setup(Launcher::isSession());
 }
 
 NetworkSecretAgent::NetworkSecretAgent(const QDBusConnection &bus, bool registerWithNetworkManager, QObject *parent)
@@ -174,6 +192,12 @@ void NetworkSecretAgent::savePermanently(const QString &uuid, const QString &set
 {
     if (uuid.isEmpty())
         return;
+    // never from the tests' desktops: this changes NetworkManager's profile
+    if (qEnvironmentVariableIsSet("WAYLAND95_NO_SYSTEM_AGENTS")) {
+        qInfo().noquote() << "Network passwords: would save the password in connection" << uuid
+                          << "(WAYLAND95_NO_SYSTEM_AGENTS)";
+        return;
+    }
     // After the connection has had a moment to come up: the profile keeps the
     // password itself (owned by NetworkManager, "flags 0"), so any desktop
     // has it. The password goes in through nmcli's stdin, never on a

@@ -47,6 +47,18 @@ bool logindCan(const QString &what)
 
 } // namespace
 
+// The automated tests run desktops inside your real session: with this set
+// (tests/run.sh does), nothing here suspends, powers off, restarts or ends
+// the session, or changes the screen's brightness or power profile; it only says what it
+// would have done.
+static bool powerActionsOff(const QString &what)
+{
+    if (!qEnvironmentVariableIsSet("WAYLAND95_NO_POWER_ACTIONS"))
+        return false;
+    qInfo().noquote() << "Power: would" << what << "(WAYLAND95_NO_POWER_ACTIONS)";
+    return true;
+}
+
 PowerManager::PowerManager(QObject *parent)
     : QObject(parent)
 {
@@ -164,7 +176,8 @@ void PowerManager::setPowerProfile(const QString &profile)
         return;
     QDBusMessage call = QDBusMessage::createMethodCall(m_profileService, m_profilePath, Properties, QStringLiteral("Set"));
     call << m_profileInterface << QStringLiteral("ActiveProfile") << QVariant::fromValue(QDBusVariant(profile));
-    bus().asyncCall(call);
+    if (!powerActionsOff(QStringLiteral("set the power profile to ") + profile))
+        bus().asyncCall(call);
 }
 
 void PowerManager::readBrightness()
@@ -192,7 +205,8 @@ void PowerManager::setBrightness(int percent)
                                                        QStringLiteral("org.freedesktop.login1.Session"),
                                                        QStringLiteral("SetBrightness"));
     call << QStringLiteral("backlight") << m_backlight << uint(qMax(1, qRound(m_maxBrightness * percent / 100.0)));
-    bus().asyncCall(call);
+    if (!powerActionsOff(QStringLiteral("set the brightness to %1%").arg(percent)))
+        bus().asyncCall(call);
     if (percent != m_brightness) {
         m_brightness = percent;
         emit brightnessChanged();
@@ -202,17 +216,6 @@ void PowerManager::setBrightness(int percent)
 void PowerManager::changeBrightness(int deltaPercent)
 {
     setBrightness(m_brightness + deltaPercent);
-}
-
-// The automated tests run desktops inside your real session: with this set
-// (tests/run.sh does), nothing here suspends, powers off, restarts or ends
-// the session; it only says what it would have done.
-static bool powerActionsOff(const QString &what)
-{
-    if (!qEnvironmentVariableIsSet("WAYLAND95_NO_POWER_ACTIONS"))
-        return false;
-    qInfo().noquote() << "Power: would" << what << "(WAYLAND95_NO_POWER_ACTIONS)";
-    return true;
 }
 
 void PowerManager::logindCall(const QString &method)

@@ -1,0 +1,15 @@
+#!/bin/sh
+# Stand-in for polkit's polkit-agent-helper-1 (see README.md), speaking its
+# protocol: the cookie on stdin, a PAM prompt, the password, the verdict.
+read -r cookie
+echo "polkit helper: user $1, cookie $cookie" >>"${W95_FAKE_LOG:-/dev/null}"
+echo "PAM_PROMPT_ECHO_OFF Password: "
+read -r password
+if [ "$password" = "right-password" ]; then
+    echo "polkit helper: right password" >>"${W95_FAKE_LOG:-/dev/null}"
+    echo SUCCESS
+else
+    echo "polkit helper: wrong password" >>"${W95_FAKE_LOG:-/dev/null}"
+    echo "PAM_ERROR_MSG Sorry, that password is wrong."
+    echo FAILURE
+fi

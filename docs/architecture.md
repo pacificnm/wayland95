@@ -49,7 +49,8 @@ maintained by the people who write the protocols.
  ┌─────────────┴─────────────────────────────┴───── win95shell (Qt/QML) ─────┐
  │ desktop (wallpaper, icons)          background layer                      │
  │ taskbar, Start menu, tray, clock    top layer, reserves the screen edge   │
- │ notifications, volume/brightness    overlay layer                         │
+ │ notifications                       top layer, above the taskbar          │
+ │ volume/brightness level             overlay layer                         │
  │ Alt+Tab box, Run, Shut Down, password prompts, network passwords          │
  │ screen saver and unlock (ext-session-lock)                                │
  │ services: launcher, program menu, polkit agent, NetworkManager secrets,   │
@@ -74,7 +75,7 @@ one file per concern):
 | `xwayland.c` | X11 windows through `wlr_xwayland` (its window manager is part of wlroots) |
 | `decoration.c` | the Win95 frame: title bar (active/inactive gradients, bold title cut short with "..."), minimize/maximize/close buttons, 3-D borders, an invisible 4-pixel grab zone outside the border for resizing; drawn with cairo and pango into one scene buffer behind the program, re-drawn only when its size, title, state or the colour scheme changes |
 | `layers.c` | layer-shell surfaces (the shell's panels), exclusive zones (the taskbar's edge), keyboard interactivity |
-| `shellproto.c` | `wayland95-shell-v1`, the shell's private protocol (below) |
+| `shell.c` | `wayland95-shell-v1`, the shell's private protocol (below) |
 | `settings.c` | reads `~/.config/wayland95/settings.ini` (the colour scheme for frames, keyboard layout and repeat, double-click time, touchpad) and watches it with inotify: changes apply at once, as the Qt compositor does today |
 
 Window frames are server-side (`xdg-decoration`): programs that leave
@@ -152,31 +153,44 @@ watcher, update check, trash watcher, problem reports). What changes:
   whole screen, shown only while the Start menu, a tray pop-up or the
   taskbar's window menu is open; it has the keyboard then, and a click
   outside closes them, as on the Qt compositor) and a tooltip layer
-  (overlay, takes no input, shown only while a tooltip is). The QML files
-  themselves are the Qt compositor's (`qml/Win95Shell/`), shared: the
-  taskbar takes a `popupParent` for where its pop-ups go.
+  (overlay, takes no input, shown only while a tooltip is). Notifications
+  are a top-layer panel at the bottom right, sized to the pop-ups and kept
+  above the taskbar by its exclusive zone; the volume/brightness level an
+  overlay that takes no input. Dialogs (Run, Shut Down, messages, the
+  polkit and network password prompts) each get a full-screen overlay
+  (`shell/qml/DialogLayer.qml`) with the keyboard while they show. The QML
+  files themselves are the Qt compositor's (`qml/Win95Shell/`), shared:
+  the taskbar takes a `popupParent` for where its pop-ups go, and the
+  desktop's own notices are `SystemNotices.qml` in both.
+- **As the session** (`win95shell --session`, as the Qt compositor is when
+  it runs on the screen as `WAYLAND95_SESSION`): autostart, telling systemd
+  and D-Bus where the display is, NetworkManager's agent and the update
+  check. A shell started by hand, or nested, does none of these.
 - **Screen saver and locking** use `ext-idle-notify` (when to start) and
   `ext-session-lock` (password-protected: nothing else is shown or gets input
   until it unlocks). Turning the display off is `wlr-output-power-management`.
 - **Screen captures** (the Print Screen tool) use screencopy.
 
-### wayland95-shell-v1 (`protocols/wayland95-shell-v1.xml`)
+### wayland95-shell-v1 (`protocols/wayland95/wayland95-shell-v1.xml`)
 
-Only for what no standard protocol covers, kept small:
+Only for what no standard protocol covers, kept small. Version 1 (4b) has
+the desktop's own keys: the compositor catches the volume and brightness
+keys (whatever has focus, except a program that asked for every key) and
+sends their presses and releases to the shell, which acts, repeats a held
+key and shows the level; with no shell bound they go to programs as usual.
+Later versions add:
 
 - Alt+Tab: the compositor owns the keys (they must work whatever has focus)
   and tells the shell to show, step and close the switcher; the shell says
   which window was picked.
 - The window menu (right-click on a title bar, Alt+Space): the compositor
   asks the shell to show it at a position for a window.
-- Shell-only windows: lets `win95shell` mark its dialogs (Run, Shut Down,
-  password prompts) so the compositor centres them, keeps them above, and
-  leaves them off the taskbar.
 - The minimize/restore animation target (taskbar button rectangle) is
   already in foreign-toplevel (`set_rectangle`).
 
-Only `win95shell`, started by the compositor itself over a private socket,
-can bind it (wlroots' global filter).
+One client at a time can bind it (a second gets an error). Once the
+compositor starts the shell itself (4e), over a private socket, only that
+`win95shell` will be able to see it (wlroots' global filter).
 
 ## Sessions and packaging
 

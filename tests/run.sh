@@ -7,7 +7,8 @@
 #
 #   tests/run.sh [SUITE...]        all suites, or some of: input (Chromium) firefox
 #                                  windows popups x11 clipboard qt frames alttab
-#                                  settings shell dialogs classic vscode
+#                                  settings shell dialogs notifications session
+#                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
 #
@@ -737,15 +738,37 @@ Layout=nosuchlayout"
 # --- the shell (win95shell: desktop, taskbar, Start menu) --------------------------
 # It runs as it will in the session, but with a throwaway home, settings and
 # D-Bus session: your files, notifications and tray stay out of it.
-start_shell() {
+start_shell() { # [ARGS...]  (--session: as the login session's desktop)
     local home=$WORK/home-$RUN
     mkdir -p "$home"
     # never without the guards: Shut Down must only say what it would do
     [ "${WAYLAND95_NO_POWER_ACTIONS:-}" = 1 ] && [ "${WAYLAND95_NO_SYSTEM_AGENTS:-}" = 1 ] \
         || { echo "refusing to start a shell without WAYLAND95_NO_POWER_ACTIONS" >&2; exit 2; }
-    HOME=$home XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET DISPLAY=$XDISPLAY QT_NO_XDG_DESKTOP_PORTAL=1 \
-        WAYLAND95_COMPOSITOR_PID=$COMP_PID \
-        dbus-run-session -- "$SHELL_BIN" >"$WORK/$SUITE-shell.log" 2>&1 &
+    # a D-Bus session of its own, which the tests reach too (in_bus): its
+    # notification server, and its password agents (on this bus, not the
+    # system's: WAYLAND95_TEST_AGENTS_ON_SESSION_BUS)
+    local addr=$WORK/$SUITE-bus.address
+    rm -f "$addr"
+    dbus-daemon --session --nofork --nopidfile --print-address=3 3>"$addr" >/dev/null 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 50); do [ -s "$addr" ] && break; sleep 0.1; done
+    SHELL_BUS=$(head -1 "$addr")
+    [ -n "$SHELL_BUS" ] || { bad "the shell's D-Bus starts" "no address"; return 1; }
+    # the system's stand-ins (tests/fakes): sound, polkit's password check,
+    # and PackageKit (only where a suite asks for it)
+    FAKE_LOG=$WORK/$SUITE-fakes.log; : >"$FAKE_LOG"
+    if [ -n "${WITH_PACKAGEKIT:-}" ]; then
+        DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS python3 -I "$HERE/fakes/packagekit.py" "$FAKE_LOG" &
+        PIDS+=($!)
+        for _ in $(seq 50); do grep -q "packagekit: ready" "$FAKE_LOG" && break; sleep 0.1; done
+    fi
+    HOME=$home XDG_CONFIG_HOME=$CONFIG XDG_DATA_HOME=$home/.local/share XDG_STATE_HOME=$home/.local/state \
+        XDG_CACHE_HOME=$home/.cache WAYLAND_DISPLAY=$SOCKET DISPLAY=$XDISPLAY QT_NO_XDG_DESKTOP_PORTAL=1 \
+        WAYLAND95_COMPOSITOR_PID=$COMP_PID DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        PATH="$HERE/fakes:$PATH" W95_FAKE_LOG=$FAKE_LOG WAYLAND95_TEST_AGENTS_ON_SESSION_BUS=1 \
+        WAYLAND95_TEST_POLKIT_HELPER=$HERE/fakes/polkit-agent-helper-1 \
+        "$SHELL_BIN" "$@" >"$WORK/$SUITE-shell.log" 2>&1 &
+    SHELL_PID=$!
     PIDS+=($!)
     for _ in $(seq 100); do
         grep -q "win95shell: ready" "$WORK/$SUITE-shell.log" 2>/dev/null && break
@@ -754,6 +777,7 @@ start_shell() {
     sleep 1.5
     grep -q "win95shell: ready" "$WORK/$SUITE-shell.log" || { bad "the shell starts" "$(tail -5 "$WORK/$SUITE-shell.log")"; return 1; }
 }
+in_bus() { DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS "$@"; }
 TASKBAR_Y=783                 # the middle of the 34-pixel taskbar at the bottom
 START_X=35
 task_button() { echo $((77 + 154 * $1 + 75)); }  # the middle of the Nth (0, 1...) window's button (150 wide, 4 apart)
@@ -893,6 +917,246 @@ suite_dialogs() {
     expect_true $? "(cleanly: it stopped on its signal, exit status 0, no failed assertion)" "exit status $st: $(tail -2 "$CLOG")"
 }
 
+# --- notifications, the volume/brightness keys, problem reports -------------
+# The notification pop-ups sit at the bottom right, 8 pixels clear of the
+# screen's edge and the taskbar (whose top is at 766): right edge 1272,
+# bottom 758, 300 wide.
+NOTE_X=975                    # the left end of every pop-up's title bar (navy, where its gradient starts)
+note_shown() { [ "$(pixel "$1" 1100 754)" = c0c0c0 ]; }   # the lowest pop-up's face
+note_rows() { # SHOT: the rows of the column that are title bar (navy, give or take)
+    magick "$WORK/$SUITE-$1.png" -crop 1x758+$NOTE_X+0 +repage -fuzz 3% -fill "#ff00ff" -opaque "#000080" \
+        txt:- 2>/dev/null | awk -F'[,:]' 'NR > 1 && /#FF00FF/ { print $2 }'
+}
+note_titles() { # SHOT: how many pop-ups (separate title bars down the column)
+    note_rows "$1" | awk 'NR == 1 || $1 != last + 1 { n++ } { last = $1 } END { print n + 0 }'
+}
+note_title_y() { note_rows "$1" | tail -1; }   # SHOT: the lowest pop-up's title bar's bottom row
+notify() { in_bus "$BUILD/win95notify" "$@"; }
+close_notes() { # every notification there is (the server numbers them from 1)
+    local i; for i in $(seq 1 40); do
+        in_bus gdbus call --session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
+            --method org.freedesktop.Notifications.CloseNotification $i >/dev/null 2>&1
+    done
+    sleep 0.6
+}
+# the level display: 240x54, centred, 80 above the taskbar (bottom at 686)
+osd_shown() { [ "$(pixel "$1" 530 680)" = c0c0c0 ]; }
+osd_blocks() { # SHOT: how many blocks the level bar has filled (20 is all)
+    magick "$WORK/$SUITE-$1.png" -crop 174x1+572+659 +repage -fuzz 3% -fill "#ff00ff" -opaque "#000080" txt:- 2>/dev/null \
+        | awk -F'[,:]' 'NR > 1 { blue = /#FF00FF/; if (blue && !was) n++; was = blue } END { print n + 0 }'
+}
+
+suite_notifications() {
+    say "notifications: pop-ups, the volume and brightness keys, problem reports (win95shell)"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    # without a shell, the volume keys are any program's
+    start_probe A qt cc0000 || return
+    local n; n=$(pmark A)
+    pointer key:XF86AudioRaiseVolume wait:0.3
+    pexpect "with no shell, the volume key goes to the program" A "$n" "key (XF86AudioRaiseVolume|Volume Up)"
+    # a crash from before the desktop started (Notepad's, a minute ago),
+    # and an autostart entry, which must not start (not the session)
+    local home=$WORK/home-$RUN crashes
+    crashes=$home/.local/state/wayland95/crashes; mkdir -p "$crashes" "$CONFIG/autostart"
+    printf 'Wayland 95 problem report\nProgram: win95notepad\nVersion: test\nTime: %s\nSignal: 11 SIGSEGV (invalid memory access)\n\n== Backtrace\n' \
+        "$(($(date +%s) - 60))" >"$crashes/win95notepad-1-1.crash"
+    printf '[Desktop Entry]\nType=Application\nName=Autostarted\nExec=%s\n' "$BUILD/win95notepad" >"$CONFIG/autostart/w95test.desktop"
+    start_shell || return
+    query activate A; sleep 0.5
+
+    # the earlier crash: one notice, a few seconds after starting
+    for _ in $(seq 20); do shell_said "notice from Wayland 95: Notepad crashed" && break; sleep 0.25; done
+    shell_said "notice from Wayland 95: Notepad crashed"; expect_true $? "a crash from before: a notice says Notepad crashed" "$(grep Notifications "$WORK/$SUITE-shell.log" | tail -3)"
+    away; shot crash
+    note_shown crash; expect_true $? "the notice pops up at the bottom right, above the taskbar" "$(pixel crash 1100 754) at 1100,754"
+    [ "$(pixel crash 1273 754)" = 008080 ] && [ "$(pixel crash 1100 760)" = 008080 ]
+    expect_true $? "(8 pixels clear of the screen's edge and the taskbar)" "$(pixel crash 1273 754) right of it, $(pixel crash 1100 760) below"
+    [ "$(note_titles crash)" = 1 ]; expect_true $? "(one notice for it)" "$(note_titles crash) pop-ups"
+    grep -q "win95notepad-1-1.crash" "$crashes/.seen" 2>/dev/null; expect_true $? "and the report is marked as seen" "$(cat "$crashes/.seen" 2>/dev/null)"
+    n=$(pmark A)
+    pointer type:k wait:0.3
+    pexpect "the active window keeps the keyboard" A "$n" "key k"
+    pointer click:1100,$(($(note_title_y crash) + 30)) wait:1
+    for _ in $(seq 20); do [ "$(windows_of win95control)" -ge 1 ] && break; sleep 0.5; done
+    [ "$(windows_of win95control)" -ge 1 ]; expect_true $? "clicking it opens Control Panel's Problem Reports" "$(query list | tr '\n' ' ')"
+    away; shot crash-clicked
+    ! note_shown crash-clicked; expect_true $? "and the notice goes" "it's still there"
+    query list | sed -n 's/^\([^|]*\)|win95control|.*/\1/p' | while read -r t; do query close "$t"; done; sleep 0.5
+    # a crash while the desktop runs
+    printf 'Wayland 95 problem report\nProgram: win95files\nTime: %s\nSignal: 6 SIGABRT (aborted)\n\n' "$(date +%s)" >"$crashes/win95files-2-2.crash"
+    for _ in $(seq 20); do shell_said "notice from Wayland 95: File Manager crashed" && break; sleep 0.25; done
+    shell_said "notice from Wayland 95: File Manager crashed"; expect_true $? "a crash now: its notice comes at once" "$(grep Notifications "$WORK/$SUITE-shell.log" | tail -3)"
+    close_notes
+    [ "$(windows_of win95notepad)" -eq 0 ]; expect_true $? "(autostart doesn't run: this shell isn't the session's)" "$(query list | tr '\n' ' ')"
+
+    # a program's notification (win95notify is our notify-send)
+    query activate A; sleep 0.3
+    local sounds; sounds=$(grep -c "^sound:" "$FAKE_LOG")
+    notify -A default=Open --wait "Test" "Clicking this says default" >"$WORK/$SUITE-click.out" 2>&1 &
+    sleep 1; away; shot note
+    note_shown note; expect_true $? "a program's notification pops up" "$(pixel note 1100 754)"
+    grep -q "Notifications: [0-9]* from win95notify shown" "$WORK/$SUITE-shell.log"; expect_true $? "(the log names the program, not what it says)" "$(grep Notifications "$WORK/$SUITE-shell.log" | tail -2)"
+    ! grep -q "Clicking this" "$WORK/$SUITE-shell.log"; expect_true $? "(what it says isn't logged)" "it was"
+    [ "$(grep -c "^sound:" "$FAKE_LOG")" -gt "$sounds" ]; expect_true $? "(with its sound)" "$(grep sound: "$FAKE_LOG")"
+    pointer click:1100,$(($(note_title_y note) + 30)) wait:0.8
+    [ "$(cat "$WORK/$SUITE-click.out")" = default ]; expect_true $? "clicking it runs its default action" "the program heard: $(cat "$WORK/$SUITE-click.out")"
+    away; shot note-clicked
+    ! note_shown note-clicked; expect_true $? "and it goes" "still there"
+    # the close box
+    notify --wait "Close me" "with the X" >"$WORK/$SUITE-close.out" 2>&1 &
+    sleep 1; away; shot close
+    local ty; ty=$(note_title_y close)
+    pointer click:1259,$((ty - 8)) wait:0.8
+    [ "$(cat "$WORK/$SUITE-close.out")" = closed ]; expect_true $? "its close box closes it (the program is told)" "the program heard: $(cat "$WORK/$SUITE-close.out")"
+    away; shot closed
+    ! note_shown closed; expect_true $? "(and it's gone)" "still there"
+    # by itself, after its time
+    local t0=$SECONDS
+    notify -t 1500 --wait "Brief" "1.5 seconds" >"$WORK/$SUITE-brief.out" 2>&1
+    local st=$? took=$((SECONDS - t0))
+    [ "$(cat "$WORK/$SUITE-brief.out")" = closed ] && [ "$st" -eq 1 ] && [ "$took" -le 4 ]
+    expect_true $? "a notification goes by itself after its time (and the program is told it expired)" "said $(cat "$WORK/$SUITE-brief.out"), status $st, after ${took}s"
+    # several: at most four at once, newest at the bottom
+    local i; for i in 1 2 3 4 5; do notify -t 20000 "Number $i" "one of five"; sleep 0.2; done
+    sleep 0.8; away; shot five
+    [ "$(note_titles five)" = 4 ]; expect_true $? "five notifications: four shown at once" "$(note_titles five) shown"
+    close_notes; away; shot none
+    ! note_shown none && [ "$(note_titles none)" = 0 ]; expect_true $? "closed by the program, they go" "$(note_titles none) still shown"
+    # Do Not Disturb: kept in the tray's list, not shown (critical ones are)
+    settings_write $'[Notifications]\nDoNotDisturb=true'; sleep 1
+    notify "Quiet" "not shown"; sleep 0.8; away; shot dnd
+    ! note_shown dnd && shell_said "from win95notify kept (do not disturb)"
+    expect_true $? "Do Not Disturb (settings.ini): a notification is kept, not shown" "$(grep Notifications "$WORK/$SUITE-shell.log" | tail -1)"
+    notify -u critical "Urgent" "shown anyway"; sleep 0.8; away; shot dnd-critical
+    note_shown dnd-critical; expect_true $? "but a critical one still shows" "$(pixel dnd-critical 1100 754)"
+    settings_write $'[Notifications]\nDoNotDisturb=false'; sleep 0.5
+    close_notes
+
+    # the volume keys: the shell's now (the sound is tests/fakes' stand-in).
+    # The level shows for 1.5 seconds: screenshots straight after the key
+    # (the pointer's out of the way already, at the notifications' corner)
+    query activate A; sleep 0.3
+    n=$(pmark A)
+    pointer key:XF86AudioRaiseVolume; shot vol-up
+    grep -q "^wpctl set-volume 42 0.550" "$FAKE_LOG"; expect_true $? "Volume Up: the volume goes from 50% to 55%" "$(cat "$FAKE_LOG")"
+    osd_shown vol-up; expect_true $? "and the level shows, centred above the taskbar" "$(pixel vol-up 530 680) at 530,680"
+    pexpect_not "(the key doesn't reach the program)" A "$n" "key (XF86Audio|Volume)"
+    [ "$(osd_blocks vol-up)" = 11 ]; expect_true $? "(its bar shows 55%: 11 blocks of 20)" "$(osd_blocks vol-up) blocks"
+    pointer key:XF86AudioLowerVolume; shot vol-down
+    grep -q "^wpctl set-volume 42 0.500" "$FAKE_LOG"; expect_true $? "Volume Down: back to 50%" "$(cat "$FAKE_LOG")"
+    [ "$(osd_blocks vol-down)" = 10 ]; expect_true $? "(its bar shows 50%: 10 blocks)" "$(osd_blocks vol-down) blocks"
+    pointer key:XF86AudioMute wait:0.5
+    grep -q "^wpctl set-mute 42 1" "$FAKE_LOG"; expect_true $? "Mute mutes" "$(tail -2 "$FAKE_LOG")"
+    local before; before=$(grep -c "set-volume" "$FAKE_LOG")
+    pointer keydown:XF86AudioRaiseVolume wait:1.2 keyup:XF86AudioRaiseVolume wait:0.3
+    [ $(($(grep -c "set-volume" "$FAKE_LOG") - before)) -ge 4 ]; expect_true $? "holding Volume Up repeats it" "$(($(grep -c "set-volume" "$FAKE_LOG") - before)) changes"
+    sleep 2.5; away; shot vol-gone
+    ! osd_shown vol-gone; expect_true $? "the level goes by itself" "$(pixel vol-gone 530 680)"
+    pexpect_not "(nor did any of them reach the program)" A "$n" "key (XF86Audio|Volume)"
+    if [ -n "$(ls /sys/class/backlight 2>/dev/null)" ]; then
+        pointer key:XF86MonBrightnessUp; shot bright
+        shell_said "Power: would set the brightness to"; expect_true $? "Brightness Up asks for a brighter screen (only logged)" "$(grep Power "$WORK/$SUITE-shell.log")"
+        osd_shown bright; expect_true $? "(and shows the level)" "$(pixel bright 530 680)"
+    fi
+}
+
+# --- the login session's desktop: passwords, updates, autostart -------------
+# win95shell --session, with the system's stand-ins (tests/fakes) on its own
+# D-Bus: polkit and NetworkManager are the tests calling its agents, and
+# PackageKit is tests/fakes/packagekit.py.
+agent() { in_bus gdbus call --session --timeout 60 --dest "$AGENT" "$@"; }
+dialog_shown() { [ "$(pixel "$1" "$2" "$3")" = c0c0c0 ]; }
+suite_session() {
+    say "session: password prompts, the update check, autostart (win95shell --session)"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    mkdir -p "$CONFIG/autostart"
+    printf '[Desktop Entry]\nType=Application\nName=Auto\nExec=%s\n' "$BUILD/win95notepad" >"$CONFIG/autostart/w95-yes.desktop"
+    printf '[Desktop Entry]\nType=Application\nName=Off\nExec=%s\nHidden=true\n' "$BUILD/win95files" >"$CONFIG/autostart/w95-hidden.desktop"
+    printf '[Desktop Entry]\nType=Application\nName=Other\nExec=%s\nOnlyShowIn=GNOME;\n' "$BUILD/win95sysmon" >"$CONFIG/autostart/w95-gnome.desktop"
+    start_probe A qt cc0000 || return
+    WITH_PACKAGEKIT=1 start_shell --session || return
+    AGENT=$(in_bus gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
+        --method org.freedesktop.DBus.GetNameOwner org.freedesktop.Notifications | sed "s/^('\(.*\)',)$/\1/")
+
+    # autostart
+    for _ in $(seq 20); do [ "$(windows_of win95notepad)" -ge 1 ] && break; sleep 0.5; done
+    [ "$(windows_of win95notepad)" -ge 1 ]; expect_true $? "autostart: the session starts its programs" "$(query list | tr '\n' ' ')"
+    [ "$(windows_of win95files)" -eq 0 ] && [ "$(windows_of win95sysmon)" -eq 0 ]
+    expect_true $? "(not one turned off, nor one only for another desktop)" "$(query list | tr '\n' ' ')"
+    shell_said "Session: would tell systemd and D-Bus WAYLAND_DISPLAY=$SOCKET"
+    expect_true $? "it would tell systemd where the display is (only logged: the tests run inside your session)" "$(grep Session: "$WORK/$SUITE-shell.log")"
+    query list | sed -n 's/^\([^|]*\)|win95notepad|.*/\1/p' | while read -r t; do query close "$t"; done; sleep 0.5
+
+    # the update check (PackageKit's stand-in finds two updates)
+    for _ in $(seq 20); do shell_said "notice from Wayland 95 Update: Updates are ready to install" && break; sleep 0.25; done
+    shell_said "notice from Wayland 95 Update: Updates are ready to install"
+    expect_true $? "the update check: a notice that updates are ready" "$(grep -i "update\|packagekit" "$WORK/$SUITE-shell.log" "$FAKE_LOG" | tail -4)"
+    grep -q "RefreshCache" "$FAKE_LOG" && grep -q "GetUpdates" "$FAKE_LOG" && grep -q "interactive=false" "$FAKE_LOG"
+    expect_true $? "(it refreshed the lists, then asked for updates, never interactively)" "$(cat "$FAKE_LOG")"
+    close_notes
+    query activate A; sleep 0.4; away; shot empty
+
+    # a program asks polkit, polkit asks us
+    local uid; uid=$(id -u)
+    local ask=(--object-path /org/wayland95/PolicyKit1/AuthenticationAgent
+               --method org.freedesktop.PolicyKit1.AuthenticationAgent.BeginAuthentication
+               org.test.action "Testing wants a password" "" "@a{ss} {}" cookie-1
+               "[('unix-user', {'uid': <uint32 $uid>})]")
+    agent "${ask[@]}" >"$WORK/$SUITE-polkit.out" 2>&1 &
+    local asker=$!
+    sleep 1; away; shot polkit
+    dialog_shown polkit 450 470; expect_true $? "a password prompt: Enter Password shows, centred" "$(pixel polkit 450 470) at 450,470"
+    local n; n=$(pmark A)
+    pointer type:wrong key:Return wait:0.8; away; shot polkit-wrong
+    grep -q "polkit helper: user $(id -un), cookie cookie-1" "$FAKE_LOG" && grep -q "wrong password" "$FAKE_LOG"
+    expect_true $? "the password goes to polkit's helper (for you, with polkit's cookie)" "$(cat "$FAKE_LOG")"
+    pexpect_not "(typing went to the prompt, not the window)" A "$n" "key"
+    dialog_shown polkit-wrong 450 470 && kill -0 $asker 2>/dev/null
+    expect_true $? "a wrong password: it stays, and the program still waits" "$(cat "$WORK/$SUITE-polkit.out")"
+    pointer type:right-password key:Return wait:0.8
+    wait $asker; local st=$?
+    [ "$st" -eq 0 ] && grep -q "^()$" "$WORK/$SUITE-polkit.out"; expect_true $? "the right one: the program gets its yes" "status $st: $(cat "$WORK/$SUITE-polkit.out")"
+    away; shot polkit-done
+    ! dialog_shown polkit-done 450 470; expect_true $? "(and the prompt goes)" "still there"
+    ask[8]=cookie-2
+    agent "${ask[@]}" >"$WORK/$SUITE-polkit2.out" 2>&1 &
+    asker=$!
+    sleep 1; pointer key:Escape wait:0.8
+    wait $asker
+    grep -q "Cancelled" "$WORK/$SUITE-polkit2.out"; expect_true $? "Escape: the program is told no" "$(cat "$WORK/$SUITE-polkit2.out")"
+    n=$(pmark A); pointer type:z wait:0.3
+    pexpect "(and the keyboard is back with the window)" A "$n" "key z"
+
+    # NetworkManager needs a Wi-Fi password
+    local wifi=(--object-path /org/freedesktop/NetworkManager/SecretAgent
+                --method org.freedesktop.NetworkManager.SecretAgent.GetSecrets
+                "{'connection': {'id': <'TestNet'>, 'uuid': <'test-uuid'>}, '802-11-wireless': {'ssid': <@ay [0x54, 0x65, 0x73, 0x74, 0x4e, 0x65, 0x74]>}, '802-11-wireless-security': {'key-mgmt': <'wpa-psk'>}}"
+                /org/freedesktop/NetworkManager/Settings/1 802-11-wireless-security "@as []" 1)
+    agent "${wifi[@]}" >"$WORK/$SUITE-wifi.out" 2>&1 &
+    asker=$!
+    sleep 1; away; shot wifi
+    differs empty wifi 380 150 450 330; expect_true $? "a network's password: Enter Network Password shows" "nothing changed"
+    pointer type:hunter22 key:Return wait:0.8
+    wait $asker
+    grep -q "'psk': <'hunter22'>" "$WORK/$SUITE-wifi.out"; expect_true $? "the password goes to NetworkManager" "$(cat "$WORK/$SUITE-wifi.out")"
+    shell_said "would save the password in connection test-uuid"; expect_true $? "(and would be saved in its profile: only logged)" "$(grep "Network passwords" "$WORK/$SUITE-shell.log")"
+    away; shot wifi-done
+    ! differs empty wifi-done 380 150 450 330; expect_true $? "(and the prompt goes)" "still there"
+    agent "${wifi[@]}" >"$WORK/$SUITE-wifi2.out" 2>&1 &
+    asker=$!
+    sleep 1; pointer key:Escape wait:0.8
+    wait $asker
+    grep -q "UserCanceled" "$WORK/$SUITE-wifi2.out"; expect_true $? "Escape: NetworkManager is told it was canceled" "$(cat "$WORK/$SUITE-wifi2.out")"
+
+    # only one shell: a second one is refused the desktop's keys
+    HOME=$WORK/home-$RUN XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        PATH="$HERE/fakes:$PATH" W95_FAKE_LOG=$FAKE_LOG timeout 10 "$SHELL_BIN" >"$WORK/$SUITE-second.log" 2>&1
+    grep -q "error 0: another shell has wayland95_shell_v1" "$WORK/$SUITE-second.log"; expect_true $? "a second shell on the same desktop is refused" "$(tail -3 "$WORK/$SUITE-second.log")"
+    kill -0 "$SHELL_PID" 2>/dev/null; expect_true $? "(and the first carries on)" "it stopped"
+}
+
 # --- the Qt compositor's desktop, as a window in this one ---------------------------
 # The taskbar, Start menu and tray QML is shared with win95shell; this checks
 # a change to it didn't break the Qt compositor's desktop (still the session
@@ -906,6 +1170,8 @@ suite_classic() {
     local home=$WORK/home-$RUN inner=w95inner-$$
     mkdir -p "$home"
     HOME=$home XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 \
+        XDG_DATA_HOME=$home/.local/share XDG_STATE_HOME=$home/.local/state XDG_CACHE_HOME=$home/.cache \
+        PATH="$HERE/fakes:$PATH" W95_FAKE_LOG=$WORK/classic-fakes.log \
         dbus-run-session -- "$OLD" --wayland-socket-name "$inner" --no-xwayland >"$WORK/classic.log" 2>&1 &
     PIDS+=($!)
     for _ in $(seq 60); do query list | grep -q "^Wayland 95|" && break; sleep 0.25; done
@@ -931,7 +1197,7 @@ suite_classic() {
 }
 
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

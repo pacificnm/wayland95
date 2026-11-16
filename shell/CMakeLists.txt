@@ -11,12 +11,16 @@ qt_add_executable(win95shell
     layershell.h layershell.cpp
     toplevels.h toplevels.cpp
     session.h session.cpp
+    desktopkeys.h desktopkeys.cpp
     # services shared with the Qt compositor
     ${CMAKE_SOURCE_DIR}/src/launcher.h ${CMAKE_SOURCE_DIR}/src/launcher.cpp
     ${CMAKE_SOURCE_DIR}/src/programmenu.h ${CMAKE_SOURCE_DIR}/src/programmenu.cpp
     ${CMAKE_SOURCE_DIR}/src/statusnotifier.h ${CMAKE_SOURCE_DIR}/src/statusnotifier.cpp
     ${CMAKE_SOURCE_DIR}/src/notifications.h ${CMAKE_SOURCE_DIR}/src/notifications.cpp
     ${CMAKE_SOURCE_DIR}/src/trashwatcher.h ${CMAKE_SOURCE_DIR}/src/trashwatcher.cpp
+    ${CMAKE_SOURCE_DIR}/src/polkitagent.h ${CMAKE_SOURCE_DIR}/src/polkitagent.cpp
+    ${CMAKE_SOURCE_DIR}/src/nmsecretagent.h ${CMAKE_SOURCE_DIR}/src/nmsecretagent.cpp
+    ${CMAKE_SOURCE_DIR}/src/updatecheck.h ${CMAKE_SOURCE_DIR}/src/updatecheck.cpp
 )
 # (layer-shell names an argument "namespace", a C++ keyword in the Qt
 # wrappers: generated from a copy with it renamed)
@@ -27,6 +31,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DI
 qt6_generate_wayland_protocol_client_sources(win95shell FILES
     ${CMAKE_CURRENT_BINARY_DIR}/protocols/wlr-layer-shell-unstable-v1.xml
     ${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-foreign-toplevel-management-unstable-v1.xml
+    ${CMAKE_SOURCE_DIR}/protocols/wayland95/wayland95-shell-v1.xml
 )
 target_include_directories(win95shell PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -42,6 +47,7 @@ set(shared_qml
     Tray.qml TrayIcon.qml ClockTray.qml NotificationsTray.qml VolumeTray.qml
     NetworkTray.qml BluetoothTray.qml BatteryTray.qml
     RunDialog.qml ShutDownDialog.qml
+    SystemNotices.qml NotificationPopup.qml LevelOsd.qml PasswordDialog.qml NetworkPasswordDialog.qml
 )
 set(qml_paths)
 foreach(f ${shared_qml})

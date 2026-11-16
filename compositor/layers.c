@@ -30,13 +30,25 @@ void layers_arrange(struct server *server)
 		ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, ZWLR_LAYER_SHELL_V1_LAYER_TOP,
 		ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM, ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND,
 	};
-	for (size_t i = 0; i < sizeof(order) / sizeof(order[0]); ++i) {
-		struct layer_surface *ls;
-		wl_list_for_each(ls, &server->layer_surfaces, link) {
-			struct wlr_layer_surface_v1 *l = ls->layer_surface;
-			if (l->current.layer != order[i] || !l->initialized)
-				continue;
-			wlr_scene_layer_surface_v1_configure(ls->scene, &full, &usable);
+	// two passes: first the panels that keep an edge for themselves (the
+	// taskbar), then the rest, in what's left (notifications and the level
+	// display sit above the taskbar, whatever order they came in)
+	for (int pass = 0; pass < 2; ++pass) {
+		for (size_t i = 0; i < sizeof(order) / sizeof(order[0]); ++i) {
+			struct layer_surface *ls;
+			wl_list_for_each(ls, &server->layer_surfaces, link) {
+				struct wlr_layer_surface_v1 *l = ls->layer_surface;
+				if (l->current.layer != order[i] || !l->initialized)
+					continue;
+#ifdef WAYLAND95_TEST_BREAK_LAYERORDER // tests/selftest.sh: one pass, in list order
+				if (pass == 1)
+					continue;
+#else
+				if ((l->current.exclusive_zone > 0) != (pass == 0))
+					continue;
+#endif
+				wlr_scene_layer_surface_v1_configure(ls->scene, &full, &usable);
+			}
 		}
 	}
 	bool changed = usable.x != server->usable_area.x || usable.y != server->usable_area.y

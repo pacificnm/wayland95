@@ -149,10 +149,28 @@ static void keyboard_key(struct wl_listener *listener, void *data)
 	activity(server);
 	// a key the desktop used doesn't go to the program, nor does its release
 	static bool swallowed[KEY_CNT];
+	// the shell's keys (volume, brightness: shell.c): which one each held
+	// key sent, so its release goes there too
+	static uint32_t shell_held[KEY_CNT];
 	bool handled = false;
+	if (event->keycode < KEY_CNT && event->state != WL_KEYBOARD_KEY_STATE_PRESSED && shell_held[event->keycode]) {
+		shell_send_key(server, shell_held[event->keycode], false);
+		shell_held[event->keycode] = 0;
+		return;
+	}
 	if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
 		const xkb_keysym_t *syms;
 		int nsyms = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, event->keycode + 8, &syms);
+		// even over the lock screen or a dialog panel; not while a program
+		// asked for every key (a virtual machine's window)
+		uint32_t shell_key = 0;
+		for (int i = 0; i < nsyms && !shell_key; ++i)
+			shell_key = shell_key_for(syms[i]);
+		if (shell_key && event->keycode < KEY_CNT && !shortcuts_inhibited(server)
+				&& shell_send_key(server, shell_key, true)) {
+			shell_held[event->keycode] = shell_key;
+			return;
+		}
 		handled = handle_shortcut(server, wlr_keyboard_get_modifiers(keyboard->wlr_keyboard), syms, nsyms);
 		if (event->keycode < KEY_CNT)
 			swallowed[event->keycode] = handled;

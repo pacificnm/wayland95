@@ -37,6 +37,14 @@ public:
     // /etc/xdg/autostart meant for any desktop or for Wayland 95.
     static void startSession();
 
+    // Is this the login session's desktop, on the screen itself? The Qt
+    // compositor is when started as the session (WAYLAND95_SESSION) on
+    // eglfs/linuxfb; win95shell is when started with --session (by the
+    // session, never by hand or by a desktop nested in another). Only then
+    // do autostart, NetworkManager's passwords and the update check run.
+    static bool isSession();
+    static void setSession(bool session);
+
     Q_INVOKABLE bool launch(const QString &program, const QStringList &arguments = {});
 
     // Start > Run...: opens a folder (in the file manager), a document or
@@ -52,5 +60,6 @@ signals:
 private:
     static QString s_socketName;
     static QString s_x11Display;
+    static bool s_session;
     QString m_lastCommand;
 };

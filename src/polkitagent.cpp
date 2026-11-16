@@ -17,8 +17,27 @@ const QString AuthorityPath = QStringLiteral("/org/freedesktop/PolicyKit1/Author
 const QString AuthorityIface = QStringLiteral("org.freedesktop.PolicyKit1.Authority");
 const QString AgentPath = QStringLiteral("/org/wayland95/PolicyKit1/AuthenticationAgent");
 
+// The automated tests (tests/run.sh) run desktops inside your session, so
+// they must never become its password agent: WAYLAND95_NO_SYSTEM_AGENTS.
+// With WAYLAND95_TEST_AGENTS_ON_SESSION_BUS as well, the agent answers on
+// the test's own session bus instead, where the tests call it as polkit
+// would, and checks passwords with the test's stand-in for polkit's helper
+// (WAYLAND95_TEST_POLKIT_HELPER): neither polkit nor PAM is involved.
+bool testMode()
+{
+    return qEnvironmentVariableIsSet("WAYLAND95_NO_SYSTEM_AGENTS")
+           && qEnvironmentVariableIsSet("WAYLAND95_TEST_AGENTS_ON_SESSION_BUS");
+}
+
+QDBusConnection agentBus()
+{
+    return testMode() ? QDBusConnection::sessionBus() : QDBusConnection::systemBus();
+}
+
 QString helperPath()
 {
+    if (testMode())
+        return qEnvironmentVariable("WAYLAND95_TEST_POLKIT_HELPER");
     for (const char *p : { "/usr/lib/polkit-1/polkit-agent-helper-1", "/usr/libexec/polkit-agent-helper-1",
                            "/usr/lib/policykit-1/polkit-agent-helper-1", "/usr/libexec/polkit-1/polkit-agent-helper-1" })
         if (QFileInfo(QLatin1String(p)).isExecutable())
@@ -88,7 +107,12 @@ PolkitAgent::PolkitAgent(QObject *parent)
 void PolkitAgent::registerAgent()
 {
     // the automated tests run desktops inside your session: they must not
-    // become its password agent (tests/run.sh sets this)
+    // become its password agent (see testMode)
+    if (testMode()) {
+        if (agentBus().registerObject(AgentPath, new PolkitAgentAdaptor(this), QDBusConnection::ExportAllSlots))
+            qInfo() << "Password prompts: a test agent, on the session bus (WAYLAND95_TEST_AGENTS_ON_SESSION_BUS)";
+        return;
+    }
     if (qEnvironmentVariableIsSet("WAYLAND95_NO_SYSTEM_AGENTS")) {
         qInfo() << "Password prompts: no polkit agent (WAYLAND95_NO_SYSTEM_AGENTS)";
         return;
@@ -159,8 +183,8 @@ void PolkitAgent::begin(const QDBusMessage &call, const QString &actionId, const
         r.users << QVariantMap{ { QStringLiteral("name"), userName(uid) }, { QStringLiteral("uid"), uid } };
     }
     if (r.users.isEmpty()) {
-        QDBusConnection::systemBus().send(call.createErrorReply(QStringLiteral("org.freedesktop.PolicyKit1.Error.Failed"),
-                                                                QStringLiteral("No user to authenticate as")));
+        agentBus().send(call.createErrorReply(QStringLiteral("org.freedesktop.PolicyKit1.Error.Failed"),
+                                              QStringLiteral("No user to authenticate as")));
         return;
     }
     const bool first = m_requests.isEmpty();
@@ -264,7 +288,7 @@ void PolkitAgent::cancelCookie(const QString &cookie)
         if (i == 0) {
             cancel();
         } else {
-            QDBusConnection::systemBus().send(m_requests.at(i).call.createErrorReply(
+            agentBus().send(m_requests.at(i).call.createErrorReply(
                 QStringLiteral("org.freedesktop.PolicyKit1.Error.Cancelled"), QStringLiteral("Cancelled")));
             m_requests.removeAt(i);
         }
@@ -275,7 +299,7 @@ void PolkitAgent::cancelCookie(const QString &cookie)
 void PolkitAgent::finish(bool cancelled)
 {
     const Request r = m_requests.takeFirst();
-    QDBusConnection::systemBus().send(cancelled
+    agentBus().send(cancelled
         ? r.call.createErrorReply(QStringLiteral("org.freedesktop.PolicyKit1.Error.Cancelled"), QStringLiteral("Cancelled by the user"))
         : r.call.createReply());
     m_error.clear();

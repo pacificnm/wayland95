@@ -60,6 +60,7 @@ static void stop_listening(struct server *s)
 		wl_list_remove(&s->lock_destroy.link);
 	}
 	protocols_finish(s);
+	shell_finish(s);
 	if (s->settings_source)
 		wl_event_source_remove(s->settings_source);
 }
@@ -174,6 +175,7 @@ int main(int argc, char *argv[])
 	layers_init(&server);
 	input_init(&server);
 	protocols_init(&server);
+	shell_init(&server);
 	xwayland_init(&server);
 
 	if (headless_w > 0)

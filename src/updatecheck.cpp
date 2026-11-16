@@ -1,4 +1,5 @@
 #include "updatecheck.h"
+#include "launcher.h"
 
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
@@ -17,15 +18,25 @@ constexpr quint64 FilterNone = 1 << 1;
 constexpr uint InfoSecurity = 8, InfoBlocked = 9;
 constexpr uint ExitSuccess = 1;
 
-QDBusConnection bus() { return QDBusConnection::systemBus(); }
+// The automated tests run desktops inside your session, which must never
+// talk to the real PackageKit (WAYLAND95_NO_SYSTEM_AGENTS). With
+// WAYLAND95_TEST_AGENTS_ON_SESSION_BUS as well, the check runs against the
+// test's stand-in on its own session bus, a second after starting.
+bool testMode()
+{
+    return qEnvironmentVariableIsSet("WAYLAND95_NO_SYSTEM_AGENTS")
+           && qEnvironmentVariableIsSet("WAYLAND95_TEST_AGENTS_ON_SESSION_BUS");
+}
+
+QDBusConnection bus() { return testMode() ? QDBusConnection::sessionBus() : QDBusConnection::systemBus(); }
 }
 
 UpdateCheck::UpdateCheck(QObject *parent)
     : QObject(parent)
 {
-    const QString platform = QGuiApplication::platformName();
-    const bool session = qEnvironmentVariableIsSet("WAYLAND95_SESSION")
-                      && (platform == QLatin1String("eglfs") || platform == QLatin1String("linuxfb"));
+    // as the session only, and never from the automated tests' desktops
+    const bool session = Launcher::isSession()
+                      && (testMode() || !qEnvironmentVariableIsSet("WAYLAND95_NO_SYSTEM_AGENTS"));
     QDBusConnectionInterface *iface = bus().isConnected() ? bus().interface() : nullptr;
     const bool packageKit = iface && (iface->isServiceRegistered(PkService).value()
                                       || iface->activatableServiceNames().value().contains(PkService));
@@ -36,7 +47,7 @@ UpdateCheck::UpdateCheck(QObject *parent)
     if (m_enabled) {
         // MEMBER properties are set from QML after construction: start then
         QTimer::singleShot(0, this, [this] {
-            m_timer.start(m_firstDelay);
+            m_timer.start(testMode() ? 1000 : m_firstDelay);
         });
     }
 }

@@ -20,6 +20,40 @@ Item {
         hideTimer.restart();
     }
 
+    // The laptop keys: change the level, then show the new one. The new
+    // level is worked out here: the mixer reports a change only a moment
+    // later (showing what it said then was a step behind), and a held key
+    // builds on the level it last asked for.
+    property real lastVolume: -1
+    property double lastVolumeAt: 0
+    function changeVolume(delta) {
+        if (!Ui.Audio.available)
+            return;
+        var base = lastVolume >= 0 && Date.now() - lastVolumeAt < 1000 ? lastVolume : Ui.Audio.volume;
+        var v = Math.max(0, Math.min(1, Math.round((base + delta) * 100) / 100));
+        lastVolume = v;
+        lastVolumeAt = Date.now();
+        Ui.Audio.setVolume(Ui.Audio.outputId, v);
+        // turning it up unmutes; turning it down doesn't
+        var mutedNow = Ui.Audio.muted && delta < 0;
+        if (Ui.Audio.muted && delta > 0)
+            Ui.Audio.setMuted(Ui.Audio.outputId, false);
+        show("volume", Math.round(v * 100), mutedNow);
+    }
+    function toggleMute() {
+        if (!Ui.Audio.available)
+            return;
+        var m = !Ui.Audio.muted;
+        Ui.Audio.setMuted(Ui.Audio.outputId, m);
+        show("volume", Math.round(Math.max(0, Math.min(1, Ui.Audio.volume)) * 100), m);
+    }
+    function changeBrightness(delta) {
+        if (!Ui.Power.hasBacklight)
+            return;
+        Ui.Power.changeBrightness(delta);
+        show("brightness", Ui.Power.brightness);
+    }
+
     width: 240
     height: 54
     opacity: 0

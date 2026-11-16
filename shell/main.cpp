@@ -3,6 +3,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QTimer>
 #include <QUrl>
 #include <QtQml/qqmlextensionplugin.h>
 #include <cstdio>
@@ -39,6 +40,11 @@ int main(int argc, char *argv[])
     // to some other desktop)
     Launcher::setSocketName(socket);
     Launcher::setX11Display(qEnvironmentVariable("DISPLAY"));
+    // --session: this is the login session's desktop (its session starts
+    // it so; by hand, or nested in another desktop, it isn't): autostart,
+    // NetworkManager's passwords and the update check (see Launcher)
+    const bool session = app.arguments().contains(QStringLiteral("--session"));
+    Launcher::setSession(session);
 
     QQmlApplicationEngine engine;
     engine.addImportPath(QStringLiteral("qrc:/qt/qml"));
@@ -50,6 +56,10 @@ int main(int argc, char *argv[])
     engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Win95Shell/Shell.qml")));
     if (engine.rootObjects().isEmpty())
         return 1;
-    std::fprintf(stderr, "win95shell: ready\n");
+    std::fprintf(stderr, "win95shell: ready%s\n", session ? " (the session's desktop)" : "");
+    // as the session: tell D-Bus and systemd where the display is, then
+    // start the autostart programs, once the desktop is up
+    if (session)
+        QTimer::singleShot(2000, &app, &Launcher::startSession);
     return app.exec();
 }

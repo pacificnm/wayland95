@@ -1,0 +1,3 @@
+#!/bin/sh
+# Stand-in for WirePlumber's wpctl (see README.md): only says what it was asked
+echo "wpctl $*" >>"${W95_FAKE_LOG:-/dev/null}"

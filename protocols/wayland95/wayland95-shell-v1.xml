@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="wayland95_shell_v1">
+  <copyright>
+    Wayland 95. This protocol is private to wayland95-compositor and its
+    shell (win95shell); nothing else should use it.
+  </copyright>
+
+  <interface name="wayland95_shell_v1" version="1">
+    <description summary="the compositor's link to its desktop shell">
+      The desktop's own keys are the shell's to act on (volume and
+      brightness now; Ctrl+Esc and the others in later versions). The
+      compositor catches them before any program sees them and sends them
+      here, but only while a shell is bound: without one they go to the
+      program with the keyboard as usual. Only one client may bind it at a
+      time; a second gets the already_bound error.
+    </description>
+
+    <enum name="error">
+      <entry name="already_bound" value="0" summary="another shell is bound"/>
+    </enum>
+
+    <enum name="key">
+      <entry name="volume_up" value="1"/>
+      <entry name="volume_down" value="2"/>
+      <entry name="volume_mute" value="3"/>
+      <entry name="brightness_up" value="4"/>
+      <entry name="brightness_down" value="5"/>
+    </enum>
+
+    <enum name="key_state">
+      <entry name="released" value="0"/>
+      <entry name="pressed" value="1"/>
+    </enum>
+
+    <request name="destroy" type="destructor"/>
+
+    <event name="key">
+      <description summary="one of the desktop's keys went down or up">
+        Each press is followed by its release. The compositor doesn't
+        repeat a held key: the shell does, if it wants to.
+      </description>
+      <arg name="key" type="uint" enum="key"/>
+      <arg name="state" type="uint" enum="key_state"/>
+    </event>
+  </interface>
+</protocol>

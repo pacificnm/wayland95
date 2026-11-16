@@ -14,6 +14,10 @@ import Win95Shell
 //                menu, a tray pop-up or the taskbar's window menu is open;
 //                it has the keyboard then, and a click outside closes them
 //   tipLayer     overlay, the whole screen, never takes clicks: tooltips
+//   notificationLayer  top, bottom right above the taskbar, sized to the
+//                pop-ups, shown while there are any; never takes the keyboard
+//   osdLayer     overlay, the volume/brightness level, never takes clicks
+//   dialog layers  (DialogLayer.qml) Run, Shut Down, messages, passwords
 QtObject {
     id: shell
 
@@ -147,10 +151,98 @@ QtObject {
             }
         }
     }
+    // a program needs a password (polkit), or NetworkManager a network's
+    property Window passwordLayer: DialogLayer {
+        showing: passwordDialog.visible
+        PasswordDialog { id: passwordDialog }
+    }
+    property Window networkPasswordLayer: DialogLayer {
+        showing: networkPasswordDialog.visible
+        NetworkPasswordDialog { id: networkPasswordDialog }
+    }
     // (created after the others: a message over the Run dialog is on top)
     property Window messageLayer: DialogLayer {
         showing: shellMessage.visible
         Ui.MessageBox95 { id: shellMessage }
+    }
+
+    // --- notifications ----------------------------------------------------
+    // bottom right, just above the taskbar (the compositor keeps a panel
+    // with no exclusive zone of its own clear of the taskbar's), newest
+    // nearest it, at most four at once
+    property Window notificationLayer: Window {
+        LayerShell.layer: LayerShell.Top
+        LayerShell.anchors: LayerShell.AnchorBottom | LayerShell.AnchorRight
+        LayerShell.exclusiveZone: 0
+        LayerShell.marginRight: 8
+        LayerShell.marginBottom: 8
+        LayerShell.keyboard: LayerShell.KeyboardNone
+        LayerShell.scope: "notifications"
+        title: "Notifications"
+        color: "transparent"
+        width: 300
+        height: Math.max(1, notificationStack.implicitHeight)
+        visible: Notifications.popups.length > 0
+        Column {
+            id: notificationStack
+            width: 300
+            spacing: 6
+            Repeater {
+                model: Notifications.popups.slice(-4)
+                NotificationPopup {
+                    required property var modelData
+                    notification: modelData
+                }
+            }
+        }
+    }
+    property SystemNotices notices: SystemNotices {}
+
+    // --- the volume and brightness keys -----------------------------------
+    // the compositor sends them here (wayland95-shell-v1); a held key
+    // repeats at the keyboard's rate (Control Panel > Keyboard)
+    property Window osdLayer: Window {
+        LayerShell.layer: LayerShell.Overlay
+        LayerShell.anchors: LayerShell.AnchorBottom
+        LayerShell.exclusiveZone: 0
+        LayerShell.marginBottom: 80
+        LayerShell.keyboard: LayerShell.KeyboardNone
+        LayerShell.scope: "osd"
+        title: "Level"
+        color: "transparent"
+        flags: Qt.WindowTransparentForInput
+        width: levelOsd.width
+        height: levelOsd.height
+        visible: levelOsd.visible
+        LevelOsd { id: levelOsd }
+    }
+    property DesktopKeys desktopKeys: DesktopKeys {
+        onPressed: (key) => {
+            shell.desktopKey(key);
+            if (key !== DesktopKeys.VolumeMute) {
+                keyRepeat.key = key;
+                keyRepeat.interval = Ui.Wayland95Settings.keyRepeatDelay;
+                keyRepeat.restart();
+            }
+        }
+        onReleased: (key) => { if (key === keyRepeat.key) keyRepeat.stop(); }
+    }
+    property Timer keyRepeat: Timer {
+        property int key: 0
+        repeat: true
+        onTriggered: {
+            interval = Math.max(15, Math.round(1000 / Math.max(1, Ui.Wayland95Settings.keyRepeatRate)));
+            shell.desktopKey(key);
+        }
+    }
+    function desktopKey(key) {
+        switch (key) {
+        case DesktopKeys.BrightnessUp: levelOsd.changeBrightness(5); break;
+        case DesktopKeys.BrightnessDown: levelOsd.changeBrightness(-5); break;
+        case DesktopKeys.VolumeUp: levelOsd.changeVolume(0.05); break;
+        case DesktopKeys.VolumeDown: levelOsd.changeVolume(-0.05); break;
+        case DesktopKeys.VolumeMute: levelOsd.toggleMute(); break;
+        }
     }
 
     // the "Start Wayland 95" sound

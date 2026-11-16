@@ -130,6 +130,10 @@ static xkb_keycode_t keycode_for(const char *name)
 	xkb_keysym_t sym = xkb_keysym_from_name(lower, XKB_KEYSYM_NO_FLAGS);
 	if (sym == XKB_KEY_NoSymbol)
 		sym = xkb_keysym_from_name(lower, XKB_KEYSYM_CASE_INSENSITIVE);
+	// a character that isn't a keysym's name ("-", ".", "/"): by what it is
+	// (only those typed without Shift)
+	if (sym == XKB_KEY_NoSymbol && strlen(lower) == 1)
+		sym = xkb_utf32_to_keysym((unsigned char)lower[0]);
 	for (xkb_keycode_t kc = xkb_keymap_min_keycode(keymap); kc <= xkb_keymap_max_keycode(keymap); ++kc) {
 		const xkb_keysym_t *syms;
 		int n = xkb_keymap_key_get_syms_by_level(keymap, kc, 0, 0, &syms);

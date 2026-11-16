@@ -9,6 +9,7 @@
 #include <QQmlEngine>
 #include <QRegularExpression>
 #include <QUrl>
+#include <QtDebug>
 
 namespace {
 
@@ -177,15 +178,20 @@ int NotificationServer::unreadCount() const
     return n;
 }
 
+// The desktop's own notices are logged with what they say (the session
+// log then tells what the desktop told you, and the tests read it); other
+// programs' only by number and program, since what they say can be private.
 uint NotificationServer::notify(const QString &appName, const QString &summary, const QString &body,
                                 const QString &icon, int urgency, int timeoutMs)
 {
+    qInfo().noquote() << "Notifications: notice from" << appName + ":" << summary;
     return add(appName, 0, icon, summary, body, {}, { { QStringLiteral("urgency"), urgency } }, timeoutMs);
 }
 
 uint NotificationServer::notifyWithActions(const QString &appName, const QString &summary, const QString &body,
                                            const QStringList &actions, int urgency, int timeoutMs)
 {
+    qInfo().noquote() << "Notifications: notice from" << appName + ":" << summary;
     return add(appName, 0, {}, summary, body, actions, { { QStringLiteral("urgency"), urgency } }, timeoutMs);
 }
 
@@ -265,6 +271,8 @@ uint NotificationServer::add(const QString &appName, uint replacesId, const QStr
             m_popups << n;
         emit popupsChanged();
     }
+    qInfo().noquote() << "Notifications:" << id << "from" << n.value(QStringLiteral("appName")).toString()
+                      << (show ? "shown" : "kept (do not disturb)");
     if (!replacing)
         emit arrived(n, show);
     return id;

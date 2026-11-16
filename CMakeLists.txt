@@ -133,6 +133,7 @@ set(win95shell_qml_files
     TaskSwitcher.qml
     ScreenCapture.qml
     ShutDownDialog.qml
+    SystemNotices.qml
 )
 
 # qt_add_qml_module() has to run in this (the executable's own) directory

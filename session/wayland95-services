@@ -31,11 +31,13 @@ put() {
 }
 
 ssh_units() {
-    # Debian starts sshd as ssh.service; Ubuntu through ssh.socket
+    # Debian starts sshd as ssh.service; Ubuntu through ssh.socket.
+    # One line, separated by spaces: the service, if there, comes last.
+    list=""
     for u in ssh.socket ssh.service; do
-        systemctl cat "$u" >/dev/null 2>&1 && echo "$u"
+        systemctl cat "$u" >/dev/null 2>&1 && list="$list $u"
     done
-    return 0
+    echo "${list# }"
 }
 
 pg_cluster() { # newest cluster: "VERSION NAME PORT ..."

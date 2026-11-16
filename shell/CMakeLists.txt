@@ -2,6 +2,7 @@
 # wayland95-compositor. See docs/architecture.md and docs/migration.md
 # (phase 4). The QML is shared with the Qt compositor (qml/Win95Shell/).
 find_package(Qt6 REQUIRED COMPONENTS WaylandClient WaylandScannerTools)
+pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
 if(NOT TARGET Qt6::WaylandClientPrivate)
     message(FATAL_ERROR "win95shell needs Qt's private Wayland client headers (qt6-wayland-private-dev)")
 endif()
@@ -12,6 +13,10 @@ qt_add_executable(win95shell
     toplevels.h toplevels.cpp
     session.h session.cpp
     desktopkeys.h desktopkeys.cpp
+    idletimer.h idletimer.cpp
+    displaypower.h displaypower.cpp
+    sessionlock.h sessionlock.cpp
+    screensaverservice.h screensaverservice.cpp
     # services shared with the Qt compositor
     ${CMAKE_SOURCE_DIR}/src/launcher.h ${CMAKE_SOURCE_DIR}/src/launcher.cpp
     ${CMAKE_SOURCE_DIR}/src/programmenu.h ${CMAKE_SOURCE_DIR}/src/programmenu.cpp
@@ -32,6 +37,9 @@ qt6_generate_wayland_protocol_client_sources(win95shell FILES
     ${CMAKE_CURRENT_BINARY_DIR}/protocols/wlr-layer-shell-unstable-v1.xml
     ${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-foreign-toplevel-management-unstable-v1.xml
     ${CMAKE_SOURCE_DIR}/protocols/wayland95/wayland95-shell-v1.xml
+    ${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-output-power-management-unstable-v1.xml
+    ${WAYLAND_PROTOCOLS_DIR}/staging/ext-idle-notify/ext-idle-notify-v1.xml
+    ${WAYLAND_PROTOCOLS_DIR}/staging/ext-session-lock/ext-session-lock-v1.xml
 )
 target_include_directories(win95shell PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -48,6 +56,7 @@ set(shared_qml
     NetworkTray.qml BluetoothTray.qml BatteryTray.qml
     RunDialog.qml ShutDownDialog.qml
     SystemNotices.qml NotificationPopup.qml LevelOsd.qml PasswordDialog.qml NetworkPasswordDialog.qml
+    UnlockDialog.qml
 )
 set(qml_paths)
 foreach(f ${shared_qml})
@@ -56,7 +65,7 @@ foreach(f ${shared_qml})
     list(APPEND qml_paths ${path})
 endforeach()
 set_source_files_properties(${CMAKE_SOURCE_DIR}/qml/Win95Shell/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
-foreach(f Shell.qml DialogLayer.qml)
+foreach(f Shell.qml DialogLayer.qml ScreenSaver.qml SaverInput.qml PowerPolicy.qml)
     set_source_files_properties(qml/${f} PROPERTIES QT_RESOURCE_ALIAS ${f})
     list(APPEND qml_paths qml/${f})
 endforeach()

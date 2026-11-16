@@ -1,5 +1,5 @@
 // wayland95-shell-v1 (protocols/wayland95/): the compositor's link to its
-// shell, win95shell. The desktop's own keys (volume, brightness) are
+// shell, win95shell. The desktop's own keys (volume, brightness, power, sleep) are
 // caught in input.c and sent here, to the one bound shell.
 #include <stdlib.h>
 #include <wayland-server-core.h>
@@ -68,6 +68,9 @@ uint32_t shell_key_for(xkb_keysym_t sym)
 	case XKB_KEY_XF86AudioMute: return WAYLAND95_SHELL_V1_KEY_VOLUME_MUTE;
 	case XKB_KEY_XF86MonBrightnessUp: return WAYLAND95_SHELL_V1_KEY_BRIGHTNESS_UP;
 	case XKB_KEY_XF86MonBrightnessDown: return WAYLAND95_SHELL_V1_KEY_BRIGHTNESS_DOWN;
+	case XKB_KEY_XF86PowerOff: return WAYLAND95_SHELL_V1_KEY_POWER;
+	case XKB_KEY_XF86Sleep: case XKB_KEY_XF86Suspend: return WAYLAND95_SHELL_V1_KEY_SLEEP;
+	case XKB_KEY_XF86Hibernate: return WAYLAND95_SHELL_V1_KEY_HIBERNATE;
 	default: return 0;
 	}
 }

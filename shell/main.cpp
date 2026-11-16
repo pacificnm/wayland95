@@ -45,6 +45,9 @@ int main(int argc, char *argv[])
     // NetworkManager's passwords and the update check (see Launcher)
     const bool session = app.arguments().contains(QStringLiteral("--session"));
     Launcher::setSession(session);
+    // (the power manager, a library singleton, reads it from here: the
+    // power policy, lid and power keys are the session desktop's)
+    app.setProperty("wayland95Session", session);
 
     QQmlApplicationEngine engine;
     engine.addImportPath(QStringLiteral("qrc:/qt/qml"));

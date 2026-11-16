@@ -7,9 +7,9 @@
 
   <interface name="wayland95_shell_v1" version="1">
     <description summary="the compositor's link to its desktop shell">
-      The desktop's own keys are the shell's to act on (volume and
-      brightness now; Ctrl+Esc and the others in later versions). The
-      compositor catches them before any program sees them and sends them
+      The desktop's own keys are the shell's to act on (volume,
+      brightness, the power and sleep buttons now; Ctrl+Esc and the others
+      in later versions). The compositor catches them before any program sees them and sends them
       here, but only while a shell is bound: without one they go to the
       program with the keyboard as usual. Only one client may bind it at a
       time; a second gets the already_bound error.
@@ -25,6 +25,9 @@
       <entry name="volume_mute" value="3"/>
       <entry name="brightness_up" value="4"/>
       <entry name="brightness_down" value="5"/>
+      <entry name="power" value="6" summary="the power button"/>
+      <entry name="sleep" value="7" summary="the sleep button"/>
+      <entry name="hibernate" value="8"/>
     </enum>
 
     <enum name="key_state">

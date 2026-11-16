@@ -18,6 +18,12 @@ namespace {
 
 QString chkpwdPath()
 {
+    // the automated tests' desktops never check your real password: they
+    // use a stand-in (tests/fakes/unix_chkpwd)
+    if (qEnvironmentVariableIsSet("WAYLAND95_NO_SYSTEM_AGENTS")) {
+        const QString test = qEnvironmentVariable("WAYLAND95_TEST_CHKPWD");
+        return QFileInfo(test).isExecutable() ? test : QString();
+    }
     for (const char *p : { "/usr/sbin/unix_chkpwd", "/sbin/unix_chkpwd", "/usr/libexec/unix_chkpwd" })
         if (QFileInfo(QLatin1String(p)).isExecutable())
             return QLatin1String(p);

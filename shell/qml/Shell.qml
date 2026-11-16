@@ -219,7 +219,9 @@ QtObject {
     property DesktopKeys desktopKeys: DesktopKeys {
         onPressed: (key) => {
             shell.desktopKey(key);
-            if (key !== DesktopKeys.VolumeMute) {
+            // (only the level keys repeat; a held power button acts once)
+            if (key === DesktopKeys.VolumeUp || key === DesktopKeys.VolumeDown
+                    || key === DesktopKeys.BrightnessUp || key === DesktopKeys.BrightnessDown) {
                 keyRepeat.key = key;
                 keyRepeat.interval = Ui.Wayland95Settings.keyRepeatDelay;
                 keyRepeat.restart();
@@ -242,7 +244,16 @@ QtObject {
         case DesktopKeys.VolumeUp: levelOsd.changeVolume(0.05); break;
         case DesktopKeys.VolumeDown: levelOsd.changeVolume(-0.05); break;
         case DesktopKeys.VolumeMute: levelOsd.toggleMute(); break;
+        default: shell.powerPolicy.key(key); break;
         }
+    }
+
+    // --- the screen saver ----------------------------------------------
+    property ScreenSaver screenSaver: ScreenSaver {
+        onActiveChanged: if (active) taskbar.closePopups()
+    }
+    property PowerPolicy powerPolicy: PowerPolicy {
+        onAskRequested: { taskbar.closePopups(); shutDownDialog.open(); }
     }
 
     // the "Start Wayland 95" sound

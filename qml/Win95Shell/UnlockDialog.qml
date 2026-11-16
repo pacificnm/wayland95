@@ -9,6 +9,8 @@ Ui.Dialog95 {
     id: dialog
 
     property var controller   // the ScreenSaverController
+    // the password is being typed (what's there changed)
+    signal typing()
 
     title: "Wayland 95 Screen Saver"
     dialogWidth: 340
@@ -78,6 +80,7 @@ Ui.Dialog95 {
             }
             onAccepted: dialog.ok()
             onEscaped: dialog.controller.cancelUnlock()
+            onTextChanged: dialog.typing()
         }
         Text {
             id: error

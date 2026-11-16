@@ -1,0 +1,10 @@
+#!/bin/bash
+# Stand-in for PAM's unix_chkpwd (see README.md): the password comes on
+# stdin, ended by a NUL; "right-password" is right.
+IFS= read -r -d '' password
+if [ "$password" = "right-password" ]; then
+    echo "unix_chkpwd: right password for $1" >>"${W95_FAKE_LOG:-/dev/null}"
+    exit 0
+fi
+echo "unix_chkpwd: wrong password for $1" >>"${W95_FAKE_LOG:-/dev/null}"
+exit 7

@@ -1,4 +1,5 @@
 #include "session.h"
+#include "launcher.h"
 
 #include <QCoreApplication>
 #include <csignal>
@@ -16,4 +17,9 @@ void ShellSession::exitDesktop()
     // not started by wayland95-compositor (by hand, while testing)
     std::fprintf(stderr, "win95shell: no compositor to stop (WAYLAND95_COMPOSITOR_PID); the shell exits\n");
     QCoreApplication::quit();
+}
+
+bool ShellSession::session() const
+{
+    return Launcher::isSession();
 }

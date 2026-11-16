@@ -18,7 +18,10 @@ QString readValue(const QString &dir, const char *name)
 BatteryInfo::BatteryInfo(QObject *parent)
     : QObject(parent)
 {
-    m_timer.setInterval(15 * 1000);
+    // (the tests' pretend battery is looked at every second)
+    const bool test = qEnvironmentVariableIsSet("WAYLAND95_NO_POWER_ACTIONS")
+                      && qEnvironmentVariableIsSet("WAYLAND95_TEST_POWER_SUPPLY");
+    m_timer.setInterval(test ? 1000 : 15 * 1000);
     connect(&m_timer, &QTimer::timeout, this, &BatteryInfo::refresh);
     m_timer.start();
     refresh();
@@ -26,7 +29,10 @@ BatteryInfo::BatteryInfo(QObject *parent)
 
 void BatteryInfo::refresh()
 {
-    const QString root = QStringLiteral("/sys/class/power_supply");
+    // the automated tests' pretend battery (tests/run.sh), never otherwise
+    const QString testRoot = qEnvironmentVariableIsSet("WAYLAND95_NO_POWER_ACTIONS")
+                                 ? qEnvironmentVariable("WAYLAND95_TEST_POWER_SUPPLY") : QString();
+    const QString root = testRoot.isEmpty() ? QStringLiteral("/sys/class/power_supply") : testRoot;
     const QStringList supplies = QDir(root).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
 
     int batteries = 0;

@@ -161,9 +161,11 @@ static void output_power_set_mode(struct wl_listener *listener, void *data)
 	struct wlr_output_state state;
 	wlr_output_state_init(&state);
 	wlr_output_state_set_enabled(&state, event->mode == ZWLR_OUTPUT_POWER_V1_MODE_ON);
+	const char *what = event->mode == ZWLR_OUTPUT_POWER_V1_MODE_ON ? "on" : "off";
 	if (!wlr_output_commit_state(event->output, &state))
-		wlr_log(WLR_ERROR, "couldn't turn output %s %s", event->output->name,
-				event->mode == ZWLR_OUTPUT_POWER_V1_MODE_ON ? "on" : "off");
+		wlr_log(WLR_ERROR, "couldn't turn output %s %s", event->output->name, what);
+	else
+		wlr_log(WLR_INFO, "output %s turned %s", event->output->name, what);
 	wlr_output_state_finish(&state);
 }
 static struct wl_listener output_power_listener = { .notify = output_power_set_mode };

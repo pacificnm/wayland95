@@ -19,7 +19,16 @@ const QString LogindPath = QStringLiteral("/org/freedesktop/login1");
 const QString LogindManager = QStringLiteral("org.freedesktop.login1.Manager");
 const QString Properties = QStringLiteral("org.freedesktop.DBus.Properties");
 
-QDBusConnection bus() { return QDBusConnection::systemBus(); }
+// The automated tests run desktops inside your session: with
+// WAYLAND95_TEST_AGENTS_ON_SESSION_BUS (and WAYLAND95_NO_SYSTEM_AGENTS) this
+// talks to the test's stand-in for logind on its own session bus instead
+// (tests/fakes/logind.py), where the test can close the lid.
+bool testBus()
+{
+    return qEnvironmentVariableIsSet("WAYLAND95_NO_SYSTEM_AGENTS")
+           && qEnvironmentVariableIsSet("WAYLAND95_TEST_AGENTS_ON_SESSION_BUS");
+}
+QDBusConnection bus() { return testBus() ? QDBusConnection::sessionBus() : QDBusConnection::systemBus(); }
 
 QString readText(const QString &path)
 {
@@ -66,15 +75,18 @@ PowerManager::PowerManager(QObject *parent)
     // hardware. Not otherwise: a copy started from a terminal inside the
     // session (or inside another desktop) runs as a window and mustn't sleep
     // the computer or take over the lid, whatever its environment says.
+    // (win95shell is the desktop when started as the session's: --session,
+    // which it tells us through the application's "wayland95Session")
     const QString platform = QGuiApplication::platformName();
-    m_primary = platform == QLatin1String("eglfs") || platform == QLatin1String("linuxfb");
+    m_primary = platform == QLatin1String("eglfs") || platform == QLatin1String("linuxfb")
+                || (qApp && qApp->property("wayland95Session").toBool());
 
     m_canSuspend = logindCan(QStringLiteral("Suspend"));
     m_canHibernate = logindCan(QStringLiteral("Hibernate"));
 
     const QString chassis = getProperty(QStringLiteral("org.freedesktop.hostname1"), QStringLiteral("/org/freedesktop/hostname1"),
                                         QStringLiteral("org.freedesktop.hostname1"), QStringLiteral("Chassis")).toString();
-    m_hasLid = QDir(QStringLiteral("/proc/acpi/button/lid")).exists()
+    m_hasLid = testBus() || QDir(QStringLiteral("/proc/acpi/button/lid")).exists()
                || chassis == QLatin1String("laptop") || chassis == QLatin1String("convertible");
     m_isLaptop = m_hasLid || chassis == QLatin1String("tablet");
     m_lidClosed = getProperty(Logind, LogindPath, LogindManager, QStringLiteral("LidClosed")).toBool();
@@ -252,6 +264,9 @@ bool PowerManager::restartRequired() const
 bool PowerManager::takeOverPowerKeys()
 {
     if (!m_primary)
+        return false;
+    // (the tests' stand-in logind may be asked; the real one never is)
+    if (!testBus() && powerActionsOff(QStringLiteral("take over the power keys and the lid")))
         return false;
     if (m_inhibitor.isValid())
         return true;

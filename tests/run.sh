@@ -7,7 +7,7 @@
 #
 #   tests/run.sh [SUITE...]        all suites, or some of: input (Chromium) firefox
 #                                  windows popups x11 clipboard qt frames alttab
-#                                  settings shell dialogs notifications session
+#                                  settings shell dialogs notifications session screensaver power
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -757,6 +757,11 @@ start_shell() { # [ARGS...]  (--session: as the login session's desktop)
     # the system's stand-ins (tests/fakes): sound, polkit's password check,
     # and PackageKit (only where a suite asks for it)
     FAKE_LOG=$WORK/$SUITE-fakes.log; : >"$FAKE_LOG"
+    if [ -n "${WITH_LOGIND:-}" ]; then
+        DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS python3 -I "$HERE/fakes/logind.py" "$FAKE_LOG" &
+        PIDS+=($!)
+        for _ in $(seq 50); do grep -q "logind: ready" "$FAKE_LOG" && break; sleep 0.1; done
+    fi
     if [ -n "${WITH_PACKAGEKIT:-}" ]; then
         DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS python3 -I "$HERE/fakes/packagekit.py" "$FAKE_LOG" &
         PIDS+=($!)
@@ -766,7 +771,8 @@ start_shell() { # [ARGS...]  (--session: as the login session's desktop)
         XDG_CACHE_HOME=$home/.cache WAYLAND_DISPLAY=$SOCKET DISPLAY=$XDISPLAY QT_NO_XDG_DESKTOP_PORTAL=1 \
         WAYLAND95_COMPOSITOR_PID=$COMP_PID DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
         PATH="$HERE/fakes:$PATH" W95_FAKE_LOG=$FAKE_LOG WAYLAND95_TEST_AGENTS_ON_SESSION_BUS=1 \
-        WAYLAND95_TEST_POLKIT_HELPER=$HERE/fakes/polkit-agent-helper-1 \
+        WAYLAND95_TEST_POLKIT_HELPER=$HERE/fakes/polkit-agent-helper-1 WAYLAND95_TEST_CHKPWD=$HERE/fakes/unix_chkpwd \
+        WAYLAND95_TEST_MINUTE_MS=${MINUTE_MS:-} WAYLAND95_TEST_POWER_SUPPLY=${POWER_SUPPLY:-} \
         "$SHELL_BIN" "$@" >"$WORK/$SUITE-shell.log" 2>&1 &
     SHELL_PID=$!
     PIDS+=($!)
@@ -1059,6 +1065,10 @@ suite_notifications() {
         shell_said "Power: would set the brightness to"; expect_true $? "Brightness Up asks for a brighter screen (only logged)" "$(grep Power "$WORK/$SUITE-shell.log")"
         osd_shown bright; expect_true $? "(and shows the level)" "$(pixel bright 530 680)"
     fi
+    # not the session's desktop: the power button is logind's business
+    pointer key:XF86PowerOff wait:0.6; away; shot power
+    [ "$(pixel power 1200 500)" = 008080 ] && ! shell_said "win95shell: power:"
+    expect_true $? "(not the session's desktop: the power button does nothing here)" "$(pixel power 1200 500): $(grep "power:" "$WORK/$SUITE-shell.log")"
 }
 
 # --- the login session's desktop: passwords, updates, autostart -------------
@@ -1157,6 +1167,179 @@ suite_session() {
     kill -0 "$SHELL_PID" 2>/dev/null; expect_true $? "(and the first carries on)" "it stopped"
 }
 
+# --- the screen saver and the lock -------------------------------------------
+# Its wait is in minutes; here a minute is 2 seconds (MINUTE_MS), and the
+# blank screen saver makes "is it showing" one pixel.
+saver_on() { [ "$(pixel "$1" 640 400)" = 000000 ] && [ "$(pixel "$1" 640 790)" = 000000 ]; }
+holder() { # hold the screen saver off over D-Bus, as a video player does, until killed
+    DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS python3 -I -c '
+import time
+from gi.repository import Gio, GLib
+bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+bus.call_sync("org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver", "org.freedesktop.ScreenSaver",
+              "Inhibit", GLib.Variant("(ss)", ("w95test", "playing a video")), None, 0, -1, None)
+print("holding", flush=True)
+time.sleep(600)' >"$WORK/$SUITE-holder.log" 2>&1 &
+    HOLDER=$!
+    PIDS+=($HOLDER)
+    for _ in $(seq 30); do grep -q holding "$WORK/$SUITE-holder.log" && break; sleep 0.1; done
+}
+suite_screensaver() {
+    say "screensaver: the screen saver, its password and the session lock (win95shell)"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    printf '[ScreenSaver]\nName=blank\nWait=1\nPassword=false\n' >"$CONFIG/wayland95/settings.ini"
+    start_probe A qt cc0000 || return
+    MINUTE_MS=2000 start_shell || return
+    query activate A; sleep 0.3
+    locate_probe A 200 200 || return
+    away; sleep 3.5; shot idle
+    saver_on idle; expect_true $? "after its wait without input, the screen saver covers everything (the taskbar too)" "$(pixel idle 640 400), $(pixel idle 640 790)"
+    local n; n=$(pmark A)
+    pointer key:a wait:0.3; shot key
+    ! saver_on key; expect_true $? "a key ends it" "still showing"
+    pexpect_not "(and the key doesn't reach the program)" A "$n" "key a"
+    pointer type:b wait:0.2
+    pexpect "(the program has the keyboard again)" A "$n" "key b"
+
+    sleep 3.5; shot idle2
+    saver_on idle2; expect_true $? "(and it comes back after the wait)" "$(pixel idle2 640 400)"
+    pointer move:1272,795 wait:0.2 move:1275,795 wait:0.3; shot nudge
+    saver_on nudge; expect_true $? "a nudge of the mouse doesn't end it" "it ended"
+    pointer move:900,500 wait:0.3; shot moved
+    ! saver_on moved; expect_true $? "a real move does" "still showing"
+    sleep 3.5; n=$(pmark A)
+    pointer click:$((PX + 40)),$((PY + 40)) wait:0.4; shot clicked
+    ! saver_on clicked; expect_true $? "a click ends it" "still showing"
+    pexpect_not "(and the program under the pointer gets no click)" A "$n" "press|release"
+
+    # Control Panel > Display's Preview: the mouse is still moving from the click
+    in_bus gdbus call --session --dest org.wayland95.ScreenSaver --object-path /org/wayland95/ScreenSaver \
+        --method org.wayland95.ScreenSaver.Preview >/dev/null
+    pointer move:700,500 wait:0.1 move:760,540 wait:0.3; shot preview
+    saver_on preview; expect_true $? "Preview shows it, and the mouse moving just after doesn't end it" "$(pixel preview 640 400)"
+    sleep 1.5; pointer move:300,300 wait:0.1 move:500,500 wait:0.3; shot preview-end
+    ! saver_on preview-end; expect_true $? "(a move after that does)" "still showing"
+
+    # held off over D-Bus (browsers, video players)
+    holder
+    away; sleep 3.5; shot held
+    ! saver_on held && shell_said "Screen saver: held off by w95test (playing a video)"
+    expect_true $? "a program holding it off over D-Bus keeps it away" "$(pixel held 640 400): $(grep "Screen saver" "$WORK/$SUITE-shell.log" | tail -2)"
+    kill "$HOLDER"; sleep 1; shot let-go
+    saver_on let-go && shell_said "a program that held it off went away"
+    expect_true $? "when that program goes (even without saying so), it starts" "$(pixel let-go 640 400): $(grep "Screen saver" "$WORK/$SUITE-shell.log" | tail -1)"
+    pointer key:Escape wait:0.3
+
+    # password protected: the session is locked
+    settings_write $'[ScreenSaver]\nName=blank\nWait=1\nPassword=true'
+    query activate A; sleep 0.3; away; sleep 3.5; shot locked
+    saver_on locked && grep -q "\] locked$" "$CLOG"
+    expect_true $? "password protected: it locks the session (the compositor says so)" "$(pixel locked 640 400): $(grep -i lock "$CLOG" | tail -2)"
+    n=$(pmark A)
+    pointer key:a wait:0.6; shot ask
+    [ "$(pixel ask 480 460)" = c0c0c0 ] && [ "$(pixel ask 300 300)" = 000000 ]
+    expect_true $? "a key asks for the password, over the screen saver" "$(pixel ask 480 460) at the box, $(pixel ask 300 300) around"
+    pointer type:wrong key:Return wait:2.5; shot wrong
+    grep -q "unix_chkpwd: wrong password for $(id -un)" "$FAKE_LOG" && [ "$(pixel wrong 480 460)" = c0c0c0 ] && ! grep -q "\] unlocked$" "$CLOG"
+    expect_true $? "a wrong password: still locked, it asks again" "$(tail -2 "$FAKE_LOG"): $(grep -i lock "$CLOG" | tail -1)"
+    pexpect_not "(nothing typed reached the program)" A "$n" "key"
+    pointer key:Escape wait:0.6; shot cancelled
+    saver_on cancelled && [ "$(pixel cancelled 480 460)" = 000000 ]
+    expect_true $? "Escape: the password box goes, the screen saver (and the lock) stays" "$(pixel cancelled 480 460)"
+    pointer key:a wait:0.6 type:right-password key:Return wait:1; shot unlocked
+    ! saver_on unlocked && grep -q "\] unlocked$" "$CLOG"
+    expect_true $? "the right password unlocks it" "$(pixel unlocked 640 400): $(grep -i lock "$CLOG" | tail -1)"
+    pointer type:c wait:0.3
+    pexpect "(and the program has the keyboard again)" A "$n" "key c"
+    # Preview never locks
+    in_bus gdbus call --session --dest org.wayland95.ScreenSaver --object-path /org/wayland95/ScreenSaver \
+        --method org.wayland95.ScreenSaver.Preview >/dev/null
+    sleep 1.8; pointer key:a wait:0.5; shot preview-pw
+    ! saver_on preview-pw && [ "$(grep -c "\] locked$" "$CLOG")" = 1 ]; expect_true $? "Preview doesn't lock: a key ends it" "$(pixel preview-pw 640 400)"
+
+    # the shell dies while locked: the screen stays locked
+    away; sleep 3.5
+    grep -q "\] locked$" <(tail -3 "$CLOG"); expect_true $? "(locked again)" "$(tail -2 "$CLOG")"
+    { kill -9 "$SHELL_PID"; wait "$SHELL_PID"; } 2>/dev/null; sleep 1; shot dead
+    [ "$(pixel dead 640 400)" = 000000 ] && [ "$(pixel dead 640 790)" = 000000 ] && grep -q "staying locked" "$CLOG"
+    expect_true $? "if the shell dies while locked, the screen stays locked" "$(pixel dead 640 400): $(tail -1 "$CLOG")"
+    n=$(pmark A)
+    pointer type:x wait:0.3
+    pexpect_not "(and no program gets the keyboard)" A "$n" "key"
+}
+
+# --- the power policy ---------------------------------------------------------
+# win95shell --session with tests/fakes/logind.py (a laptop; the test opens
+# and closes its lid) and a pretend battery (POWER_SUPPLY). A minute is 2
+# seconds here. Power actions are only logged ("Power: would ...").
+battery() { # ONLINE STATUS PERCENT
+    echo "$1" >"$POWER_SUPPLY/AC/online"; echo "$2" >"$POWER_SUPPLY/BAT0/status"; echo "$3" >"$POWER_SUPPLY/BAT0/capacity"
+}
+lid() { in_bus gdbus call --session --dest org.freedesktop.login1 --object-path /org/freedesktop/login1 \
+    --method org.freedesktop.login1.Manager.SetLid "$1" >/dev/null; }
+display_turned() { grep -c "output HEADLESS-1 turned $1" "$CLOG"; }
+suite_power() {
+    say "power: display off, sleep, the lid, the power buttons, a low battery (win95shell --session)"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    POWER_SUPPLY=$WORK/power-$RUN
+    mkdir -p "$POWER_SUPPLY/AC" "$POWER_SUPPLY/BAT0"
+    echo Mains >"$POWER_SUPPLY/AC/type"; echo Battery >"$POWER_SUPPLY/BAT0/type"
+    battery 1 Charging 80
+    printf '[ScreenSaver]\nName=none\n[Power]\ndisplayOffAC=1\nsleepAC=2\ndisplayOffBattery=1\nsleepBattery=0\nlidAction=display\npowerButton=ask\nsleepButton=sleep\ncriticalBattery=hibernate\n' \
+        >"$CONFIG/wayland95/settings.ini"
+    start_probe A qt cc0000 || return
+    WITH_LOGIND=1 MINUTE_MS=2000 start_shell --session || return
+    grep -q "logind: Inhibit ('handle-power-key:handle-suspend-key:handle-hibernate-key:handle-lid-switch'" "$FAKE_LOG"
+    expect_true $? "as the session, the power keys and the lid are the desktop's (logind is told)" "$(grep logind: "$FAKE_LOG")"
+    query activate A; sleep 0.3
+
+    # idle: the display goes off after a "minute", input turns it on
+    local off on
+    away; sleep 2.8
+    [ "$(display_turned off)" -ge 1 ]; expect_true $? "idle for its time: the display turns off" "$(grep -i "turned\|display" "$CLOG" "$WORK/$SUITE-shell.log" | tail -3)"
+    local n; n=$(pmark A)
+    pointer key:Shift_L wait:0.5
+    [ "$(display_turned on)" -ge 1 ]; expect_true $? "a key turns it on again" "$(grep turned "$CLOG" | tail -2)"
+    # and sleep after two
+    off=$(display_turned off)
+    away; sleep 4.8
+    shell_said "Power: would Suspend"; expect_true $? "idle for longer: the computer goes to sleep (only logged)" "$(grep Power: "$WORK/$SUITE-shell.log" | tail -2)"
+    pointer key:Shift_L wait:0.5
+
+    # held off by a program
+    holder
+    off=$(display_turned off)
+    away; sleep 2.8
+    [ "$(display_turned off)" = "$off" ]; expect_true $? "a program holding the screen saver off keeps the display on" "it went off"
+    kill "$HOLDER"; pointer key:Shift_L wait:0.3
+
+    # the lid (lidAction=display)
+    off=$(display_turned off); on=$(display_turned on)
+    lid true; sleep 0.6
+    [ "$(display_turned off)" -gt "$off" ]; expect_true $? "closing the lid: its action (the display off)" "$(grep "turned\|power:" "$CLOG" "$WORK/$SUITE-shell.log" | tail -2)"
+    lid false; sleep 0.6
+    [ "$(display_turned on)" -gt "$on" ]; expect_true $? "opening it: the display comes on" "$(grep turned "$CLOG" | tail -2)"
+
+    # the buttons (the compositor passes them to the shell)
+    n=$(pmark A)
+    pointer key:XF86PowerOff wait:0.6; away; shot power
+    expect_color "the power button: Shut Down asks what to do (powerButton=ask)" power 1200 500 004646
+    pointer key:Escape wait:0.5
+    pexpect_not "(the program never saw the button)" A "$n" "key"
+    local sleeps; sleeps=$(grep -c "Power: would Suspend" "$WORK/$SUITE-shell.log")
+    pointer key:XF86Sleep wait:0.5
+    [ "$(grep -c "Power: would Suspend" "$WORK/$SUITE-shell.log")" -gt "$sleeps" ]; expect_true $? "the sleep button sleeps" "$(grep power: "$WORK/$SUITE-shell.log" | tail -2)"
+
+    # a critically low battery: a warning, then a minute later its action
+    battery 0 Discharging 4
+    for _ in $(seq 20); do shell_said "notice from Power: Battery critically low" && break; sleep 0.25; done
+    shell_said "notice from Power: Battery critically low"; expect_true $? "unplugged at 4%: a warning that it will hibernate in a minute" "$(grep -i "notice\|battery" "$WORK/$SUITE-shell.log" | tail -3)"
+    for _ in $(seq 16); do shell_said "Power: would Hibernate" && break; sleep 0.25; done
+    shell_said "Power: would Hibernate"; expect_true $? "and then it hibernates (only logged)" "$(grep Power: "$WORK/$SUITE-shell.log" | tail -2)"
+}
+
 # --- the Qt compositor's desktop, as a window in this one ---------------------------
 # The taskbar, Start menu and tray QML is shared with win95shell; this checks
 # a change to it didn't break the Qt compositor's desktop (still the session
@@ -1197,7 +1380,7 @@ suite_classic() {
 }
 
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

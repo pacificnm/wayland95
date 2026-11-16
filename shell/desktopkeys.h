@@ -1,6 +1,6 @@
 #pragma once
 
-// The desktop's own keys (volume, brightness), which wayland95-compositor
+// The desktop's own keys (volume, brightness, the power and sleep buttons), which wayland95-compositor
 // catches and sends to its shell over wayland95-shell-v1
 // (protocols/wayland95/). In QML:
 //
@@ -49,6 +49,9 @@ public:
         VolumeMute = 3,
         BrightnessUp = 4,
         BrightnessDown = 5,
+        Power = 6,
+        Sleep = 7,
+        Hibernate = 8,
     };
     Q_ENUM(Key)
 

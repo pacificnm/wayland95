@@ -196,6 +196,9 @@ else()
 endif()
 
 add_subdirectory(apps/common)   # Win95Ui shared QML controls
+if(WLROOTS_FOUND_CHECK_FOUND)
+    add_subdirectory(shell)     # win95shell, the desktop for wayland95-compositor
+endif()
 add_subdirectory(apps/files)    # win95files
 add_subdirectory(apps/notepad)  # win95notepad
 add_subdirectory(apps/control)  # win95control

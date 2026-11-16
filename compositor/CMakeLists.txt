@@ -37,7 +37,7 @@ server_protocol(${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-output-power-management-un
 set(SOURCES main.c output.c input.c view.c xdg.c xwayland.c layers.c protocols.c
     decoration.c settings.c server.h ${PROTOCOL_HEADERS})
 set(LIBS PkgConfig::WLROOTS PkgConfig::WL_SERVER PkgConfig::XKB PkgConfig::PIXMAN PkgConfig::XCB
-    PkgConfig::CAIRO PkgConfig::PANGOCAIRO PkgConfig::DRM PkgConfig::LIBINPUT)
+    PkgConfig::CAIRO PkgConfig::PANGOCAIRO PkgConfig::DRM PkgConfig::LIBINPUT m)
 
 add_executable(wayland95-compositor ${SOURCES})
 set_target_properties(wayland95-compositor PROPERTIES
@@ -54,7 +54,8 @@ install(TARGETS wayland95-compositor RUNTIME DESTINATION bin)
 # tests catch each break (never installed, built only on request):
 #   FRAMES: no wl_pointer.frame   FOCUS: no keyboard until one is plugged in
 #   SSD: no Win95 frames (every program left undecorated)
-foreach(BREAK FRAMES FOCUS SSD)
+#   EXCLUSIVE: panels' exclusive zones ignored (windows under the taskbar)
+foreach(BREAK FRAMES FOCUS SSD EXCLUSIVE)
     string(TOLOWER ${BREAK} break_name)
     add_executable(wayland95-compositor-broken-${break_name} EXCLUDE_FROM_ALL ${SOURCES})
     set_target_properties(wayland95-compositor-broken-${break_name} PROPERTIES

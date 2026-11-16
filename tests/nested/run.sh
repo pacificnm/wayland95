@@ -3,7 +3,8 @@
 #
 #   tests/nested/run.sh desktop         start the nested desktop (stays running)
 #   tests/nested/run.sh new-desktop     the same with the new wlroots compositor
-#                                       (docs/migration.md); same socket, so the
+#                                       and its shell, win95shell (docs/migration.md);
+#                                       same socket, so the
 #                                       commands below work with either
 #   tests/nested/run.sh chromium        open Chromium in it, on the test page
 #   tests/nested/run.sh firefox         Firefox (GTK, Wayland)
@@ -57,10 +58,15 @@ new-desktop)
     # session has no GPU buffer sharing (linux-dmabuf) for wlroots to use,
     # and through X11 it gets the GPU (DRI3). Elsewhere, the Wayland way.
     exec > >(tee "$DIR/desktop.log") 2>&1
+    # with the new shell (taskbar, Start menu, desktop), on a D-Bus session
+    # of its own, so it doesn't fight your desktop over notifications and
+    # the tray
+    SHELL_ARGS=()
+    [ -x "$REPO/build/win95shell" ] && SHELL_ARGS=(--run "dbus-run-session -- $REPO/build/win95shell")
     if [ -n "${DISPLAY:-}" ] && [ "${XDG_CURRENT_DESKTOP:-}" = Wayland95 ]; then
-        exec env -u WAYLAND_DISPLAY "$REPO/build/wayland95-compositor" --socket "$SOCKET"
+        exec env -u WAYLAND_DISPLAY "$REPO/build/wayland95-compositor" --socket "$SOCKET" "${SHELL_ARGS[@]}"
     fi
-    exec "$REPO/build/wayland95-compositor" --socket "$SOCKET"
+    exec "$REPO/build/wayland95-compositor" --socket "$SOCKET" "${SHELL_ARGS[@]}"
     ;;
 chromium)
     inside chromium chromium --ozone-platform=wayland --user-data-dir="$DIR/chromium-profile" \

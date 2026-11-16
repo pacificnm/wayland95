@@ -136,8 +136,25 @@ watcher, update check, trash watcher, problem reports). What changes:
   `WindowManager` keeps its interface to QML and is fed from the protocol.
 - **Panels** are layer-shell surfaces. Qt has no public layer-shell API and
   KDE's layer-shell-qt is not an option (no KDE libraries), so `shell/`
-  includes its own Qt shell integration for `zwlr_layer_shell_v1`, built on
-  Qt's Wayland client private API (`qt6-wayland-private-dev`, part of Qt).
+  includes its own Qt shell integration for `zwlr_layer_shell_v1`
+  (`shell/layershell.*`), built on Qt's Wayland client private API
+  (`qt6-wayland-private-dev`, part of Qt). It's per window
+  (`QWaylandWindow::setShellIntegration`), so the shell can still open
+  ordinary windows; in QML it's attached properties on a plain `Window`
+  (`LayerShell.layer`, `.anchors`, `.exclusiveZone`, `.keyboard`,
+  `.margins`). Each panel tells Qt its place on the screen, worked out from
+  its anchors (Qt otherwise pins every window to the corner:
+  `QT_WAYLAND_DISABLE_FIXED_POSITIONS`), so items map between the shell's
+  windows as they did inside one.
+- **The shell's windows** (`shell/qml/Shell.qml`): the desktop (background
+  layer: backdrop and icons), the taskbar (top layer along the bottom; its
+  exclusive zone keeps windows clear of it), a pop-up layer (overlay, the
+  whole screen, shown only while the Start menu, a tray pop-up or the
+  taskbar's window menu is open; it has the keyboard then, and a click
+  outside closes them, as on the Qt compositor) and a tooltip layer
+  (overlay, takes no input, shown only while a tooltip is). The QML files
+  themselves are the Qt compositor's (`qml/Win95Shell/`), shared: the
+  taskbar takes a `popupParent` for where its pop-ups go.
 - **Screen saver and locking** use `ext-idle-notify` (when to start) and
   `ext-session-lock` (password-protected: nothing else is shown or gets input
   until it unlocks). Turning the display off is `wlr-output-power-management`.

@@ -4,11 +4,13 @@
 #   frames: no wl_pointer.frame (the Chromium mouse wheel bug)
 #   focus:  no keyboard focus until a keyboard exists (typing lost)
 #   ssd:    no Win95 frames (every window left undecorated)
+#   exclusive: panels' exclusive zones ignored (windows under the taskbar)
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 BUILD=${BUILD:-$(cd "$HERE/.." && pwd)/build}
 cmake --build "$BUILD" --target wayland95-compositor wayland95-compositor-broken-frames \
-    wayland95-compositor-broken-focus wayland95-compositor-broken-ssd >/dev/null || exit 2
+    wayland95-compositor-broken-focus wayland95-compositor-broken-ssd \
+    wayland95-compositor-broken-exclusive >/dev/null || exit 2
 ok=0; bad=0
 check() { # NAME COMPOSITOR MUST-FAIL-REGEX (empty: everything must pass)
     local out failed
@@ -30,6 +32,7 @@ check() { # NAME COMPOSITOR MUST-FAIL-REGEX (empty: everything must pass)
 check "the real build" "$BUILD/wayland95-compositor" ""
 check "broken: no pointer frames" "$BUILD/tests/wayland95-compositor-broken-frames" "\[input\] wheel down scrolls"
 check "broken: no keyboard focus" "$BUILD/tests/wayland95-compositor-broken-focus" "\[windows\] keys go to the active window|\[qt\] typing"
+check "broken: taskbar edge ignored" "$BUILD/tests/wayland95-compositor-broken-exclusive" "\[shell\] a maximized window stops above the taskbar"
 check "broken: no window frames" "$BUILD/tests/wayland95-compositor-broken-ssd" "\[frames\] the frame's outer corner is white|\[frames\] an X11 window gets the Win95 frame"
 echo "== $ok passed, $bad failed"
 [ "$bad" -eq 0 ]

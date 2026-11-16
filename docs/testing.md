@@ -39,12 +39,16 @@ fresh compositor. The suites (`tests/run.sh SUITE`):
 | `qt` | a Qt window: clicks, wheel, typing, menus by mouse and keyboard, clipboard and primary selection with GTK |
 | `frames` | Win95 frames on Qt windows: the bevel's colours pixel by pixel, active and inactive title gradients, the buttons drawn; clicking a title bar activates; moving by the title bar (exactly with the pointer); resizing from a corner, the left edge (right edge stays) and the grab zone outside the border; maximize (size, title at the top, drawing fills the rest), no moving while maximized, restore to the same place; double-click maximize and restore; minimize; a button pressed then left doesn't act, a held button looks pressed, close closes; GTK keeps its own title bar; X11 windows get the frame and its close works |
 | `alttab` | three Qt windows: Alt+Tab to the previous window, twice for two back, Alt+Shift+Tab the other way, Escape stays, the Tab never reaches the program, a minimized window can be picked (and is restored), typing afterwards, Alt+F4 closes only the active window |
+| `shell` | win95shell (with a throwaway home, settings and D-Bus session): the desktop and taskbar drawn; a maximized window stops above the taskbar; a button per window, the active one pressed in; a button activates, minimizes and restores its window (and the keyboard follows); a button's menu opens at the pointer, Maximize and Close by key; the Start menu opens, closes by Escape (keyboard back to the window) and by a click outside, a submenu by its letter, an entry starts its program; double-clicking My Computer opens it; the clock's tooltip shows above it, stays while the pointer moves (its layer takes no pointer) and goes |
+| `classic` | the Qt compositor's desktop as a window in the new one, since the taskbar QML is shared: its desktop and taskbar, its Start menu just above the taskbar, Escape, the clock's tooltip, a taskbar button's menu at the pointer |
 | `settings` | settings.ini changes apply at once: title and face colours (written as QSettings does, and edited in place), the double-click time (a slow double-click counts only with a long interval), an unknown keyboard layout is reported and typing still works |
 | `vscode` | VS Code: opens the file, the wheel scrolls the editor, typing and Ctrl+S save it |
 
 Each compositor gets its own empty config folder (`XDG_CONFIG_HOME`), so
 your own settings.ini (colour scheme, double-click time) never changes a
-result.
+result. Desktops started by the tests run on a D-Bus session of their own
+and with `WAYLAND95_NO_SYSTEM_AGENTS=1`, so they never answer polkit or
+NetworkManager for your real session.
 
 Not covered headless: the keyboard layout and repeat (they apply to real
 keyboards; the tests' virtual keyboard brings its own keymap) and touchpad
@@ -61,7 +65,8 @@ compositors (each reintroducing a real bug we've had) and checks that each
 fails exactly the checks meant to catch it, and that the real build passes.
 A new kind of check gets a broken build to prove it, where that's possible.
 The breaks: no pointer frames (the wheel in Chromium), no keyboard until
-one is plugged in (typing lost), no Win95 frames.
+one is plugged in (typing lost), no Win95 frames, panels' exclusive zones
+ignored (windows under the taskbar).
 
 ## 2. Nested, on your screen (VS Code)
 
@@ -72,8 +77,9 @@ programs inside it with throwaway profiles. This is where things are
 looked at and tried by hand, and where GPU-only problems show (black or
 torn windows, dmabuf formats). The input trace logs every press, release
 and wheel turn. `tests/nested/run.sh new-desktop` (VS Code task "Nested:
-new wlroots desktop") runs the wlroots compositor the same way; inside the
-Qt compositor's session it nests through Xwayland, since that session can't
+new wlroots desktop") runs the wlroots compositor the same way, with the
+new shell (win95shell, on a D-Bus session of its own); inside the Qt
+compositor's session it nests through Xwayland, since that session can't
 give wlroots the GPU directly.
 
 ## 3. The real session, in a virtual machine

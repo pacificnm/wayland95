@@ -1,0 +1,67 @@
+# win95shell: Wayland 95's desktop as panels (layer-shell) of
+# wayland95-compositor. See docs/architecture.md and docs/migration.md
+# (phase 4). The QML is shared with the Qt compositor (qml/Win95Shell/).
+find_package(Qt6 REQUIRED COMPONENTS WaylandClient WaylandScannerTools)
+if(NOT TARGET Qt6::WaylandClientPrivate)
+    message(FATAL_ERROR "win95shell needs Qt's private Wayland client headers (qt6-wayland-private-dev)")
+endif()
+
+qt_add_executable(win95shell
+    main.cpp
+    layershell.h layershell.cpp
+    toplevels.h toplevels.cpp
+    # services shared with the Qt compositor
+    ${CMAKE_SOURCE_DIR}/src/launcher.h ${CMAKE_SOURCE_DIR}/src/launcher.cpp
+    ${CMAKE_SOURCE_DIR}/src/programmenu.h ${CMAKE_SOURCE_DIR}/src/programmenu.cpp
+    ${CMAKE_SOURCE_DIR}/src/statusnotifier.h ${CMAKE_SOURCE_DIR}/src/statusnotifier.cpp
+    ${CMAKE_SOURCE_DIR}/src/notifications.h ${CMAKE_SOURCE_DIR}/src/notifications.cpp
+    ${CMAKE_SOURCE_DIR}/src/trashwatcher.h ${CMAKE_SOURCE_DIR}/src/trashwatcher.cpp
+)
+# (layer-shell names an argument "namespace", a C++ keyword in the Qt
+# wrappers: generated from a copy with it renamed)
+file(READ ${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-layer-shell-unstable-v1.xml layer_shell_xml)
+string(REPLACE "name=\"namespace\"" "name=\"scope\"" layer_shell_xml "${layer_shell_xml}")
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/protocols/wlr-layer-shell-unstable-v1.xml "${layer_shell_xml}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-layer-shell-unstable-v1.xml)
+qt6_generate_wayland_protocol_client_sources(win95shell FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/protocols/wlr-layer-shell-unstable-v1.xml
+    ${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-foreign-toplevel-management-unstable-v1.xml
+)
+target_include_directories(win95shell PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/apps/common
+)
+
+# the QML: the Qt compositor's files that make sense in a client (not its
+# window frames, Xwayland or compositor root), and the shell's own root
+set(shared_qml
+    Taskbar.qml TaskButton.qml StartButton.qml StartMenu.qml Clock.qml Bevel.qml
+    DesktopIcons.qml DesktopBackground.qml Theme.qml MenuIcon.qml
+    Tray.qml TrayIcon.qml ClockTray.qml NotificationsTray.qml VolumeTray.qml
+    NetworkTray.qml BluetoothTray.qml BatteryTray.qml
+)
+set(qml_paths)
+foreach(f ${shared_qml})
+    set(path ${CMAKE_SOURCE_DIR}/qml/Win95Shell/${f})
+    set_source_files_properties(${path} PROPERTIES QT_RESOURCE_ALIAS ${f})
+    list(APPEND qml_paths ${path})
+endforeach()
+set_source_files_properties(${CMAKE_SOURCE_DIR}/qml/Win95Shell/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/Shell.qml PROPERTIES QT_RESOURCE_ALIAS Shell.qml)
+list(APPEND qml_paths qml/Shell.qml)
+
+qt_add_qml_module(win95shell
+    URI Win95Shell
+    VERSION 1.0
+    QML_FILES ${qml_paths}
+    RESOURCE_PREFIX /qt/qml
+)
+
+target_link_libraries(win95shell PRIVATE
+    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus
+    Qt6::WaylandClient Qt6::WaylandClientPrivate
+    win95uiplugin
+)
+set_target_properties(win95shell PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+install(TARGETS win95shell RUNTIME DESTINATION bin)

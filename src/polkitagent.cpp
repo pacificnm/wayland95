@@ -87,6 +87,12 @@ PolkitAgent::PolkitAgent(QObject *parent)
 
 void PolkitAgent::registerAgent()
 {
+    // the automated tests run desktops inside your session: they must not
+    // become its password agent (tests/run.sh sets this)
+    if (qEnvironmentVariableIsSet("WAYLAND95_NO_SYSTEM_AGENTS")) {
+        qInfo() << "Password prompts: no polkit agent (WAYLAND95_NO_SYSTEM_AGENTS)";
+        return;
+    }
     QDBusConnection bus = QDBusConnection::systemBus();
     if (!bus.isConnected() || helperPath().isEmpty())
         return;

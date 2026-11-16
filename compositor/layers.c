@@ -41,6 +41,9 @@ void layers_arrange(struct server *server)
 	}
 	bool changed = usable.x != server->usable_area.x || usable.y != server->usable_area.y
 			|| usable.width != server->usable_area.width || usable.height != server->usable_area.height;
+#ifdef WAYLAND95_TEST_BREAK_EXCLUSIVE // tests/selftest.sh: windows ignore the taskbar's edge
+	usable = full;
+#endif
 	server->usable_area = usable;
 	wlr_log(WLR_DEBUG, "usable area %d,%d %dx%d", usable.x, usable.y, usable.width, usable.height);
 	if (changed)

@@ -7,7 +7,7 @@
 #
 #   tests/run.sh [SUITE...]        all suites, or some of: input (Chromium) firefox
 #                                  windows popups x11 clipboard qt frames alttab
-#                                  settings vscode
+#                                  settings shell classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
 #
@@ -21,8 +21,12 @@ W95INPUT=$BUILD/tests/w95input
 W95QUERY=$BUILD/tests/w95query
 PROBE=$BUILD/tests/w95probe-gtk
 PROBE_QT=$BUILD/tests/w95probe-qt
+SHELL_BIN=$BUILD/win95shell
 PAGE="file://$REPO/tests/nested/clicktest.html"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/wayland95-tests.XXXXXX")
+# desktops started by the tests never register with the system's polkit or
+# NetworkManager (they'd answer for your real session)
+export WAYLAND95_NO_SYSTEM_AGENTS=1
 PIDS=()
 pass=0
 fail=0
@@ -54,14 +58,15 @@ bad() { echo "FAIL  [$SUITE] $1"; [ -n "${2:-}" ] && echo "      $2"; fail=$((fa
 
 # --- the compositor ---------------------------------------------------------
 # a fresh one for each suite: nothing left over from the last
-fresh() {
+fresh() { # [WIDTHxHEIGHT]
+    local size=${1:-1280x800}
     stop_all
     RUN=$((RUN + 1))
     SOCKET="w95test-$$-$RUN"
     CLOG=$WORK/$SUITE-compositor.log
     # its own settings (settings.ini), not the user's
     CONFIG=$WORK/config-$RUN; mkdir -p "$CONFIG/wayland95"
-    XDG_CONFIG_HOME=$CONFIG "$COMPOSITOR" --socket "$SOCKET" --headless 1280x800 >"$CLOG" 2>&1 &
+    XDG_CONFIG_HOME=$CONFIG "$COMPOSITOR" --socket "$SOCKET" --headless "$size" >"$CLOG" 2>&1 &
     PIDS+=($!)
     for _ in $(seq 50); do
         grep -q "WAYLAND_DISPLAY=$SOCKET" "$CLOG" 2>/dev/null && break
@@ -96,40 +101,43 @@ expect_color() { # NAME SHOT X Y RRGGBB (within 8 per channel: gradients)
     local got; got=$(pixel "$2" "$3" "$4")
     if color_near "$got" "$5" 8; then ok "$1"; else bad "$1" "pixel $3,$4 in $SUITE-$2.png is ${got:-unreadable}, expected about $5"; fi
 }
-expect_true() { # NAME WHAT-HAPPENED (status of the last command)
-    if [ "$?" -eq 0 ]; then ok "$1"; else bad "$1" "$2"; fi
+# the last command's status, passed as $? first: bash runs any $(...) in the
+# other arguments before the function starts, and that would reset $? (a bug
+# that let checks pass whatever happened, until tests/selftest.sh caught it)
+expect_true() { # STATUS NAME WHAT-HAPPENED   e.g.  [ "$x" = 1 ]; expect_true $? "x is 1" "x is $x"
+    if [ "$1" -eq 0 ]; then ok "$2"; else bad "$2" "$3"; fi
 }
 
 # --- probes: GTK windows that log what they get ------------------------------
 # start_probe NAME wayland|x11|qt RRGGBB: GTK on Wayland or X11, or Qt; its
-# log is $WORK/NAME.log, commands go to $WORK/NAME.in
+# log is $WORK/SUITE-NAME.log, commands go to $WORK/SUITE-NAME.in
 start_probe() {
-    local name=$1 backend=$2 color=$3 fifo=$WORK/$1.in
+    local name=$1 backend=$2 color=$3 fifo=$WORK/$SUITE-$1.in
     rm -f "$fifo"; mkfifo "$fifo"
     sleep 100000 >"$fifo" &
     PIDS+=($!)
     if [ "$backend" = qt ]; then
         WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland "$PROBE_QT" --title "$name" --color "$color" \
-            <"$fifo" >"$WORK/$name.log" 2>"$WORK/$name.err" &
+            <"$fifo" >"$WORK/$SUITE-$name.log" 2>"$WORK/$SUITE-$name.err" &
     elif [ "$backend" = x11 ]; then
         env -u WAYLAND_DISPLAY GDK_BACKEND=x11 DISPLAY="$XDISPLAY" "$PROBE" --title "$name" --color "$color" \
-            <"$fifo" >"$WORK/$name.log" 2>"$WORK/$name.err" &
+            <"$fifo" >"$WORK/$SUITE-$name.log" 2>"$WORK/$SUITE-$name.err" &
     else
         WAYLAND_DISPLAY=$SOCKET GDK_BACKEND=wayland "$PROBE" --title "$name" --color "$color" \
-            <"$fifo" >"$WORK/$name.log" 2>"$WORK/$name.err" &
+            <"$fifo" >"$WORK/$SUITE-$name.log" 2>"$WORK/$SUITE-$name.err" &
     fi
     PIDS+=($!)
     eval "PID_$name=$!"
     for _ in $(seq 100); do
-        grep -q "EVT ready" "$WORK/$name.log" 2>/dev/null && { sleep 0.3; return 0; }
+        grep -q "EVT ready" "$WORK/$SUITE-$name.log" 2>/dev/null && { sleep 0.3; return 0; }
         sleep 0.1
     done
-    bad "start $name ($backend)" "it didn't show its window: $(tail -3 "$WORK/$name.err")"
+    bad "start $name ($backend)" "it didn't show its window: $(tail -3 "$WORK/$SUITE-$name.err")"
     return 1
 }
-probe_cmd() { printf '%s\n' "$2" >"$WORK/$1.in"; sleep 0.4; }
-pmark() { grep -c "^EVT" "$WORK/$1.log"; }
-pevents() { grep "^EVT" "$WORK/$1.log" | tail -n +$(($2 + 1)) | sed 's/^EVT //' | tr '\n' '|'; }
+probe_cmd() { printf '%s\n' "$2" >"$WORK/$SUITE-$1.in"; sleep 0.4; }
+pmark() { grep -c "^EVT" "$WORK/$SUITE-$1.log"; }
+pevents() { grep "^EVT" "$WORK/$SUITE-$1.log" | tail -n +$(($2 + 1)) | sed 's/^EVT //' | tr '\n' '|'; }
 pexpect() { # NAME PROBE MARK REGEX
     local got; got=$(pevents "$2" "$3")
     if echo "$got" | grep -qE "$4"; then ok "$1"; else bad "$1" "$2 expected /$4/, got: $got"; fi
@@ -158,7 +166,7 @@ drag() {
     pointer "${args[@]}"
 }
 near() { [ $(($1 - $2)) -le "$3" ] && [ $(($2 - $1)) -le "$3" ]; } # A B TOLERANCE
-last_size() { grep "^EVT size" "$WORK/$1.log" | tail -1 | awk '{print $3"x"$4}'; }
+last_size() { grep "^EVT size" "$WORK/$SUITE-$1.log" | tail -1 | awk '{print $3"x"$4}'; }
 
 # --- browsers: the test page logs every event it gets ---------------------------
 BROWSER=chromium
@@ -307,7 +315,7 @@ suite_windows() {
     pexpect "a new window gets the keyboard" B 0 "focus in"
     pexpect "the window before loses it" A "$n" "focus out"
     query list | grep -q "^B|.*activated" && ! query list | grep -q "^A|.*activated"
-    expect_true "the window list shows the new window active" "$(query list | tr '\n' ' ')"
+    expect_true $? "the window list shows the new window active" "$(query list | tr '\n' ' ')"
 
     # A's left edge is still visible next to B: clicking there brings it up
     n=$(pmark A); m=$(pmark B); pointer click:$((AX + 10)),$((AY + 150))
@@ -320,11 +328,11 @@ suite_windows() {
 
     n=$(pmark A); query maximize A; sleep 0.8
     pexpect "maximize (from the window list)" A "$n" "state maximized"
-    [ "$(last_size A)" = "1280x800" ]; expect_true "maximized fills the screen" "size is $(last_size A)"
+    [ "$(last_size A)" = "1280x800" ]; expect_true $? "maximized fills the screen" "size is $(last_size A)"
     shot maximized
     expect_pixel "and is drawn over all of it" maximized 1270 790 cc0000
     n=$(pmark A); query unmaximize A; sleep 0.8
-    [ "$(last_size A)" = "$a_size" ]; expect_true "restore gives back its size" "size is $(last_size A), was $a_size"
+    [ "$(last_size A)" = "$a_size" ]; expect_true $? "restore gives back its size" "size is $(last_size A), was $a_size"
 
     # B alone covers its bottom right corner
     local bx=$((AX + 30 + 395)) by=$((AY + 30 + 295))
@@ -333,7 +341,7 @@ suite_windows() {
     query minimize B; sleep 0.5
     shot minimized
     expect_pixel "minimize hides the window" minimized $bx $by 000000
-    query list | grep -q "^B|.*minimized"; expect_true "and the list says minimized" "$(query list | tr '\n' ' ')"
+    query list | grep -q "^B|.*minimized"; expect_true $? "and the list says minimized" "$(query list | tr '\n' ' ')"
     m=$(pmark B); query unminimize B; sleep 0.5
     shot restored
     expect_pixel "restoring shows it again" restored $bx $by 0000cc
@@ -347,7 +355,7 @@ suite_windows() {
     drag $((bx0 + 150)) $((by0 - 25)) $((bx0 + 250)) $((by0 + 25))
     locate_probe B $((bx0 + 200)) $((by0 + 200)) || return
     near "$PX" $((bx0 + 100)) 12 && near "$PY" $((by0 + 50)) 12
-    expect_true "dragging the title bar moves the window" "moved to $PX,$PY, expected about $((bx0 + 100)),$((by0 + 50))"
+    expect_true $? "dragging the title bar moves the window" "moved to $PX,$PY, expected about $((bx0 + 100)),$((by0 + 50))"
 
     # resizing: drag the bottom right corner (GTK's resize border is just outside)
     local size0 w0 h0 size1
@@ -356,11 +364,11 @@ suite_windows() {
     drag $cx $cy $((cx + 100)) $((cy + 50)); sleep 0.3
     size1=$(last_size B)
     near "${size1%x*}" $((w0 + 100)) 12 && near "${size1#*x}" $((h0 + 50)) 12
-    expect_true "dragging the corner resizes" "size $size0 -> $size1, expected about +100,+50"
+    expect_true $? "dragging the corner resizes" "size $size0 -> $size1, expected about +100,+50"
 
     query close A; sleep 0.8
-    ! kill -0 "$PID_A" 2>/dev/null; expect_true "close (from the window list) closes the program" "A still runs"
-    ! query list | grep -q "^A|"; expect_true "and it leaves the list" "$(query list | tr '\n' ' ')"
+    ! kill -0 "$PID_A" 2>/dev/null; expect_true $? "close (from the window list) closes the program" "A still runs"
+    ! query list | grep -q "^A|"; expect_true $? "and it leaves the list" "$(query list | tr '\n' ' ')"
 }
 
 suite_popups() {
@@ -394,7 +402,7 @@ suite_x11() {
     [ -n "$XDISPLAY" ] || { bad "Xwayland" "the compositor has no X11 display"; return; }
     start_probe X x11 00aa00 || return
     ok "an X11 program starts (Xwayland on $XDISPLAY)"
-    query list | grep -q "^X|"; expect_true "it's in the window list" "$(query list | tr '\n' ' ')"
+    query list | grep -q "^X|"; expect_true $? "it's in the window list" "$(query list | tr '\n' ' ')"
     locate_probe X 240 228 || return
     local XX=$PX XY=$PY n
     n=$(pmark X); pointer click:$((XX + 100)),$((XY + 50))
@@ -430,7 +438,7 @@ suite_x11() {
     sleep 1
     pointer type:"hello xterm" key:Return wait:0.5
     [ "$(cat "$typed" 2>/dev/null)" = "hello xterm" ]
-    expect_true "xterm: typing reaches the program in it" "it got: $(cat "$typed" 2>/dev/null)"
+    expect_true $? "xterm: typing reaches the program in it" "it got: $(cat "$typed" 2>/dev/null)"
 }
 
 suite_clipboard() {
@@ -511,19 +519,19 @@ suite_vscode() {
         --disable-gpu --new-window "$file" >"$WORK/vscode.log" 2>&1 &
     PIDS+=($!)
     for _ in $(seq 60); do query list | grep -q "note.txt" && break; sleep 0.5; done
-    query list | grep -q "note.txt"; expect_true "VS Code opens a window with the file" "$(query list | tr '\n' ' ')"
+    query list | grep -q "note.txt"; expect_true $? "VS Code opens a window with the file" "$(query list | tr '\n' ' ')"
     sleep 3
     # scrolling the editor
     shot before-wheel
     pointer move:500,400 wheel:5 wait:0.8
     shot after-wheel
     differs before-wheel after-wheel 300 500 80 100   # the line numbers and text
-    expect_true "the wheel scrolls the editor" "the editor didn't change"
+    expect_true $? "the wheel scrolls the editor" "the editor didn't change"
     pointer wheel:-5 wait:0.8
     # typing and Ctrl+S save
     pointer key:ctrl+Home type:"hello code" key:Return key:ctrl+s wait:1.5
     head -1 "$file" | grep -q "^hello code$"
-    expect_true "typing, and Ctrl+S saves" "the file starts: $(head -1 "$file")"
+    expect_true $? "typing, and Ctrl+S saves" "the file starts: $(head -1 "$file")"
     # stop its helper processes along with it
     pkill -f -- "--user-data-dir=$WORK/vscode-data" 2>/dev/null
 }
@@ -575,59 +583,59 @@ suite_frames() {
     drag $((AX + 60)) $(title_y $AY) $((AX + 60 + 150)) $(($(title_y $AY) + 80))
     locate_probe A $((AX + 150 + 50)) $((AY + 80 + 50)) || return
     [ "$PX" -eq $((AX + 150)) ] && [ "$PY" -eq $((AY + 80)) ]
-    expect_true "dragging the title bar moves the window" "moved to $PX,$PY, expected $((AX + 150)),$((AY + 80))"
+    expect_true $? "dragging the title bar moves the window" "moved to $PX,$PY, expected $((AX + 150)),$((AY + 80))"
     AX=$PX; AY=$PY
 
     # resizing from the frame's edges, and from just outside them
     drag $((AX + W + 1)) $((AY + H + 1)) $((AX + W + 61)) $((AY + H + 41)); sleep 0.3
     [ "$(size_of A)" = "$((W + 60))x$((H + 40))" ]
-    expect_true "dragging the bottom right corner resizes" "size $(size_of A), expected $((W + 60))x$((H + 40))"
+    expect_true $? "dragging the bottom right corner resizes" "size $(size_of A), expected $((W + 60))x$((H + 40))"
     W=$((W + 60)); H=$((H + 40))
     drag $((AX - 2)) $((AY + 100)) $((AX - 42)) $((AY + 100)); sleep 0.3
     [ "$(size_of A)" = "$((W + 40))x$H" ]
-    expect_true "dragging the left edge resizes" "size $(size_of A), expected $((W + 40))x$H"
+    expect_true $? "dragging the left edge resizes" "size $(size_of A), expected $((W + 40))x$H"
     locate_probe A $((AX + 20)) $((AY + 100)) || return
     [ "$PX" -eq $((AX - 40)) ] && [ "$PY" -eq "$AY" ]
-    expect_true "and the right edge stays put" "drawing area at $PX,$PY, expected $((AX - 40)),$AY"
+    expect_true $? "and the right edge stays put" "drawing area at $PX,$PY, expected $((AX - 40)),$AY"
     AX=$PX; W=$((W + 40))
     drag $((AX + W + 5)) $((AY + 100)) $((AX + W + 35)) $((AY + 100)); sleep 0.3
     [ "$(size_of A)" = "$((W + 30))x$H" ]
-    expect_true "the grab zone just outside the border resizes too" "size $(size_of A), expected $((W + 30))x$H"
+    expect_true $? "the grab zone just outside the border resizes too" "size $(size_of A), expected $((W + 30))x$H"
     W=$((W + 30))
 
     # the buttons
     n=$(pmark A); pointer click:$(max_x $AX $W),$(title_y $AY) wait:0.5; away
     pexpect "the maximize button maximizes" A "$n" "state maximized"
-    [ "$(size_of A)" = "1280x778" ]; expect_true "the window fills the screen below its title bar" "size $(size_of A)"
+    [ "$(size_of A)" = "1280x778" ]; expect_true $? "the window fills the screen below its title bar" "size $(size_of A)"
     shot maximized
     expect_color "the title bar is at the top of the screen" maximized 2 11 000080
     expect_pixel "and the window's drawing fills the rest" maximized 640 790 cc0000
     drag 400 11 600 200; sleep 0.3
-    grep "^EVT state" "$WORK/A.log" | tail -1 | grep -q maximized
-    expect_true "a maximized window doesn't move by its title bar (as Win95)" "it was restored"
+    grep "^EVT state" "$WORK/$SUITE-A.log" | tail -1 | grep -q maximized
+    expect_true $? "a maximized window doesn't move by its title bar (as Win95)" "it was restored"
     n=$(pmark A); pointer click:$(max_x 0 1280),$(title_y 22) wait:0.5
-    [ "$(size_of A)" = "${W}x$H" ]; expect_true "the same button restores it" "size $(size_of A), expected ${W}x$H"
+    [ "$(size_of A)" = "${W}x$H" ]; expect_true $? "the same button restores it" "size $(size_of A), expected ${W}x$H"
     locate_probe A $((AX + 20)) $((AY + 100)) || return
-    [ "$PX" -eq "$AX" ] && [ "$PY" -eq "$AY" ]; expect_true "to where it was" "at $PX,$PY, expected $AX,$AY"
+    [ "$PX" -eq "$AX" ] && [ "$PY" -eq "$AY" ]; expect_true $? "to where it was" "at $PX,$PY, expected $AX,$AY"
 
     n=$(pmark A); pointer click:$((AX + 100)),$(title_y $AY) click:$((AX + 100)),$(title_y $AY) wait:0.5
     pexpect "double-clicking the title bar maximizes" A "$n" "state maximized"
     pointer click:640,11 click:640,11 wait:0.5
-    [ "$(size_of A)" = "${W}x$H" ]; expect_true "and double-clicking again restores" "size $(size_of A)"
+    [ "$(size_of A)" = "${W}x$H" ]; expect_true $? "and double-clicking again restores" "size $(size_of A)"
 
     pointer click:$(min_x $AX $W),$(title_y $AY) wait:0.5; away
-    query list | grep -q "^A|.*minimized"; expect_true "the minimize button minimizes" "$(query list | tr '\n' ' ')"
+    query list | grep -q "^A|.*minimized"; expect_true $? "the minimize button minimizes" "$(query list | tr '\n' ' ')"
     shot minimized
     expect_pixel "and the window is gone from the screen" minimized $((AX + W - 10)) $((AY + H - 10)) 000000
     query unminimize A; sleep 0.5
 
     # a button only acts if let go over it
     pointer move:$(close_x $AX $W),$(title_y $AY) down:left move:$((AX + 100)),$((AY + 100)) up:left wait:0.5
-    kill -0 "$PID_A" 2>/dev/null; expect_true "pressing close and moving off doesn't close" "A closed"
+    kill -0 "$PID_A" 2>/dev/null; expect_true $? "pressing close and moving off doesn't close" "A closed"
     pointer move:$(close_x $AX $W),$(title_y $AY) down:left wait:0.3; shot pressed; pointer up:left wait:0.8
     expect_pixel "a held button looks pressed (grey outer top left)" pressed $(($(close_x $AX $W) - 8)) $(($(title_y $AY) - 7)) 808080
     expect_pixel "(black inside it)" pressed $(($(close_x $AX $W) - 7)) $(($(title_y $AY) - 6)) 000000
-    ! kill -0 "$PID_A" 2>/dev/null; expect_true "the close button closes the program" "A still runs"
+    ! kill -0 "$PID_A" 2>/dev/null; expect_true $? "the close button closes the program" "A still runs"
 
     # who gets a frame: not programs that draw their own (GTK on Wayland)...
     start_probe G wayland 00cc00 || return
@@ -635,7 +643,7 @@ suite_frames() {
     away; shot gtk
     local c; c=$(pixel gtk $((PX + 5)) $((PY - 11)))
     [ -n "$c" ] && [ $((16#${c:0:2})) -gt 192 ]
-    expect_true "a GTK window keeps its own title bar (no Win95 frame)" "pixel above it is $c"
+    expect_true $? "a GTK window keeps its own title bar (no Win95 frame)" "pixel above it is $c"
     # ...but X11 programs do
     start_probe X x11 cc6600 || return
     locate_probe X 300 250 || return   # (the newest window, on top)
@@ -643,14 +651,14 @@ suite_frames() {
     expect_color "an X11 window gets the Win95 frame" x11 $PX $((PY - 12)) 000080
     size=$(size_of X)
     pointer click:$(close_x $PX ${size%x*}),$(title_y $PY) wait:1
-    ! kill -0 "$PID_X" 2>/dev/null; expect_true "its close button closes it" "X still runs"
+    ! kill -0 "$PID_X" 2>/dev/null; expect_true $? "its close button closes it" "X still runs"
 }
 
 # --- Alt+Tab, Alt+F4 ----------------------------------------------------------------
 active() { query list | sed -n 's/^\([^|]*\)|.*activated.*/\1/p'; }
 expect_active() { # NAME WINDOW
     local a; a=$(active)
-    [ "$a" = "$2" ]; expect_true "$1" "active: ${a:-nothing}, expected $2"
+    [ "$a" = "$2" ]; expect_true $? "$1" "active: ${a:-nothing}, expected $2"
 }
 suite_alttab() {
     say "alttab: switching windows by keyboard"
@@ -672,12 +680,12 @@ suite_alttab() {
     query minimize B; sleep 0.4
     pointer keydown:alt key:Tab key:Tab keyup:alt
     expect_active "a minimized window can be picked" B
-    ! query list | grep -q "^B|.*minimized"; expect_true "and it's restored" "$(query list | tr '\n' ' ')"
+    ! query list | grep -q "^B|.*minimized"; expect_true $? "and it's restored" "$(query list | tr '\n' ' ')"
     n=$(pmark B); pointer type:x
     pexpect "the keyboard works after switching" B "$n" "key x"
     pointer key:alt+F4 wait:0.8
-    ! kill -0 "$PID_B" 2>/dev/null; expect_true "Alt+F4 closes the active window" "B still runs"
-    kill -0 "$PID_A" 2>/dev/null && kill -0 "$PID_C" 2>/dev/null; expect_true "and only that one" "another closed too"
+    ! kill -0 "$PID_B" 2>/dev/null; expect_true $? "Alt+F4 closes the active window" "B still runs"
+    kill -0 "$PID_A" 2>/dev/null && kill -0 "$PID_C" 2>/dev/null; expect_true $? "and only that one" "another closed too"
 }
 
 # --- settings.ini (Control Panel) ---------------------------------------------------
@@ -699,7 +707,7 @@ face=#d5ccbb"
     away; shot scheme
     expect_pixel "a new title colour shows at once" scheme $AX $((AY - 12)) 800000
     expect_pixel "and a new face colour" scheme $((AX - 1)) $((AY - 23)) d5ccbb
-    grep -q "settings.ini changed" "$CLOG"; expect_true "(the compositor saw the change)" "nothing in its log"
+    grep -q "settings.ini changed" "$CLOG"; expect_true $? "(the compositor saw the change)" "nothing in its log"
     printf '[Appearance]\nactiveTitle=#008000\nactiveTitle2=#008000\n' >"$CONFIG/wayland95/settings.ini"; sleep 0.5
     away; shot edited
     expect_pixel "a file edited in place counts too" edited $AX $((AY - 12)) 008000
@@ -716,13 +724,152 @@ DoubleClickInterval=900"
     settings_write "[Keyboard]
 Layout=nosuchlayout"
     grep -q 'unknown keyboard layout "nosuchlayout"' "$CLOG"
-    expect_true "an unknown keyboard layout is reported" "nothing in the log"
+    expect_true $? "an unknown keyboard layout is reported" "nothing in the log"
     n=$(pmark A); pointer type:k
     pexpect "and the keyboard still works" A "$n" "key k"
 }
 
+
+# --- the shell (win95shell: desktop, taskbar, Start menu) --------------------------
+# It runs as it will in the session, but with a throwaway home, settings and
+# D-Bus session: your files, notifications and tray stay out of it.
+start_shell() {
+    local home=$WORK/home-$RUN
+    mkdir -p "$home"
+    HOME=$home XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET DISPLAY=$XDISPLAY QT_NO_XDG_DESKTOP_PORTAL=1 \
+        dbus-run-session -- "$SHELL_BIN" >"$WORK/$SUITE-shell.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 100); do
+        grep -q "win95shell: ready" "$WORK/$SUITE-shell.log" 2>/dev/null && break
+        sleep 0.1
+    done
+    sleep 1.5
+    grep -q "win95shell: ready" "$WORK/$SUITE-shell.log" || { bad "the shell starts" "$(tail -5 "$WORK/$SUITE-shell.log")"; return 1; }
+}
+TASKBAR_Y=783                 # the middle of the 34-pixel taskbar at the bottom
+START_X=35
+task_button() { echo $((77 + 154 * $1 + 75)); }  # the middle of the Nth (0, 1...) window's button (150 wide, 4 apart)
+windows_of() { query list | grep -c "|$1|"; }
+
+suite_shell() {
+    say "shell: the desktop, taskbar and Start menu (win95shell)"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    start_shell || return
+    away; shot empty
+    expect_pixel "the desktop is drawn (its colour)" empty 640 400 008080
+    expect_pixel "the taskbar is drawn along the bottom" empty 640 790 c0c0c0
+    expect_pixel "with its top edge highlighted" empty 640 766 ffffff
+
+    # the desktop icons (first: windows open over them, at the top left)
+    pointer move:40,35 click:40,35 click:40,35
+    for _ in $(seq 20); do [ "$(windows_of win95files)" -ge 1 ] && break; sleep 0.5; done
+    [ "$(windows_of win95files)" -ge 1 ]; expect_true $? "double-clicking My Computer opens it" "$(query list | tr '\n' ' ')"
+    query list | sed -n 's/^\([^|]*\)|win95files|.*/\1/p' | while read -r t; do query close "$t"; done; sleep 0.8
+    [ "$(windows_of win95files)" -eq 0 ]; expect_true $? "(and it closes from the window list)" "$(query list | tr '\n' ' ')"
+
+    start_probe A qt cc0000 || return
+    start_probe B qt 0000cc || return
+    local n
+    n=$(pmark A); query maximize A; sleep 0.8
+    [ "$(last_size A)" = "1280x744" ]; expect_true $? "a maximized window stops above the taskbar" "size $(last_size A), expected 1280x744 (800 - taskbar 34 - title 22)"
+    query unmaximize A; sleep 0.5
+    query activate B; sleep 0.4
+
+    away; shot buttons
+    # (a button's top left corner: white sticking out, grey pressed in)
+    expect_pixel "a button for each window: the other's sticks out" buttons $(($(task_button 0) - 74)) 769 ffffff
+    expect_pixel "the active window's button is pressed in" buttons $(($(task_button 1) - 74)) 769 808080
+
+    pointer click:$(task_button 0),$TASKBAR_Y wait:0.4
+    expect_active "clicking a window's button activates it" A
+    pointer click:$(task_button 0),$TASKBAR_Y wait:0.4
+    query list | grep -q "^A|.*minimized"; expect_true $? "clicking the active window's button minimizes it" "$(query list | tr '\n' ' ')"
+    pointer click:$(task_button 0),$TASKBAR_Y wait:0.4
+    ! query list | grep -q "^A|.*minimized" && [ "$(active)" = A ]
+    expect_true $? "and clicking again brings it back, active" "$(query list | tr '\n' ' ')"
+    n=$(pmark A); pointer type:k
+    pexpect "the keyboard goes to it" A "$n" "key k"
+
+    # the taskbar's window menu
+    pointer click:$(task_button 1),$TASKBAR_Y,right wait:0.5; away; shot window-menu
+    expect_pixel "a button's menu opens where it was clicked" window-menu $(($(task_button 1) + 75)) 700 c0c0c0
+    pointer key:x wait:0.6
+    query list | grep -q "^B|.*maximized"; expect_true $? "a button's menu: Maximize (by its key)" "$(query list | tr '\n' ' ')"
+    pointer click:$(task_button 1),$TASKBAR_Y,right wait:0.5 key:c wait:0.8
+    ! kill -0 "$PID_B" 2>/dev/null; expect_true $? "a button's menu: Close" "B still runs"
+    ! query list | grep -q "^B|"; expect_true $? "and its button goes" "$(query list | tr '\n' ' ')"
+
+    # the Start menu
+    pointer click:$START_X,$TASKBAR_Y wait:0.6; away; shot start
+    expect_pixel "the Start button opens the Start menu" start 120 600 c0c0c0
+    pointer key:Escape wait:0.5; away; shot start-closed
+    expect_pixel "Escape closes it" start-closed 120 600 008080
+    n=$(pmark A); pointer type:j
+    pexpect "and the keyboard is back with the window" A "$n" "key j"
+    pointer click:$START_X,$TASKBAR_Y wait:0.6 click:900,300 wait:0.5; away; shot start-outside
+    expect_pixel "a click outside closes it" start-outside 120 600 008080
+    pointer click:$START_X,$TASKBAR_Y wait:0.6 key:d wait:0.6; away; shot documents
+    expect_pixel "a submenu opens by its letter (Documents)" documents 260 575 000080
+    pointer key:h
+    for _ in $(seq 20); do [ "$(windows_of win95files)" -ge 1 ] && break; sleep 0.5; done
+    [ "$(windows_of win95files)" -ge 1 ]; expect_true $? "an entry starts its program (Documents > Home: the file manager)" "$(query list | tr '\n' ' ')"
+    grep -q 'Launcher: started ".*/win95files"' "$WORK/$SUITE-shell.log"
+    expect_true $? "(the shell's log says so)" "$(grep Launcher "$WORK/$SUITE-shell.log")"
+
+
+    # tooltips: shown, and in a layer that takes no clicks
+    pointer move:1243,$TASKBAR_Y wait:1.2; shot tooltip
+    local tips; tips=$(magick "$WORK/$SUITE-tooltip.png" -crop 300x80+980+680 +repage -fill black +opaque "#ffffe1" -format "%[fx:mean*w*h]" info: 2>/dev/null)
+    [ "${tips%.*}" -gt 100 ] 2>/dev/null; expect_true $? "the clock's tooltip shows, above it" "${tips:-no} tooltip-coloured pixels above the clock"
+    pointer move:1246,$((TASKBAR_Y + 2)) wait:0.6; shot tooltip-moved
+    tips=$(magick "$WORK/$SUITE-tooltip-moved.png" -crop 300x80+980+680 +repage -fill black +opaque "#ffffe1" -format "%[fx:mean*w*h]" info: 2>/dev/null)
+    [ "${tips%.*}" -gt 100 ] 2>/dev/null; expect_true $? "and stays as the pointer moves (the tooltip layer takes no pointer)" "${tips:-no} tooltip pixels after moving"
+    pointer move:640,400 wait:0.8; shot tooltip-gone
+    tips=$(magick "$WORK/$SUITE-tooltip-gone.png" -crop 300x80+980+680 +repage -fill black +opaque "#ffffe1" -format "%[fx:mean*w*h]" info: 2>/dev/null)
+    [ "${tips%.*}" -eq 0 ] 2>/dev/null; expect_true $? "and goes when the pointer leaves" "${tips:-?} tooltip pixels left"
+}
+
+
+# --- the Qt compositor's desktop, as a window in this one ---------------------------
+# The taskbar, Start menu and tray QML is shared with win95shell; this checks
+# a change to it didn't break the Qt compositor's desktop (still the session
+# until the switch). Its 1280x800 output is a window here, drawing area at
+# 43,55.
+suite_classic() {
+    say "classic: the Qt compositor's desktop (shared QML)"
+    local OLD=$BUILD/win95compositor
+    [ -x "$OLD" ] || { bad "win95compositor" "not built"; return; }
+    fresh 1400x900
+    local home=$WORK/home-$RUN inner=w95inner-$$
+    mkdir -p "$home"
+    HOME=$home XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 \
+        dbus-run-session -- "$OLD" --wayland-socket-name "$inner" --no-xwayland >"$WORK/classic.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 60); do query list | grep -q "^Wayland 95|" && break; sleep 0.25; done
+    query list | grep -q "^Wayland 95|"; expect_true $? "the Qt compositor starts (as a window)" "$(tail -3 "$WORK/classic.log")"
+    sleep 2
+    local X=43 Y=55 TB=$((55 + 800 - 17))
+    WAYLAND_DISPLAY=$inner QT_QPA_PLATFORM=wayland "$PROBE_QT" --title Inner < <(sleep 60) >"$WORK/inner.log" 2>&1 &
+    PIDS+=($!)
+    sleep 2
+    away; shot desktop
+    expect_pixel "its desktop is drawn" desktop $((X + 640)) $((Y + 600)) 008080
+    expect_pixel "and its taskbar" desktop $((X + 640)) $((TB + 7)) c0c0c0
+    pointer click:$((X + 35)),$TB wait:0.7; away; shot start
+    expect_pixel "its Start menu opens just above the taskbar" start $((X + 120)) $((Y + 600)) c0c0c0
+    pointer key:Escape wait:0.4; away; shot start-closed
+    expect_pixel "and closes" start-closed $((X + 120)) $((Y + 600)) 008080
+    pointer move:600,400 wait:0.3 move:$((X + 1243)),$TB wait:1.3; shot tooltip
+    local tips; tips=$(magick "$WORK/$SUITE-tooltip.png" -crop 300x80+$((X + 980))+$((Y + 680)) +repage -fill black +opaque "#ffffe1" -format "%[fx:mean*w*h]" info: 2>/dev/null)
+    [ "${tips%.*}" -gt 100 ] 2>/dev/null; expect_true $? "the clock's tooltip shows above it" "${tips:-no} tooltip pixels there"
+    pointer move:600,400 click:$((X + 152)),$TB,right wait:0.6; away; shot window-menu
+    expect_pixel "a taskbar button's menu opens where it was clicked" window-menu $((X + 152 + 75)) $((Y + 700)) c0c0c0
+    pointer key:Escape
+}
+
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

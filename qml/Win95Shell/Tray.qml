@@ -14,6 +14,9 @@ Ui.Bevel {
 
     // where pop-ups, tooltips and menus go (the desktop, above everything)
     required property Item popupParent
+    // tooltips (by default with the pop-ups)
+    property Item tipParent: popupParent
+    readonly property bool tipShowing: tip.visible
 
     readonly property bool popupOpen: anyPopupOpen() || clock.popupOpen || appMenu.visible
     function anyPopupOpen() {
@@ -144,15 +147,15 @@ Ui.Bevel {
         onTriggered: {
             if (!target)
                 return;
-            var p = target.mapToItem(area.popupParent, target.width / 2, 0);
-            tip.x = Math.max(2, Math.min(area.popupParent.width - tip.width - 2, p.x - tip.width / 2));
+            var p = target.mapToItem(area.tipParent, target.width / 2, 0);
+            tip.x = Math.max(2, Math.min(area.tipParent.width - tip.width - 2, p.x - tip.width / 2));
             tip.y = p.y - tip.height - 4;
             tip.visible = true;
         }
     }
     Rectangle {
         id: tip
-        parent: area.popupParent
+        parent: area.tipParent
         visible: false
         z: 200
         width: tipText.implicitWidth + 8

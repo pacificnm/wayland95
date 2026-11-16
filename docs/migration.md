@@ -13,9 +13,23 @@ and the results are recorded here.
 | 1 | Test harness with a first, minimal `wayland95-compositor` (headless backend, xdg-shell, plain windows): `grim` screenshots, virtual pointer/keyboard, `tests/run.sh`, test pages and test programs | the harness opens Chromium in it, clicks and scrolls, and checks both the page's event log and a screenshot; a deliberately broken build is caught | **done** (2026-11-16) |
 | 2 | `wayland95-compositor` core: outputs, input, xdg-shell, popups, Xwayland, all standard protocols; plain frames | input, popups, windows, X11, clipboard suites pass with Chromium, Firefox, VS Code, GTK, Qt, xterm | **done** (2026-11-16, see below) |
 | 3 | Win95 window frames (cairo/pango), move/resize/maximize/minimize, Alt+Tab keys, settings.ini | frames, alttab and settings suites (frame screenshots checked pixel by pixel); everything before still passes | **done** (2026-11-16, see below) |
-| 4 | `win95shell`: layer-shell integration for Qt, the existing QML moved over, foreign-toplevel taskbar, `wayland95-shell-v1`, services | shell suite; screen suite vs. reference images of today's desktop | not started |
+| 4 | `win95shell`: layer-shell integration for Qt, the existing QML moved over, foreign-toplevel taskbar, `wayland95-shell-v1`, services | shell suite; screen suite vs. reference images of today's desktop | in progress (steps below) |
 | 5 | Session, package, ISO: session script, libseat, `.deb`, live image; "Wayland 95 (classic)" kept as a second session | VM boot test; full `tests/run.sh`; nested check by hand | not started |
 | 6 | Switch: the wlroots desktop becomes "Wayland 95"; publish; then remove the Qt compositor | a release with both sessions has been used on the Optiplex and this machine without regressions | not started |
+
+### Phase 4 in steps
+
+Phase 4 is the largest, so it goes in steps, each with its own tests and
+commit. The Qt compositor keeps working throughout (shared QML files keep
+working in both).
+
+| Step | What | Tests |
+|---|---|---|
+| 4a | `shell/`: our Qt layer-shell integration (`LayerWindow`, no KDE library), the window list from foreign-toplevel behind the same `WindowManager` interface, the desktop (background layer), the taskbar (top layer, reserves its edge), the Start menu, tray and window menu on a pop-up layer shown only while one is open | `shell` suite: the taskbar shows, maximized windows stop above it, a button per window (title, active, minimized), clicking a button activates/minimizes/restores, its menu, the Start menu opens by click and launches a program, clicking outside closes it, the desktop's icons open |
+| 4b | dialogs (Run, Shut Down, message boxes, polkit and network passwords) as layer surfaces; notifications and the volume/brightness display; the services (polkit agent, NetworkManager secrets, notification server, tray watcher, update check, trash, problem reports, autostart) | dialogs suite; notifications suite (notify-send) |
+| 4c | `wayland95-shell-v1`: the Alt+Tab box, the desktop's own keys (Ctrl+Esc, Ctrl+Shift+Esc, Print, Ctrl+Shift+5), the window menu (right-click on a title bar, Alt+Space), End Task (the program's process) | alttab suite with the box; keys suite |
+| 4d | screen saver and lock (ext-idle-notify, ext-session-lock), display off, Print Screen and the capture tool (screencopy), accessibility options (StickyKeys, FilterKeys, MouseKeys: in the compositor, where keys arrive) | lock suite; accessibility suite |
+| 4e | the compositor starts the shell and restarts it if it dies; the whole desktop compared with reference screenshots of today's | screen suite |
 
 ## Phase results
 
@@ -92,6 +106,52 @@ the frame behind the program's surfaces.
   (right-click on a title bar, Alt+Space), window icons in the title bar.
   Keyboard layout, repeat and touchpad settings are checked nested, with a
   real keyboard and touchpad (the headless tests have neither).
+
+**Correction to the results above** (2026-11-16): 29 of the 48 checks that
+use `expect_true` in `tests/run.sh` could not fail until now. Their message
+ran a command (`$(...)`), which bash does before the check starts, and that
+reset the status the check looked at. So the phase 2 and 3 totals included
+checks that passed whatever happened. `tests/selftest.sh` found it: a
+deliberately broken build (panels' exclusive zones ignored) failed nothing.
+Fixed: the status is now passed in explicitly. Rerun with the fix, the
+earlier phases' checks found one real bug (resizing by a frame edge or
+corner was a pixel short about half the time: the pointer's position was
+truncated, not rounded; fixed in phase 4a) and one wrong test (it
+double-clicked a desktop icon a window had opened over). Every result from
+here on is with the fixed harness.
+
+**Phase 4, step 4a** (2026-11-16): `shell/` (`win95shell`): the layer-shell
+integration for Qt (`layershell.*`), the window list from foreign-toplevel
+(`toplevels.*`, the `WindowManager` interface the taskbar already used),
+`Shell.qml` (desktop, taskbar, pop-up and tooltip layers); the launcher,
+program menu, tray, notifications model and trash watcher compiled in from
+`src/`. `Taskbar.qml` and `Tray.qml` gained `popupParent`/`tipParent` (the
+Qt compositor passes what it used before, so it's unchanged there).
+- `tests/run.sh` (with the fixed harness): 177 of 177 checks pass, three
+  full runs in a row; new: `shell` 26, `classic` 7 (the Qt compositor's
+  desktop inside the new one, checking the shared QML still works there).
+- `tests/selftest.sh`: the real build passes everything; each break is
+  caught: no pointer frames (38 checks fail), no keyboard group (13), no
+  Win95 frames (21), and the new one, panels' exclusive zones ignored,
+  by exactly the check for it (a maximized window stops above the taskbar).
+- Found and fixed while testing (each seen in a screenshot first):
+  - the clock's tooltip appeared at the screen's top left: Qt pins every
+    Wayland window to the corner, so the taskbar thought it was at the top;
+    the shell now turns that off and tells Qt where each panel is
+  - the tooltip layer would have taken the pointer: Qt doesn't send the
+    empty input region for a click-through window when the flag is set
+    before its surface exists; the integration sends it
+  - pop-ups positioned before their layer was first shown were placed with
+    a zero-sized parent: the layers now have screen-sized parents from the
+    start
+  - the launcher dropped DISPLAY in the new shell (X11 programs from the
+    Start menu wouldn't start): the shell passes on the compositor's
+- Tests no longer risk answering for your session: desktops started by the
+  tests don't register a polkit agent (`WAYLAND95_NO_SYSTEM_AGENTS`), and
+  the shell runs with a throwaway home and D-Bus session.
+- Not yet (later steps): Run, Shut Down and Help from the Start menu (4b),
+  the desktop's own keys such as Ctrl+Esc (4c), the shell starting with the
+  compositor (4e; for now `--run`, as `tests/nested/run.sh new-desktop` does).
 
 ## What changes for users
 

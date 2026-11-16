@@ -2,6 +2,7 @@
 // tests drive), the cursor, gestures, pointer constraints (games), drag and
 // drop, and the seat that hands it all to programs.
 #include <linux/input-event-codes.h>
+#include <math.h>
 #include <stdlib.h>
 #include <time.h>
 #include <wlr/types/wlr_cursor_shape_v1.h>
@@ -355,16 +356,19 @@ void input_reset_cursor_mode(struct server *server)
 	server->grabbed_view = NULL;
 }
 
+// (positions are rounded: the pointer is at fractions of a pixel, and
+// truncating 339.9999 left windows a pixel short half the time)
 static void process_move(struct server *server)
 {
-	view_move(server->grabbed_view, server->cursor->x - server->grab_x, server->cursor->y - server->grab_y);
+	view_move(server->grabbed_view, (int)lround(server->cursor->x - server->grab_x),
+			(int)lround(server->cursor->y - server->grab_y));
 }
 
 static void process_resize(struct server *server)
 {
 	struct view *view = server->grabbed_view;
-	double border_x = server->cursor->x - server->grab_x;
-	double border_y = server->cursor->y - server->grab_y;
+	int border_x = (int)lround(server->cursor->x - server->grab_x);
+	int border_y = (int)lround(server->cursor->y - server->grab_y);
 	int left = server->grab_geobox.x, right = server->grab_geobox.x + server->grab_geobox.width;
 	int top = server->grab_geobox.y, bottom = server->grab_geobox.y + server->grab_geobox.height;
 	if (server->resize_edges & WLR_EDGE_TOP) {

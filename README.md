@@ -1,8 +1,22 @@
 # Wayland 95
 
-Wayland 95 (this repo: `win95-wayland`) is a Windows-95-styled Wayland desktop shell, built with Qt 6's
-`QtWaylandCompositor` + QML for the compositor and chrome, and a small C++
-backend (`WindowManager`) that owns the window list the taskbar renders from.
+Wayland 95 (this repo: `win95-wayland`) is a Windows-95-styled Wayland
+desktop: a compositor with the Win95 taskbar, Start menu and window frames,
+plus its own File Manager, Notepad, Terminal, Control Panel and other apps.
+
+> **Moving to wlroots.** The compositor is being rebuilt on
+> [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots), the library
+> sway and labwc use, because Qt's compositor module lacks much of what
+> desktop programs need (the reasons: [docs/architecture.md](docs/architecture.md)).
+> The new design is two programs: `wayland95-compositor` (C, wlroots) and
+> `win95shell` (the Qt/QML taskbar, Start menu and desktop). Plan and
+> progress: [docs/migration.md](docs/migration.md); how it's tested:
+> [docs/testing.md](docs/testing.md). Until it's finished, the session runs
+> the Qt compositor this README describes, and keeps getting fixes.
+
+The current compositor is built with Qt 6's `QtWaylandCompositor` + QML for
+the compositor and chrome, and a small C++ backend (`WindowManager`) that
+owns the window list the taskbar renders from.
 
 ## What's here
 
@@ -692,6 +706,10 @@ opening on the host desktop.
 
 ## Running it nested (the way to develop and test this)
 
+(For the wlroots compositor, see [docs/testing.md](docs/testing.md); the
+same `tests/nested/run.sh` and VS Code tasks will run it.)
+
+
 **Do this, not the login-session install, while you're actively working on
 it.** A compositor bug in a login session means no desktop at all until you
 drop to a TTY and fix it; nested, a crash just closes a window.
@@ -867,6 +885,12 @@ start theirs at login, so programs that keep passwords in one (browsers,
 VS Code) may ask you to unlock it, or keep them their own way.
 
 ## What's not here yet
+
+The move to wlroots ([docs/migration.md](docs/migration.md)) is the main
+work in progress; it brings what the Qt compositor can't offer: GPU buffer
+sharing (`linux-dmabuf`), current xdg-shell, popups kept on screen, middle-
+click paste, screen sharing, fractional scaling, touchpad gestures, input
+methods and a real lock screen. Beyond that:
 
 - Clipboard and drag-and-drop between X11 and Wayland programs
 - Per-edge resize (only bottom-right corner currently)

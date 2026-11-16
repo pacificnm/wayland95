@@ -5,6 +5,11 @@ A bootable ISO of Debian 13 (trixie) that starts straight into the Wayland
 It runs from a USB stick, DVD or VM under BIOS or UEFI, and "Install
 Wayland 95" in the Start menu puts it on a disk (Calamares).
 
+The image currently runs the Qt compositor. When the wlroots compositor is
+ready (phase 5 of [../docs/migration.md](../docs/migration.md)) the package
+list gains `libwlroots-0.18`, and `tests/vm/run.sh` boots this image in
+QEMU to check the session before any release.
+
 ## Building
 
 Once, the tools:

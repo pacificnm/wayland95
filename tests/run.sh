@@ -6,7 +6,8 @@
 # logs) and what's drawn (grim screenshots).
 #
 #   tests/run.sh [SUITE...]        all suites, or some of: input (Chromium) firefox
-#                                  windows popups x11 clipboard qt vscode
+#                                  windows popups x11 clipboard qt frames alttab
+#                                  settings vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
 #
@@ -58,7 +59,9 @@ fresh() {
     RUN=$((RUN + 1))
     SOCKET="w95test-$$-$RUN"
     CLOG=$WORK/$SUITE-compositor.log
-    "$COMPOSITOR" --socket "$SOCKET" --headless 1280x800 >"$CLOG" 2>&1 &
+    # its own settings (settings.ini), not the user's
+    CONFIG=$WORK/config-$RUN; mkdir -p "$CONFIG/wayland95"
+    XDG_CONFIG_HOME=$CONFIG "$COMPOSITOR" --socket "$SOCKET" --headless 1280x800 >"$CLOG" 2>&1 &
     PIDS+=($!)
     for _ in $(seq 50); do
         grep -q "WAYLAND_DISPLAY=$SOCKET" "$CLOG" 2>/dev/null && break
@@ -80,6 +83,18 @@ expect_pixel() { # NAME SHOT X Y RRGGBB | !RRGGBB (anything but)
         *) [ "$got" = "$5" ] && { ok "$1"; return; } ;;
     esac
     bad "$1" "pixel $3,$4 in $SUITE-$2.png is ${got:-unreadable}, expected $5"
+}
+# whether two colours (rrggbb) are within TOL of each other in each channel
+color_near() { # RRGGBB RRGGBB TOL
+    local a=$1 b=$2 i
+    [ ${#a} -eq 6 ] || return 1
+    for i in 0 2 4; do
+        near $((16#${a:$i:2})) $((16#${b:$i:2})) "$3" || return 1
+    done
+}
+expect_color() { # NAME SHOT X Y RRGGBB (within 8 per channel: gradients)
+    local got; got=$(pixel "$2" "$3" "$4")
+    if color_near "$got" "$5" 8; then ok "$1"; else bad "$1" "pixel $3,$4 in $SUITE-$2.png is ${got:-unreadable}, expected about $5"; fi
 }
 expect_true() { # NAME WHAT-HAPPENED (status of the last command)
     if [ "$?" -eq 0 ]; then ok "$1"; else bad "$1" "$2"; fi
@@ -513,8 +528,201 @@ suite_vscode() {
     pkill -f -- "--user-data-dir=$WORK/vscode-data" 2>/dev/null
 }
 
+
+# --- window frames (compositor/decoration.c) -------------------------------------
+# A Win95 frame around a window whose drawing area is at X,Y and W x H: the
+# border is 3 pixels, the title bar 22 (from 25 above the drawing area to 3
+# above), its buttons 16x14 at the right end.
+title_y() { echo $(($1 - 11)); }               # Y -> the title bar's middle
+close_x() { echo $(($1 + $2 - 11)); }          # X W -> the close button's middle
+max_x() { echo $(($1 + $2 - 29)); }
+min_x() { echo $(($1 + $2 - 47)); }
+size_of() { last_size "$1"; }
+away() { pointer move:1275,795; }              # the pointer out of the screenshots
+
+suite_frames() {
+    say "frames: Win95 window frames"
+    fresh
+    start_probe A qt cc0000 || return
+    locate_probe A 300 250 || return
+    local AX=$PX AY=$PY size W H n
+    size=$(size_of A); W=${size%x*}; H=${size#*x}
+    start_probe B qt 0000cc || return
+    locate_probe B $((AX + 200)) $((AY + 200)) || return
+    local BX=$PX BY=$PY
+    away; shot two
+
+    # the look: Bevel.qml's colours, the title gradients of the standard scheme
+    expect_pixel "the frame's outer corner is white" two $((BX - 3)) $((BY - 25)) ffffff
+    expect_pixel "then light grey" two $((BX - 2)) $((BY - 24)) dfdfdf
+    expect_pixel "then the face" two $((BX - 1)) $((BY - 23)) c0c0c0
+    expect_pixel "the bottom right edge is black" two $((BX + W + 2)) $((BY + H + 2)) 000000
+    expect_pixel "inside it dark grey" two $((BX + W + 1)) $((BY + H + 1)) 808080
+    expect_color "the active window's title starts navy" two $BX $((BY - 12)) 000080
+    expect_color "and fades to blue (right of the close button)" two $((BX + W - 2)) $((BY - 12)) 1084d0
+    expect_color "the inactive window's title is grey" two $AX $((AY - 12)) 808080
+    expect_pixel "the close button is drawn (its face)" two $(($(close_x $BX $W) - 6)) $(($(title_y $BY) - 4)) c0c0c0
+    expect_pixel "with its X" two $(($(close_x $BX $W) - 4)) $(($(title_y $BY) - 4)) 000000
+
+    # a click on the frame activates its window
+    n=$(pmark A); pointer click:$((AX + 30)),$(title_y $AY); away
+    pexpect "clicking a title bar activates the window" A "$n" "focus in"
+    shot activated
+    expect_color "its title turns navy" activated $AX $((AY - 12)) 000080
+    expect_color "and the other's grey (its right end shows)" activated $((BX + W - 2)) $((BY - 12)) b5b5b5
+
+    # moving by the title bar: exactly with the pointer (no threshold)
+    drag $((AX + 60)) $(title_y $AY) $((AX + 60 + 150)) $(($(title_y $AY) + 80))
+    locate_probe A $((AX + 150 + 50)) $((AY + 80 + 50)) || return
+    [ "$PX" -eq $((AX + 150)) ] && [ "$PY" -eq $((AY + 80)) ]
+    expect_true "dragging the title bar moves the window" "moved to $PX,$PY, expected $((AX + 150)),$((AY + 80))"
+    AX=$PX; AY=$PY
+
+    # resizing from the frame's edges, and from just outside them
+    drag $((AX + W + 1)) $((AY + H + 1)) $((AX + W + 61)) $((AY + H + 41)); sleep 0.3
+    [ "$(size_of A)" = "$((W + 60))x$((H + 40))" ]
+    expect_true "dragging the bottom right corner resizes" "size $(size_of A), expected $((W + 60))x$((H + 40))"
+    W=$((W + 60)); H=$((H + 40))
+    drag $((AX - 2)) $((AY + 100)) $((AX - 42)) $((AY + 100)); sleep 0.3
+    [ "$(size_of A)" = "$((W + 40))x$H" ]
+    expect_true "dragging the left edge resizes" "size $(size_of A), expected $((W + 40))x$H"
+    locate_probe A $((AX + 20)) $((AY + 100)) || return
+    [ "$PX" -eq $((AX - 40)) ] && [ "$PY" -eq "$AY" ]
+    expect_true "and the right edge stays put" "drawing area at $PX,$PY, expected $((AX - 40)),$AY"
+    AX=$PX; W=$((W + 40))
+    drag $((AX + W + 5)) $((AY + 100)) $((AX + W + 35)) $((AY + 100)); sleep 0.3
+    [ "$(size_of A)" = "$((W + 30))x$H" ]
+    expect_true "the grab zone just outside the border resizes too" "size $(size_of A), expected $((W + 30))x$H"
+    W=$((W + 30))
+
+    # the buttons
+    n=$(pmark A); pointer click:$(max_x $AX $W),$(title_y $AY) wait:0.5; away
+    pexpect "the maximize button maximizes" A "$n" "state maximized"
+    [ "$(size_of A)" = "1280x778" ]; expect_true "the window fills the screen below its title bar" "size $(size_of A)"
+    shot maximized
+    expect_color "the title bar is at the top of the screen" maximized 2 11 000080
+    expect_pixel "and the window's drawing fills the rest" maximized 640 790 cc0000
+    drag 400 11 600 200; sleep 0.3
+    grep "^EVT state" "$WORK/A.log" | tail -1 | grep -q maximized
+    expect_true "a maximized window doesn't move by its title bar (as Win95)" "it was restored"
+    n=$(pmark A); pointer click:$(max_x 0 1280),$(title_y 22) wait:0.5
+    [ "$(size_of A)" = "${W}x$H" ]; expect_true "the same button restores it" "size $(size_of A), expected ${W}x$H"
+    locate_probe A $((AX + 20)) $((AY + 100)) || return
+    [ "$PX" -eq "$AX" ] && [ "$PY" -eq "$AY" ]; expect_true "to where it was" "at $PX,$PY, expected $AX,$AY"
+
+    n=$(pmark A); pointer click:$((AX + 100)),$(title_y $AY) click:$((AX + 100)),$(title_y $AY) wait:0.5
+    pexpect "double-clicking the title bar maximizes" A "$n" "state maximized"
+    pointer click:640,11 click:640,11 wait:0.5
+    [ "$(size_of A)" = "${W}x$H" ]; expect_true "and double-clicking again restores" "size $(size_of A)"
+
+    pointer click:$(min_x $AX $W),$(title_y $AY) wait:0.5; away
+    query list | grep -q "^A|.*minimized"; expect_true "the minimize button minimizes" "$(query list | tr '\n' ' ')"
+    shot minimized
+    expect_pixel "and the window is gone from the screen" minimized $((AX + W - 10)) $((AY + H - 10)) 000000
+    query unminimize A; sleep 0.5
+
+    # a button only acts if let go over it
+    pointer move:$(close_x $AX $W),$(title_y $AY) down:left move:$((AX + 100)),$((AY + 100)) up:left wait:0.5
+    kill -0 "$PID_A" 2>/dev/null; expect_true "pressing close and moving off doesn't close" "A closed"
+    pointer move:$(close_x $AX $W),$(title_y $AY) down:left wait:0.3; shot pressed; pointer up:left wait:0.8
+    expect_pixel "a held button looks pressed (grey outer top left)" pressed $(($(close_x $AX $W) - 8)) $(($(title_y $AY) - 7)) 808080
+    expect_pixel "(black inside it)" pressed $(($(close_x $AX $W) - 7)) $(($(title_y $AY) - 6)) 000000
+    ! kill -0 "$PID_A" 2>/dev/null; expect_true "the close button closes the program" "A still runs"
+
+    # who gets a frame: not programs that draw their own (GTK on Wayland)...
+    start_probe G wayland 00cc00 || return
+    locate_probe G 300 250 || return
+    away; shot gtk
+    local c; c=$(pixel gtk $((PX + 5)) $((PY - 11)))
+    [ -n "$c" ] && [ $((16#${c:0:2})) -gt 192 ]
+    expect_true "a GTK window keeps its own title bar (no Win95 frame)" "pixel above it is $c"
+    # ...but X11 programs do
+    start_probe X x11 cc6600 || return
+    locate_probe X 300 250 || return   # (the newest window, on top)
+    away; shot x11
+    expect_color "an X11 window gets the Win95 frame" x11 $PX $((PY - 12)) 000080
+    size=$(size_of X)
+    pointer click:$(close_x $PX ${size%x*}),$(title_y $PY) wait:1
+    ! kill -0 "$PID_X" 2>/dev/null; expect_true "its close button closes it" "X still runs"
+}
+
+# --- Alt+Tab, Alt+F4 ----------------------------------------------------------------
+active() { query list | sed -n 's/^\([^|]*\)|.*activated.*/\1/p'; }
+expect_active() { # NAME WINDOW
+    local a; a=$(active)
+    [ "$a" = "$2" ]; expect_true "$1" "active: ${a:-nothing}, expected $2"
+}
+suite_alttab() {
+    say "alttab: switching windows by keyboard"
+    fresh
+    start_probe A qt cc0000 || return
+    start_probe B qt 00cc00 || return
+    start_probe C qt 0000cc || return
+    expect_active "(the newest window is active)" C
+    local n; n=$(pmark C)
+    pointer keydown:alt key:Tab keyup:alt
+    expect_active "Alt+Tab goes to the window used before" B
+    pexpect_not "the program doesn't get the Tab" C "$n" "key $(printf '\t')"
+    pointer keydown:alt key:Tab key:Tab keyup:alt
+    expect_active "Tab twice with Alt held goes two back" A
+    pointer keydown:alt key:shift+Tab keyup:alt
+    expect_active "Alt+Shift+Tab goes the other way" C
+    pointer keydown:alt key:Tab key:Escape keyup:alt
+    expect_active "Escape while switching stays put" C
+    query minimize B; sleep 0.4
+    pointer keydown:alt key:Tab key:Tab keyup:alt
+    expect_active "a minimized window can be picked" B
+    ! query list | grep -q "^B|.*minimized"; expect_true "and it's restored" "$(query list | tr '\n' ' ')"
+    n=$(pmark B); pointer type:x
+    pexpect "the keyboard works after switching" B "$n" "key x"
+    pointer key:alt+F4 wait:0.8
+    ! kill -0 "$PID_B" 2>/dev/null; expect_true "Alt+F4 closes the active window" "B still runs"
+    kill -0 "$PID_A" 2>/dev/null && kill -0 "$PID_C" 2>/dev/null; expect_true "and only that one" "another closed too"
+}
+
+# --- settings.ini (Control Panel) ---------------------------------------------------
+settings_write() { # INI-TEXT: written the way QSettings does (new file, moved into place)
+    printf '%s\n' "$1" >"$CONFIG/wayland95/settings.ini.tmp"
+    mv "$CONFIG/wayland95/settings.ini.tmp" "$CONFIG/wayland95/settings.ini"
+    sleep 0.5
+}
+suite_settings() {
+    say "settings: Control Panel changes apply at once"
+    fresh
+    start_probe A qt cc0000 || return
+    locate_probe A 300 250 || return
+    local AX=$PX AY=$PY n
+    settings_write "[Appearance]
+activeTitle=#800000
+activeTitle2=#800000
+face=#d5ccbb"
+    away; shot scheme
+    expect_pixel "a new title colour shows at once" scheme $AX $((AY - 12)) 800000
+    expect_pixel "and a new face colour" scheme $((AX - 1)) $((AY - 23)) d5ccbb
+    grep -q "settings.ini changed" "$CLOG"; expect_true "(the compositor saw the change)" "nothing in its log"
+    printf '[Appearance]\nactiveTitle=#008000\nactiveTitle2=#008000\n' >"$CONFIG/wayland95/settings.ini"; sleep 0.5
+    away; shot edited
+    expect_pixel "a file edited in place counts too" edited $AX $((AY - 12)) 008000
+
+    settings_write "[Mouse]
+DoubleClickInterval=150"
+    n=$(pmark A); pointer click:$((AX + 100)),$((AY - 11)) wait:0.4 click:$((AX + 100)),$((AY - 11)) wait:0.5
+    pexpect_not "a slow double-click doesn't count with a short interval" A "$n" "state maximized"
+    settings_write "[Mouse]
+DoubleClickInterval=900"
+    n=$(pmark A); pointer click:$((AX + 100)),$((AY - 11)) wait:0.4 click:$((AX + 100)),$((AY - 11)) wait:0.5
+    pexpect "but does with a long one" A "$n" "state maximized"
+
+    settings_write "[Keyboard]
+Layout=nosuchlayout"
+    grep -q 'unknown keyboard layout "nosuchlayout"' "$CLOG"
+    expect_true "an unknown keyboard layout is reported" "nothing in the log"
+    n=$(pmark A); pointer type:k
+    pexpect "and the keyboard still works" A "$n" "key k"
+}
+
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

@@ -37,11 +37,21 @@ fresh compositor. The suites (`tests/run.sh SUITE`):
 | `x11` | GTK under Xwayland: clicks land where drawn, the wheel, typing, its menus, focus moving between X11 and Wayland windows both ways; xterm: typing reaches its program |
 | `clipboard` | copy and paste Wayland to Wayland, Wayland to X11, X11 to Wayland; the primary selection, Wayland to Wayland and to X11 |
 | `qt` | a Qt window: clicks, wheel, typing, menus by mouse and keyboard, clipboard and primary selection with GTK |
+| `frames` | Win95 frames on Qt windows: the bevel's colours pixel by pixel, active and inactive title gradients, the buttons drawn; clicking a title bar activates; moving by the title bar (exactly with the pointer); resizing from a corner, the left edge (right edge stays) and the grab zone outside the border; maximize (size, title at the top, drawing fills the rest), no moving while maximized, restore to the same place; double-click maximize and restore; minimize; a button pressed then left doesn't act, a held button looks pressed, close closes; GTK keeps its own title bar; X11 windows get the frame and its close works |
+| `alttab` | three Qt windows: Alt+Tab to the previous window, twice for two back, Alt+Shift+Tab the other way, Escape stays, the Tab never reaches the program, a minimized window can be picked (and is restored), typing afterwards, Alt+F4 closes only the active window |
+| `settings` | settings.ini changes apply at once: title and face colours (written as QSettings does, and edited in place), the double-click time (a slow double-click counts only with a long interval), an unknown keyboard layout is reported and typing still works |
 | `vscode` | VS Code: opens the file, the wheel scrolls the editor, typing and Ctrl+S save it |
 
-Still to come (phase 3 and 4): Win95 frames and their buttons, Alt+Tab,
-settings.ini, the shell's taskbar and Start menu, the lock screen, drag and
-drop between programs, robustness (crashing and hung programs).
+Each compositor gets its own empty config folder (`XDG_CONFIG_HOME`), so
+your own settings.ini (colour scheme, double-click time) never changes a
+result.
+
+Not covered headless: the keyboard layout and repeat (they apply to real
+keyboards; the tests' virtual keyboard brings its own keymap) and touchpad
+settings (no touchpad). Those are checked nested, with your real keyboard
+and touchpad. Still to come (phase 4): the shell's taskbar and Start menu,
+the lock screen, drag and drop between programs, robustness (crashing and
+hung programs).
 
 `tests/run.sh` runs everything and prints PASS/FAIL per check with what was
 expected and what happened; `tests/run.sh input` runs one suite.
@@ -50,6 +60,8 @@ expected and what happened; `tests/run.sh input` runs one suite.
 compositors (each reintroducing a real bug we've had) and checks that each
 fails exactly the checks meant to catch it, and that the real build passes.
 A new kind of check gets a broken build to prove it, where that's possible.
+The breaks: no pointer frames (the wheel in Chromium), no keyboard until
+one is plugged in (typing lost), no Win95 frames.
 
 ## 2. Nested, on your screen (VS Code)
 

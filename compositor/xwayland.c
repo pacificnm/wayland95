@@ -18,8 +18,11 @@ static void xview_map(struct wl_listener *listener, void *data)
 	if (!view->scene_tree) {
 		view->scene_tree = wlr_scene_tree_create(view->server->layer_windows);
 		view->scene_tree->node.data = &view->tag;
-		wlr_scene_subsurface_tree_create(view->scene_tree, xs->surface);
+		view->content = wlr_scene_subsurface_tree_create(view->scene_tree, xs->surface);
 	}
+	// the Win95 frame, unless the program asked for none (_MOTIF_WM_HINTS:
+	// programs that draw their own title bar, splash screens)
+	view->ssd = xs->decorations == WLR_XWAYLAND_SURFACE_DECORATIONS_ALL;
 	// a window that asked for a position keeps it (X11 programs remember
 	// theirs); others are cascaded like Wayland windows
 	if (!view->placed && (xs->x != 0 || xs->y != 0)) {
@@ -28,13 +31,33 @@ static void xview_map(struct wl_listener *listener, void *data)
 		view->placed = true;
 	}
 	view_mapped(view);
+	// one that asked to start maximized did so before it was known to get a
+	// frame: make room for the title bar now
+	if (view->maximized && view->ssd)
+		view_arrange_all(view->server);
 }
 
 static void xview_unmap(struct wl_listener *listener, void *data)
 {
 	struct view *view = wl_container_of(listener, view, unmap);
 	view_unmapped(view);
-	wlr_scene_node_set_enabled(&view->scene_tree->node, false);
+}
+
+static void xview_commit(struct wl_listener *listener, void *data)
+{
+	struct view *view = wl_container_of(listener, view, commit);
+	if (view->mapped)
+		frame_update(view); // a new size, if it changed
+}
+
+static void xview_set_decorations(struct wl_listener *listener, void *data)
+{
+	struct view *view = wl_container_of(listener, view, decoration_mode);
+	bool ssd = view->xsurface->decorations == WLR_XWAYLAND_SURFACE_DECORATIONS_ALL;
+	if (view->mapped && ssd != view->ssd) {
+		view->ssd = ssd;
+		frame_update(view);
+	}
 }
 
 static void xview_associate(struct wl_listener *listener, void *data)
@@ -44,6 +67,8 @@ static void xview_associate(struct wl_listener *listener, void *data)
 	wl_signal_add(&view->xsurface->surface->events.map, &view->map);
 	view->unmap.notify = xview_unmap;
 	wl_signal_add(&view->xsurface->surface->events.unmap, &view->unmap);
+	view->commit.notify = xview_commit;
+	wl_signal_add(&view->xsurface->surface->events.commit, &view->commit);
 }
 
 static void xview_dissociate(struct wl_listener *listener, void *data)
@@ -51,9 +76,12 @@ static void xview_dissociate(struct wl_listener *listener, void *data)
 	struct view *view = wl_container_of(listener, view, dissociate);
 	wl_list_remove(&view->map.link);
 	wl_list_remove(&view->unmap.link);
+	wl_list_remove(&view->commit.link);
 	if (view->scene_tree) {
+		frame_destroy(view);
 		wlr_scene_node_destroy(&view->scene_tree->node);
 		view->scene_tree = NULL;
+		view->content = NULL;
 	}
 }
 
@@ -72,6 +100,8 @@ static void xview_destroy(struct wl_listener *listener, void *data)
 	wl_list_remove(&view->request_fullscreen.link);
 	wl_list_remove(&view->set_title.link);
 	wl_list_remove(&view->set_app_id.link);
+	wl_list_remove(&view->decoration_mode.link);
+	free(view->frame_title);
 	free(view);
 }
 
@@ -174,6 +204,8 @@ static void new_managed(struct server *server, struct wlr_xwayland_surface *xs)
 	wl_signal_add(&xs->events.set_title, &view->set_title);
 	view->set_app_id.notify = xview_set_title; // the class is the app id
 	wl_signal_add(&xs->events.set_class, &view->set_app_id);
+	view->decoration_mode.notify = xview_set_decorations;
+	wl_signal_add(&xs->events.set_decorations, &view->decoration_mode);
 }
 
 // -------------------------------------------- menus, tooltips (unmanaged)

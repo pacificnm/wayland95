@@ -20,6 +20,17 @@
 
 #include "server.h"
 
+// --------------------------------------------------- shortcut inhibitors
+
+// A remote desktop or virtual machine window asks for every key, Alt+Tab
+// included, while it has the keyboard (input.c checks it); granted, as
+// other desktops do.
+static void new_shortcuts_inhibitor(struct wl_listener *listener, void *data)
+{
+	struct wlr_keyboard_shortcuts_inhibitor_v1 *inhibitor = data;
+	wlr_keyboard_shortcuts_inhibitor_v1_activate(inhibitor);
+}
+
 // ------------------------------------------------------- idle, inhibitors
 
 struct inhibitor {
@@ -294,7 +305,9 @@ void protocols_init(struct server *server)
 	wlr_tearing_control_manager_v1_create(server->display, 1);
 	wlr_content_type_manager_v1_create(server->display, 1);
 	wlr_alpha_modifier_v1_create(server->display);
-	wlr_keyboard_shortcuts_inhibit_v1_create(server->display);
+	server->shortcuts_inhibit = wlr_keyboard_shortcuts_inhibit_v1_create(server->display);
+	server->new_shortcuts_inhibitor.notify = new_shortcuts_inhibitor;
+	wl_signal_add(&server->shortcuts_inhibit->events.new_inhibitor, &server->new_shortcuts_inhibitor);
 
 	server->output_manager = wlr_output_manager_v1_create(server->display);
 	server->output_manager_apply.notify = output_manager_apply;

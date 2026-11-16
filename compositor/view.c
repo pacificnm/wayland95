@@ -66,6 +66,8 @@ void view_close(struct view *view)
 
 static void set_activated(struct view *view, bool active)
 {
+	view->frame_active = active;
+	frame_update(view);
 	if (view->type == VIEW_XDG)
 		wlr_xdg_toplevel_set_activated(view->xdg_toplevel, active);
 	else
@@ -162,6 +164,17 @@ static void apply_state(struct view *view)
 	}
 }
 
+// where a maximized window's content goes: the usable area, less the title
+// bar; the frame's borders hang just outside the area (Win95 does the same)
+static void maximized_box(struct view *view, struct wlr_box *box)
+{
+	*box = view->server->usable_area;
+	if (view->ssd) {
+		box->y += FRAME_TOP - FRAME_BORDER;
+		box->height -= FRAME_TOP - FRAME_BORDER;
+	}
+}
+
 static void remember_geometry(struct view *view)
 {
 	if (view->maximized || view->fullscreen)
@@ -178,7 +191,8 @@ void view_set_maximized(struct view *view, bool maximized)
 	if (maximized) {
 		remember_geometry(view);
 		view->maximized = true;
-		struct wlr_box area = view->server->usable_area;
+		struct wlr_box area;
+		maximized_box(view, &area);
 		view_move(view, area.x, area.y);
 		view_resize(view, area.width, area.height);
 	} else {
@@ -189,6 +203,7 @@ void view_set_maximized(struct view *view, bool maximized)
 		}
 	}
 	apply_state(view);
+	frame_update(view);
 }
 
 void view_set_fullscreen(struct view *view, bool fullscreen)
@@ -206,7 +221,8 @@ void view_set_fullscreen(struct view *view, bool fullscreen)
 	} else {
 		view->fullscreen = false;
 		if (view->maximized) {
-			struct wlr_box area = view->server->usable_area;
+			struct wlr_box area;
+			maximized_box(view, &area);
 			view_move(view, area.x, area.y);
 			view_resize(view, area.width, area.height);
 		} else if (view->saved.width > 0) {
@@ -215,6 +231,7 @@ void view_set_fullscreen(struct view *view, bool fullscreen)
 		}
 	}
 	apply_state(view);
+	frame_update(view);
 }
 
 // panels came or went: maximized windows follow the usable area
@@ -223,7 +240,8 @@ void view_arrange_all(struct server *server)
 	struct view *view;
 	wl_list_for_each(view, &server->views, link) {
 		if (view->mapped && view->maximized && !view->fullscreen) {
-			struct wlr_box area = server->usable_area;
+			struct wlr_box area;
+			maximized_box(view, &area);
 			view_move(view, area.x, area.y);
 			view_resize(view, area.width, area.height);
 		}
@@ -267,7 +285,7 @@ static void ftl_fullscreen(struct wl_listener *listener, void *data)
 	view_set_fullscreen(view, event->fullscreen);
 }
 
-static const char *view_title(struct view *view)
+const char *view_title(struct view *view)
 {
 	const char *t = view->type == VIEW_XDG ? view->xdg_toplevel->title : view->xsurface->title;
 	return t ? t : "";
@@ -281,6 +299,7 @@ static const char *view_app_id(struct view *view)
 
 void view_update_title(struct view *view)
 {
+	frame_update(view);
 	if (view->ftl) {
 		wlr_foreign_toplevel_handle_v1_set_title(view->ftl, view_title(view));
 		wlr_foreign_toplevel_handle_v1_set_app_id(view->ftl, view_app_id(view));
@@ -308,12 +327,20 @@ void view_mapped(struct view *view)
 	struct server *server = view->server;
 	view->mapped = true;
 	wlr_scene_node_set_enabled(&view->scene_tree->node, true);
+	frame_update(view);
+	int left, top, right, bottom;
+	view_frame_insets(view, &left, &top, &right, &bottom);
+	struct wlr_box area = server->usable_area;
 	if (!view->placed) {
-		// cascade new windows from the top left of the usable area
-		struct wlr_box area = server->usable_area;
+		// cascade new windows (their frames) from the top left of the
+		// usable area
 		int n = wl_list_length(&server->views) % 8;
-		view_move(view, area.x + 40 + n * 30, area.y + 30 + n * 30);
+		view_move(view, area.x + 40 + n * 30 + left, area.y + 30 + n * 30 + top);
 		view->placed = true;
+	} else if (!view->maximized && !view->fullscreen && view->y - top < area.y) {
+		// a window that placed itself keeps its place, but not with its
+		// title bar off the top of the screen
+		view_move(view, view->x, area.y + top);
 	} else {
 		place_node(view);
 	}
@@ -346,6 +373,14 @@ void view_unmapped(struct view *view)
 	if (view == server->grabbed_view)
 		input_reset_cursor_mode(server);
 	view->mapped = false;
+	wlr_scene_node_set_enabled(&view->scene_tree->node, false);
+	if (server->frame_press_view == view)
+		server->frame_press_view = NULL;
+	if (server->last_title_click_view == view)
+		server->last_title_click_view = NULL;
+	if (server->switch_current == view)
+		server->switch_current = NULL;
+	view->frame_pressed = PART_NONE;
 	wl_list_remove(&view->link);
 	wl_list_init(&view->link);
 	if (view->ftl) {
@@ -377,12 +412,16 @@ struct view *view_from_surface_at(struct server *server, double lx, double ly,
 	// while locked only the lock screen exists for input
 	struct wlr_scene_node *root = server->locked ? &server->layer_lock->node : &server->scene->tree.node;
 	struct wlr_scene_node *node = wlr_scene_node_at(root, lx, ly, sx, sy);
-	if (!node || node->type != WLR_SCENE_NODE_BUFFER)
+	if (!node)
 		return NULL;
-	struct wlr_scene_surface *scene_surface = wlr_scene_surface_try_from_buffer(wlr_scene_buffer_from_node(node));
-	if (!scene_surface)
-		return NULL;
-	*surface = scene_surface->surface;
+	// a program's surface, or something of ours: a window frame (its
+	// picture or the resize zone around it), the lock screen's cover
+	if (node->type == WLR_SCENE_NODE_BUFFER) {
+		struct wlr_scene_surface *scene_surface =
+				wlr_scene_surface_try_from_buffer(wlr_scene_buffer_from_node(node));
+		if (scene_surface)
+			*surface = scene_surface->surface;
+	}
 	// up the tree to the node that says what it belongs to
 	struct wlr_scene_tree *tree = node->parent;
 	while (tree && !tree->node.data)
@@ -403,8 +442,17 @@ void view_begin_interactive(struct view *view, enum cursor_mode mode, uint32_t e
 	if (view->fullscreen)
 		return;
 	if (view->maximized && mode == CURSOR_MOVE) {
-		// dragging a maximized window restores it under the pointer
+		// dragging a maximized window (by its own title bar) restores it
+		// under the pointer, at the same place across its width
+		struct wlr_box geo;
+		view_geometry(view, &geo);
+		double fraction = geo.width > 0 ? (server->cursor->x - view->x) / geo.width : 0.5;
+		double dy = server->cursor->y - view->y;
 		view_set_maximized(view, false);
+		if (view->saved.width > 0)
+			view_move(view, server->cursor->x - fraction * view->saved.width, server->cursor->y - dy);
+	} else if (view->maximized) {
+		return; // a maximized window has no edges to resize
 	}
 	server->grabbed_view = view;
 	server->cursor_mode = mode;

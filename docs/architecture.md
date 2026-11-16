@@ -72,14 +72,29 @@ one file per concern):
 | `view.c` | one window (xdg toplevel or X11): map/unmap, focus, stacking, move/resize/maximize/minimize, foreign-toplevel handle |
 | `xdg.c` | xdg-shell: toplevels, popups (placed and kept on screen with `wlr_xdg_popup_unconstrain_from_box`) |
 | `xwayland.c` | X11 windows through `wlr_xwayland` (its window manager is part of wlroots) |
-| `decoration.c` | the Win95 frame: title bar (active/inactive gradients, icon, title), minimize/maximize/close buttons, 3-D borders; drawn with cairo and pango into scene buffers, re-drawn on resize/title/state changes |
+| `decoration.c` | the Win95 frame: title bar (active/inactive gradients, bold title cut short with "..."), minimize/maximize/close buttons, 3-D borders, an invisible 4-pixel grab zone outside the border for resizing; drawn with cairo and pango into one scene buffer behind the program, re-drawn only when its size, title, state or the colour scheme changes |
 | `layers.c` | layer-shell surfaces (the shell's panels), exclusive zones (the taskbar's edge), keyboard interactivity |
 | `shellproto.c` | `wayland95-shell-v1`, the shell's private protocol (below) |
-| `settings.c` | reads `~/.config/wayland95/settings.ini` (keyboard, mouse, touchpad, accessibility) and watches it for changes, as the Qt compositor does today |
+| `settings.c` | reads `~/.config/wayland95/settings.ini` (the colour scheme for frames, keyboard layout and repeat, double-click time, touchpad) and watches it with inotify: changes apply at once, as the Qt compositor does today |
 
-Window frames are server-side (`xdg-decoration`): programs that can leave
-decorations to the desktop get the Win95 frame, as now. Programs that draw
-their own keep doing so.
+Window frames are server-side (`xdg-decoration`): programs that leave
+decorations to the desktop (no preference, or server side: Qt, Electron)
+get the Win95 frame, as now. Programs that ask to draw their own, or don't
+use xdg-decoration (GTK), keep doing so. X11 programs get the frame unless
+their `_MOTIF_WM_HINTS` ask for none. The frame looks as the Qt
+compositor's did (3-pixel bevel, 22-pixel title bar, 16x14 buttons) and
+behaves as Win95's: drag the title bar to move, the edges and corners to
+resize, double-click the title bar to maximize or restore; buttons act when
+released over them; a maximized window's title bar sits at the top of the
+screen with its borders just off it, and doesn't move by dragging.
+
+Keys the compositor keeps for itself: Alt+Tab and Alt+Shift+Tab step
+through the windows, most recently used first, and letting go of Alt
+activates the one reached (Escape goes back); Alt+F4 closes the active
+window. Until the shell draws the Alt+Tab box (phase 4), each step brings
+that window to the front. A program that asks for every key
+(`keyboard-shortcuts-inhibit`: remote desktops, virtual machines) gets
+these too while it has the keyboard.
 
 Standard protocols offered (implemented by wlroots 0.18, checked against its
 headers; the compositor handles each one, and the tests in

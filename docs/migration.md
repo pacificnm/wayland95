@@ -10,9 +10,9 @@ and the results are recorded here.
 | Phase | What | Gate | Status |
 |---|---|---|---|
 | 0 | Design, test plan, documentation | this document set reviewed | **done** |
-| 1 | Test harness with a first, minimal `wayland95-compositor` (headless backend, xdg-shell, plain windows): `grim` screenshots, virtual pointer/keyboard, `tests/run.sh`, test pages and test programs | the harness opens Chromium in it, clicks and scrolls, and checks both the page's event log and a screenshot; a deliberately broken build is caught | not started |
+| 1 | Test harness with a first, minimal `wayland95-compositor` (headless backend, xdg-shell, plain windows): `grim` screenshots, virtual pointer/keyboard, `tests/run.sh`, test pages and test programs | the harness opens Chromium in it, clicks and scrolls, and checks both the page's event log and a screenshot; a deliberately broken build is caught | **done** (2026-11-16) |
 | 2 | `wayland95-compositor` core: outputs, input, xdg-shell, popups, Xwayland, all standard protocols; plain frames | input, popups, windows, X11, clipboard suites pass with Chromium, Firefox, VS Code, GTK, Qt, xterm | **done** (2026-11-16, see below) |
-| 3 | Win95 window frames (cairo/pango), move/resize/maximize/minimize, Alt+Tab keys, settings.ini | windows suite incl. frame screenshots; settings suite | not started |
+| 3 | Win95 window frames (cairo/pango), move/resize/maximize/minimize, Alt+Tab keys, settings.ini | frames, alttab and settings suites (frame screenshots checked pixel by pixel); everything before still passes | **done** (2026-11-16, see below) |
 | 4 | `win95shell`: layer-shell integration for Qt, the existing QML moved over, foreign-toplevel taskbar, `wayland95-shell-v1`, services | shell suite; screen suite vs. reference images of today's desktop | not started |
 | 5 | Session, package, ISO: session script, libseat, `.deb`, live image; "Wayland 95 (classic)" kept as a second session | VM boot test; full `tests/run.sh`; nested check by hand | not started |
 | 6 | Switch: the wlroots desktop becomes "Wayland 95"; publish; then remove the Qt compositor | a release with both sessions has been used on the Optiplex and this machine without regressions | not started |
@@ -67,6 +67,32 @@ confinement, idle activity. Tools: `w95input` gained the keyboard,
 - Moved to later, with reasons in architecture.md: explicit GPU sync
   (linux-drm-syncobj), input methods (text-input v3, phase 4).
 
+**Phase 3** (2026-11-16): `decoration.c` (the Win95 frame), `settings.c`
+(settings.ini, watched with inotify), and in `input.c` the frame's clicks
+and cursors, Alt+Tab / Alt+Shift+Tab / Alt+F4, and settings for new
+keyboards and touchpads. Each window is now a tree at its corner holding
+the frame behind the program's surfaces.
+- `tests/run.sh`: 144 of 144 checks pass, three full runs in a row: the 89
+  from phase 2, plus frames 36, alttab 11, settings 8.
+- `tests/selftest.sh`: the real build passes everything; without pointer
+  frames 26 checks fail, without the keyboard group 11, and the new break,
+  no Win95 frames, 16 (the frames suite).
+- Frame policy as in the Qt compositor: the Win95 frame unless the program
+  asks to draw its own or doesn't use xdg-decoration (GTK); X11 windows
+  unless their Motif hints ask for none. Same look (22-pixel title bar).
+- Tests no longer see your own settings.ini: each compositor in the tests
+  gets an empty config folder.
+- Test mistakes found by looking at the screenshots, fixed in the tests:
+  a gradient sampled mid-way and compared with its end colour, a title
+  sample covered by the window raised over it, an X11 window looked for
+  where it wasn't placed. And one check proven able to fail before
+  trusting it: Qt does log a plain Tab, so "the program doesn't get the
+  Tab" means something.
+- Left for phase 4 (it needs the shell): the Alt+Tab box, the window menu
+  (right-click on a title bar, Alt+Space), window icons in the title bar.
+  Keyboard layout, repeat and touchpad settings are checked nested, with a
+  real keyboard and touchpad (the headless tests have neither).
+
 ## What changes for users
 
 - Nothing until phase 5: the update channel keeps delivering the Qt
@@ -79,7 +105,7 @@ confinement, idle activity. Tools: `w95input` gained the keyboard,
 ## Build dependencies added
 
 `libwlroots-0.18-dev`, `libseat-dev` (pulled in by it), `libcairo2-dev`,
-`libpango1.0-dev`, `qt6-wayland-private-dev` (the shell's layer-shell
+`libpango1.0-dev`, `libdrm-dev`, `libinput-dev`, `qt6-wayland-private-dev` (the shell's layer-shell
 integration), `wayland-protocols`, `hwdata`; for the tests `grim`, `wlrctl`
 and `wtype`. `debian/control`, `install.sh` and the build instructions in the
 README are updated in the phase that first needs each.

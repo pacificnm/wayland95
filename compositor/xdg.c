@@ -9,6 +9,28 @@
 
 // ------------------------------------------------------------- toplevels
 
+// Who draws the frame: the Win95 frame for programs that leave it to the
+// desktop (xdg-decoration, no preference or server side: Qt, most Electron
+// and Chromium setups); programs that ask to draw their own, or don't speak
+// xdg-decoration at all (GTK), draw their own. As the Qt compositor did.
+static void apply_decoration_mode(struct view *view)
+{
+	bool ssd = false;
+	if (view->decoration) {
+		ssd = view->decoration->requested_mode != WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
+		if (view->xdg_toplevel->base->initialized)
+			wlr_xdg_toplevel_decoration_v1_set_mode(view->decoration, ssd
+					? WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE
+					: WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
+	}
+	if (ssd != view->ssd) {
+		view->ssd = ssd;
+		frame_update(view);
+		if (view->maximized)
+			view_arrange_all(view->server); // the title bar's room changed
+	}
+}
+
 static void toplevel_map(struct wl_listener *listener, void *data)
 {
 	struct view *view = wl_container_of(listener, view, map);
@@ -26,11 +48,7 @@ static void toplevel_commit(struct wl_listener *listener, void *data)
 	struct view *view = wl_container_of(listener, view, commit);
 	struct wlr_xdg_toplevel *toplevel = view->xdg_toplevel;
 	if (toplevel->base->initial_commit) {
-		// Win95 frames (server side) come in phase 3; until then programs
-		// draw their own
-		if (view->decoration)
-			wlr_xdg_toplevel_decoration_v1_set_mode(view->decoration,
-					WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
+		apply_decoration_mode(view);
 		// the program chooses its size, unless it asked to start
 		// maximized or fullscreen
 		if (toplevel->requested.fullscreen)
@@ -58,6 +76,7 @@ static void toplevel_commit(struct wl_listener *listener, void *data)
 		if (nx != view->x || ny != view->y)
 			view_move(view, nx, ny);
 	}
+	frame_update(view); // a new size, if it changed
 }
 
 static void toplevel_destroy(struct wl_listener *listener, void *data)
@@ -78,6 +97,8 @@ static void toplevel_destroy(struct wl_listener *listener, void *data)
 		wl_list_remove(&view->decoration_mode.link);
 		wl_list_remove(&view->decoration_destroy.link);
 	}
+	frame_destroy(view);
+	wlr_scene_node_destroy(&view->scene_tree->node);
 	free(view);
 }
 
@@ -151,9 +172,14 @@ static void new_xdg_toplevel(struct wl_listener *listener, void *data)
 	struct view *view = calloc(1, sizeof(*view));
 	view_init_common(view, server, VIEW_XDG);
 	view->xdg_toplevel = xdg_toplevel;
-	view->scene_tree = wlr_scene_xdg_surface_create(server->layer_windows, xdg_toplevel->base);
+	// the window's tree, at the window geometry's corner: the frame
+	// (decoration.c) and the program's surfaces (content), whose origin is
+	// the geometry's corner too (the scene helper offsets by the geometry)
+	view->scene_tree = wlr_scene_tree_create(server->layer_windows);
 	view->scene_tree->node.data = &view->tag;
-	xdg_toplevel->base->data = view->scene_tree; // popups attach under it
+	wlr_scene_node_set_enabled(&view->scene_tree->node, false); // until mapped
+	view->content = wlr_scene_xdg_surface_create(view->scene_tree, xdg_toplevel->base);
+	xdg_toplevel->base->data = view->content; // popups attach under it
 
 	view->map.notify = toplevel_map;
 	wl_signal_add(&xdg_toplevel->base->surface->events.map, &view->map);
@@ -184,9 +210,7 @@ static void new_xdg_toplevel(struct wl_listener *listener, void *data)
 static void decoration_request_mode(struct wl_listener *listener, void *data)
 {
 	struct view *view = wl_container_of(listener, view, decoration_mode);
-	if (view->xdg_toplevel->base->initialized)
-		wlr_xdg_toplevel_decoration_v1_set_mode(view->decoration,
-				WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
+	apply_decoration_mode(view);
 }
 
 static void decoration_destroy(struct wl_listener *listener, void *data)
@@ -195,15 +219,17 @@ static void decoration_destroy(struct wl_listener *listener, void *data)
 	wl_list_remove(&view->decoration_mode.link);
 	wl_list_remove(&view->decoration_destroy.link);
 	view->decoration = NULL;
+	apply_decoration_mode(view); // the program draws its own again
 }
 
 static void new_xdg_decoration(struct wl_listener *listener, void *data)
 {
 	struct wlr_xdg_toplevel_decoration_v1 *decoration = data;
-	struct wlr_scene_tree *tree = decoration->toplevel->base->data;
-	if (!tree || !tree->node.data)
+	// the content tree's parent is the window's tree
+	struct wlr_scene_tree *content = decoration->toplevel->base->data;
+	if (!content || !content->node.parent || !content->node.parent->node.data)
 		return;
-	struct view *view = (struct view *)tree->node.data;
+	struct view *view = (struct view *)content->node.parent->node.data;
 	view->decoration = decoration;
 	view->decoration_mode.notify = decoration_request_mode;
 	wl_signal_add(&decoration->events.request_mode, &view->decoration_mode);
@@ -224,7 +250,7 @@ static void popup_unconstrain(struct server *server, struct wlr_xdg_popup *popup
 		root = xdg->popup->parent;
 	struct wlr_scene_tree *tree = NULL;
 	if (xdg && xdg->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-		tree = xdg->data; // its origin is the window geometry's corner
+		tree = xdg->data; // the content: its origin is the window geometry's corner
 	} else {
 		struct wlr_layer_surface_v1 *ls = wlr_layer_surface_v1_try_from_wlr_surface(root);
 		if (ls && ls->data)

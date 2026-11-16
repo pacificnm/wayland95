@@ -30,6 +30,32 @@
 struct wlr_xwayland;
 struct wlr_xwayland_surface;
 
+// The Win95 window frame (decoration.c): a 3-pixel border (2-pixel bevel
+// and 1 of face) and a 22-pixel title bar, as the Qt compositor drew them.
+#define FRAME_BORDER 3
+#define FRAME_TITLE 22
+#define FRAME_TOP (FRAME_BORDER + FRAME_TITLE)
+#define FRAME_RESIZE_MARGIN 4 // invisible grab zone outside the border
+
+enum frame_part {
+	PART_NONE, PART_TITLE, PART_MINIMIZE, PART_MAXIMIZE, PART_CLOSE, PART_EDGE,
+};
+
+// ~/.config/wayland95/settings.ini, as the Control Panel writes it
+// (settings.c); re-read when it changes
+struct settings {
+	float face[4], light[4], highlight[4], shadow[4], dark[4];
+	float active_title[4], active_title2[4], active_title_text[4];
+	float inactive_title[4], inactive_title2[4], inactive_title_text[4];
+	char font[64];
+	char layout[64]; // "us", "de(nodeadkeys)"...
+	int repeat_delay, repeat_rate;
+	int double_click_ms;
+	// touchpad
+	bool tap_to_click, natural_scroll, disable_while_typing, middle_emulation;
+	double pointer_speed; // -1..1
+};
+
 enum cursor_mode {
 	CURSOR_PASSTHROUGH, // events go to the surface under the pointer
 	CURSOR_MOVE,        // dragging a window
@@ -68,6 +94,23 @@ struct server {
 
 	// where windows may go: the output minus panels' exclusive zones
 	struct wlr_box usable_area;
+
+	struct settings settings;
+	int settings_watch; // inotify
+	struct wl_event_source *settings_source;
+	struct wl_list physical_keyboards; // struct physical_keyboard.link
+	struct wl_list pointers; // struct pointer_device.link
+
+	// a press on a frame button (it acts on release, if still over it)
+	struct view *frame_press_view;
+	enum frame_part frame_press_part;
+	// double-clicks on title bars
+	struct view *last_title_click_view;
+	uint32_t last_title_click_ms;
+
+	// Alt+Tab: switching through the windows, most recent first
+	bool switching;
+	struct view *switch_current;
 
 	struct wl_list outputs; // struct output.link
 	struct wl_listener new_output;
@@ -125,6 +168,9 @@ struct server {
 	struct wlr_pointer_constraint_v1 *active_constraint;
 	struct wl_listener active_constraint_destroy;
 
+	struct wlr_keyboard_shortcuts_inhibit_manager_v1 *shortcuts_inhibit;
+	struct wl_listener new_shortcuts_inhibitor;
+
 	struct wlr_idle_notifier_v1 *idle_notifier;
 	struct wlr_idle_inhibit_manager_v1 *idle_inhibit;
 	struct wl_listener new_idle_inhibitor;
@@ -172,7 +218,20 @@ struct view {
 	struct wlr_xdg_toplevel *xdg_toplevel;   // VIEW_XDG
 	struct wlr_xwayland_surface *xsurface;   // VIEW_XWAYLAND
 	struct wlr_xdg_toplevel_decoration_v1 *decoration;
-	struct wlr_scene_tree *scene_tree;
+	struct wlr_scene_tree *scene_tree;  // at the window's corner: frame and content
+	struct wlr_scene_tree *content;     // the program's surfaces
+	// the Win95 frame, when the program leaves decorations to us
+	bool ssd;
+	struct wlr_scene_tree *frame_tree;
+	struct wlr_scene_buffer *frame;
+	struct wlr_scene_rect *resize_zone;
+	int frame_w, frame_h; // the window size it was drawn for
+	bool frame_active;  // the window is the active one
+	enum frame_part frame_pressed; // a title button held down
+	// what the current picture was drawn for
+	bool frame_drawn_active, frame_maximized;
+	enum frame_part frame_drawn_pressed;
+	char *frame_title;
 	bool mapped, placed, minimized, maximized, fullscreen;
 	int x, y;           // layout position of the window geometry's corner
 	struct wlr_box saved; // size and place before maximize/fullscreen
@@ -226,8 +285,34 @@ struct keyboard {
 	struct wl_listener destroy;
 };
 
+struct physical_keyboard {
+	struct wl_list link;
+	struct wlr_keyboard *wlr_keyboard;
+	struct wl_listener destroy;
+};
+
+struct pointer_device {
+	struct wl_list link;
+	struct wlr_input_device *device;
+	struct wl_listener destroy;
+};
+
 // output.c
 void output_init(struct server *server);
+
+// settings.c
+void settings_init(struct server *server);
+void settings_apply_keyboard(struct server *server, struct wlr_keyboard *keyboard);
+void settings_apply_pointer(struct server *server, struct wlr_input_device *device);
+
+// decoration.c
+void frame_update(struct view *view); // create, redraw, or remove as needed
+void frame_destroy(struct view *view);
+enum frame_part frame_part_at(struct view *view, double lx, double ly, uint32_t *edges);
+void frame_set_pressed(struct view *view, enum frame_part part);
+const char *frame_cursor(enum frame_part part, uint32_t edges);
+// the frame's extent around the window (0 without a frame)
+void view_frame_insets(struct view *view, int *left, int *top, int *right, int *bottom);
 
 // input.c
 void input_init(struct server *server);
@@ -251,6 +336,7 @@ void view_set_fullscreen(struct view *view, bool fullscreen);
 void view_mapped(struct view *view);   // after the type-specific map
 void view_unmapped(struct view *view); // before the type-specific unmap
 void view_update_title(struct view *view);
+const char *view_title(struct view *view); // never NULL
 void view_begin_interactive(struct view *view, enum cursor_mode mode, uint32_t edges);
 struct view *view_top(struct server *server); // topmost mapped, not minimized
 void view_arrange_all(struct server *server); // usable area changed

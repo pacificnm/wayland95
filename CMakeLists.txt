@@ -185,12 +185,14 @@ install(TARGETS win95compositor RUNTIME DESTINATION bin)
 # the same output directory as win95compositor so the shell can launch it.
 
 # the wlroots compositor (being built: docs/migration.md)
-pkg_check_modules(WLROOTS_FOUND_CHECK QUIET wlroots-0.18)
+# (built only when everything it needs is there, so the Qt session's build
+# never fails for its sake until it replaces it)
+pkg_check_modules(WLROOTS_FOUND_CHECK QUIET wlroots-0.18 cairo pangocairo libdrm libinput)
 if(WLROOTS_FOUND_CHECK_FOUND)
     add_subdirectory(compositor)    # wayland95-compositor
     add_subdirectory(tests/tools)   # w95input... (tests/run.sh)
 else()
-    message(STATUS "wlroots 0.18 not found: skipping wayland95-compositor (sudo apt install libwlroots-0.18-dev)")
+    message(STATUS "skipping wayland95-compositor: it needs libwlroots-0.18-dev libcairo2-dev libpango1.0-dev libdrm-dev libinput-dev")
 endif()
 
 add_subdirectory(apps/common)   # Win95Ui shared QML controls

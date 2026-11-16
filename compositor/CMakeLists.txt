@@ -5,6 +5,11 @@ pkg_check_modules(WL_SERVER REQUIRED IMPORTED_TARGET wayland-server)
 pkg_check_modules(XKB REQUIRED IMPORTED_TARGET xkbcommon)
 pkg_check_modules(PIXMAN REQUIRED IMPORTED_TARGET pixman-1)
 pkg_check_modules(XCB REQUIRED IMPORTED_TARGET xcb)
+# window frames (decoration.c), settings (settings.c)
+pkg_check_modules(CAIRO REQUIRED IMPORTED_TARGET cairo)
+pkg_check_modules(PANGOCAIRO REQUIRED IMPORTED_TARGET pangocairo)
+pkg_check_modules(DRM REQUIRED IMPORTED_TARGET libdrm)
+pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
 pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
 find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
 
@@ -29,18 +34,12 @@ server_protocol(${WAYLAND_PROTOCOLS_DIR}/staging/ext-session-lock/ext-session-lo
 server_protocol(${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-layer-shell-unstable-v1.xml wlr-layer-shell-unstable-v1)
 server_protocol(${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-output-power-management-unstable-v1.xml wlr-output-power-management-unstable-v1)
 
-add_executable(wayland95-compositor
-    main.c
-    output.c
-    input.c
-    view.c
-    xdg.c
-    xwayland.c
-    layers.c
-    protocols.c
-    server.h
-    ${PROTOCOL_HEADERS}
-)
+set(SOURCES main.c output.c input.c view.c xdg.c xwayland.c layers.c protocols.c
+    decoration.c settings.c server.h ${PROTOCOL_HEADERS})
+set(LIBS PkgConfig::WLROOTS PkgConfig::WL_SERVER PkgConfig::XKB PkgConfig::PIXMAN PkgConfig::XCB
+    PkgConfig::CAIRO PkgConfig::PANGOCAIRO PkgConfig::DRM PkgConfig::LIBINPUT)
+
+add_executable(wayland95-compositor ${SOURCES})
 set_target_properties(wayland95-compositor PROPERTIES
     C_STANDARD 17
     C_STANDARD_REQUIRED ON
@@ -48,21 +47,20 @@ set_target_properties(wayland95-compositor PROPERTIES
 target_compile_definitions(wayland95-compositor PRIVATE WLR_USE_UNSTABLE)
 target_compile_options(wayland95-compositor PRIVATE -Wall -Wextra -Wno-unused-parameter)
 target_include_directories(wayland95-compositor PRIVATE ${GEN})
-target_link_libraries(wayland95-compositor PRIVATE
-    PkgConfig::WLROOTS PkgConfig::WL_SERVER PkgConfig::XKB PkgConfig::PIXMAN PkgConfig::XCB)
+target_link_libraries(wayland95-compositor PRIVATE ${LIBS})
 install(TARGETS wayland95-compositor RUNTIME DESTINATION bin)
 
 # Deliberately broken builds for tests/selftest.sh, which checks that the
-# tests catch each break (never installed, built only on request)
-foreach(BREAK FRAMES FOCUS)
+# tests catch each break (never installed, built only on request):
+#   FRAMES: no wl_pointer.frame   FOCUS: no keyboard until one is plugged in
+#   SSD: no Win95 frames (every program left undecorated)
+foreach(BREAK FRAMES FOCUS SSD)
     string(TOLOWER ${BREAK} break_name)
-    add_executable(wayland95-compositor-broken-${break_name} EXCLUDE_FROM_ALL
-        main.c output.c input.c view.c xdg.c xwayland.c layers.c protocols.c server.h ${PROTOCOL_HEADERS})
+    add_executable(wayland95-compositor-broken-${break_name} EXCLUDE_FROM_ALL ${SOURCES})
     set_target_properties(wayland95-compositor-broken-${break_name} PROPERTIES
         C_STANDARD 17 RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
     target_compile_definitions(wayland95-compositor-broken-${break_name} PRIVATE
         WLR_USE_UNSTABLE WAYLAND95_TEST_BREAK_${BREAK})
     target_include_directories(wayland95-compositor-broken-${break_name} PRIVATE ${GEN})
-    target_link_libraries(wayland95-compositor-broken-${break_name} PRIVATE
-        PkgConfig::WLROOTS PkgConfig::WL_SERVER PkgConfig::XKB PkgConfig::PIXMAN PkgConfig::XCB)
+    target_link_libraries(wayland95-compositor-broken-${break_name} PRIVATE ${LIBS})
 endforeach()

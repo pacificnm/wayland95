@@ -135,6 +135,7 @@ int main(int argc, char *argv[])
 	server.foreign_toplevels = wlr_foreign_toplevel_manager_v1_create(server.display);
 	server.ext_toplevels = wlr_ext_foreign_toplevel_list_v1_create(server.display, 1);
 
+	settings_init(&server); // before the keyboards and window frames need it
 	output_init(&server);
 	xdg_init(&server);
 	layers_init(&server);

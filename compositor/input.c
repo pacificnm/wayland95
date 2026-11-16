@@ -1,17 +1,20 @@
 // Input: keyboards, pointers (mice, touchpads, and the virtual ones the
 // tests drive), the cursor, gestures, pointer constraints (games), drag and
 // drop, and the seat that hands it all to programs.
+#include <linux/input-event-codes.h>
 #include <stdlib.h>
 #include <time.h>
 #include <wlr/types/wlr_cursor_shape_v1.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_keyboard_shortcuts_inhibit_v1.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/util/log.h>
+#include <wlr/util/edges.h>
 #include <wlr/util/region.h>
 
 #include "server.h"
@@ -24,22 +27,142 @@ static void activity(struct server *server)
 
 // ------------------------------------------------------------ keyboards
 
+// ---------------------------------------------------- desktop shortcuts
+//
+// Alt+Tab / Alt+Shift+Tab: step through the windows, most recently used
+// first; each step brings the next one to the front, and letting go of Alt
+// activates it (Escape goes back). Until the shell draws the Alt+Tab box
+// (phase 4, wayland95-shell-v1), the windows themselves show the way.
+// Alt+F4 closes the active window.
+
+static void switch_step(struct server *server, int dir)
+{
+	int n = 0;
+	struct view *view;
+	wl_list_for_each(view, &server->views, link)
+		if (view->mapped)
+			n++;
+	if (n == 0)
+		return;
+	struct view *list[n];
+	int i = 0, current = 0;
+	wl_list_for_each(view, &server->views, link) {
+		if (!view->mapped)
+			continue;
+		if (view == server->switch_current)
+			current = i;
+		list[i++] = view;
+	}
+	if (!server->switching) {
+		server->switching = true;
+		current = 0; // from the active window
+	}
+	current = ((current + dir) % n + n) % n;
+	server->switch_current = list[current];
+	if (!list[current]->minimized)
+		wlr_scene_node_raise_to_top(&list[current]->scene_tree->node);
+}
+
+// the stacking as it was (the list is in order, front first)
+static void switch_restore_stacking(struct server *server)
+{
+	struct view *view;
+	wl_list_for_each_reverse(view, &server->views, link)
+		if (view->mapped)
+			wlr_scene_node_raise_to_top(&view->scene_tree->node);
+}
+
+static void switch_end(struct server *server, bool accept)
+{
+	if (!server->switching)
+		return;
+	server->switching = false;
+	struct view *chosen = server->switch_current;
+	server->switch_current = NULL;
+	if (accept && chosen) {
+		view_focus(chosen);
+	} else {
+		switch_restore_stacking(server);
+	}
+	input_refresh_pointer(server);
+}
+
+// the program with the keyboard asked to get every key (a remote desktop
+// or virtual machine window)
+static bool shortcuts_inhibited(struct server *server)
+{
+	struct wlr_surface *focused = server->seat->keyboard_state.focused_surface;
+	struct wlr_keyboard_shortcuts_inhibitor_v1 *inhibitor;
+	wl_list_for_each(inhibitor, &server->shortcuts_inhibit->inhibitors, link)
+		if (inhibitor->surface == focused && inhibitor->seat == server->seat && inhibitor->active)
+			return true;
+	return false;
+}
+
+static bool handle_shortcut(struct server *server, uint32_t modifiers, const xkb_keysym_t *syms, int nsyms)
+{
+	if (server->locked || server->exclusive_layer)
+		return false; // the lock screen or a panel has the keyboard to itself
+	bool alt = modifiers & WLR_MODIFIER_ALT;
+	for (int i = 0; i < nsyms; ++i) {
+		xkb_keysym_t sym = syms[i];
+		if (server->switching && sym == XKB_KEY_Escape) {
+			switch_end(server, false);
+			return true;
+		}
+		if (!alt || shortcuts_inhibited(server))
+			continue;
+		if (sym == XKB_KEY_Tab || sym == XKB_KEY_ISO_Left_Tab) {
+			bool back = (modifiers & WLR_MODIFIER_SHIFT) || sym == XKB_KEY_ISO_Left_Tab;
+			switch_step(server, back ? -1 : 1);
+			return true;
+		}
+		if (sym == XKB_KEY_F4 && !server->switching) {
+			struct view *top = view_top(server);
+			if (top && top->frame_active)
+				view_close(top);
+			return true;
+		}
+	}
+	return false;
+}
+
 static void keyboard_modifiers(struct wl_listener *listener, void *data)
 {
 	struct keyboard *keyboard = wl_container_of(listener, keyboard, modifiers);
-	wlr_seat_set_keyboard(keyboard->server->seat, keyboard->wlr_keyboard);
-	wlr_seat_keyboard_notify_modifiers(keyboard->server->seat, &keyboard->wlr_keyboard->modifiers);
+	struct server *server = keyboard->server;
+	// Alt let go: that's the one. The focus moves first, so the window
+	// that had it doesn't see a lone Alt press and release (Firefox would
+	// show its menu bar)
+	if (server->switching && !(wlr_keyboard_get_modifiers(keyboard->wlr_keyboard) & WLR_MODIFIER_ALT))
+		switch_end(server, true);
+	wlr_seat_set_keyboard(server->seat, keyboard->wlr_keyboard);
+	wlr_seat_keyboard_notify_modifiers(server->seat, &keyboard->wlr_keyboard->modifiers);
 }
 
 static void keyboard_key(struct wl_listener *listener, void *data)
 {
 	struct keyboard *keyboard = wl_container_of(listener, keyboard, key);
+	struct server *server = keyboard->server;
 	struct wlr_keyboard_key_event *event = data;
-	activity(keyboard->server);
-	// desktop shortcuts (Alt+Tab...) come in phase 3; everything goes to
-	// the focused program
-	wlr_seat_set_keyboard(keyboard->server->seat, keyboard->wlr_keyboard);
-	wlr_seat_keyboard_notify_key(keyboard->server->seat, event->time_msec, event->keycode, event->state);
+	activity(server);
+	// a key the desktop used doesn't go to the program, nor does its release
+	static bool swallowed[KEY_CNT];
+	bool handled = false;
+	if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+		const xkb_keysym_t *syms;
+		int nsyms = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, event->keycode + 8, &syms);
+		handled = handle_shortcut(server, wlr_keyboard_get_modifiers(keyboard->wlr_keyboard), syms, nsyms);
+		if (event->keycode < KEY_CNT)
+			swallowed[event->keycode] = handled;
+	} else if (event->keycode < KEY_CNT && swallowed[event->keycode]) {
+		swallowed[event->keycode] = false;
+		handled = true;
+	}
+	if (handled)
+		return;
+	wlr_seat_set_keyboard(server->seat, keyboard->wlr_keyboard);
+	wlr_seat_keyboard_notify_key(server->seat, event->time_msec, event->keycode, event->state);
 }
 
 static void keyboard_destroy(struct wl_listener *listener, void *data)
@@ -87,24 +210,46 @@ static struct keyboard *listen_keyboard(struct server *server, struct wlr_keyboa
 	return keyboard;
 }
 
-// the default keymap (Control Panel > Keyboard's layout comes in phase 3)
-static void set_default_keymap(struct wlr_keyboard *wlr_keyboard)
+static void physical_keyboard_destroy(struct wl_listener *listener, void *data)
 {
-	struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-	struct xkb_keymap *keymap = xkb_keymap_new_from_names(context, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
-	wlr_keyboard_set_keymap(wlr_keyboard, keymap);
-	xkb_keymap_unref(keymap);
-	xkb_context_unref(context);
-	wlr_keyboard_set_repeat_info(wlr_keyboard, 25, 600);
+	struct physical_keyboard *pk = wl_container_of(listener, pk, destroy);
+	wl_list_remove(&pk->destroy.link);
+	wl_list_remove(&pk->link);
+	free(pk);
 }
 
 static void add_physical_keyboard(struct server *server, struct wlr_keyboard *wlr_keyboard)
 {
-	// the group needs its members to share its keymap
-	wlr_keyboard_set_keymap(wlr_keyboard, server->kbd_group->keyboard.keymap);
-	wlr_keyboard_set_repeat_info(wlr_keyboard, 25, 600);
+	// the layout and repeat from Control Panel > Keyboard; the group needs
+	// its members to share its keymap
+	settings_apply_keyboard(server, wlr_keyboard);
 	if (!wlr_keyboard_group_add_keyboard(server->kbd_group, wlr_keyboard))
 		wlr_log(WLR_ERROR, "keyboard %s couldn't join the keyboard group", wlr_keyboard->base.name);
+	struct physical_keyboard *pk = calloc(1, sizeof(*pk));
+	pk->wlr_keyboard = wlr_keyboard;
+	pk->destroy.notify = physical_keyboard_destroy;
+	wl_signal_add(&wlr_keyboard->base.events.destroy, &pk->destroy);
+	wl_list_insert(&server->physical_keyboards, &pk->link);
+}
+
+static void pointer_device_destroy(struct wl_listener *listener, void *data)
+{
+	struct pointer_device *pd = wl_container_of(listener, pd, destroy);
+	wl_list_remove(&pd->destroy.link);
+	wl_list_remove(&pd->link);
+	free(pd);
+}
+
+static void add_pointer(struct server *server, struct wlr_input_device *device)
+{
+	// touchpad settings from Control Panel > Mouse
+	settings_apply_pointer(server, device);
+	wlr_cursor_attach_input_device(server->cursor, device);
+	struct pointer_device *pd = calloc(1, sizeof(*pd));
+	pd->device = device;
+	pd->destroy.notify = pointer_device_destroy;
+	wl_signal_add(&device->events.destroy, &pd->destroy);
+	wl_list_insert(&server->pointers, &pd->link);
 }
 
 static void new_input(struct wl_listener *listener, void *data)
@@ -116,7 +261,7 @@ static void new_input(struct wl_listener *listener, void *data)
 		add_physical_keyboard(server, wlr_keyboard_from_input_device(device));
 		break;
 	case WLR_INPUT_DEVICE_POINTER:
-		wlr_cursor_attach_input_device(server->cursor, device);
+		add_pointer(server, device);
 		break;
 	default:
 		break;
@@ -262,12 +407,15 @@ static void pointer_focus(struct server *server, uint32_t time)
 
 	double sx, sy;
 	struct wlr_surface *surface = NULL;
-	view_from_surface_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy, NULL);
+	struct view *view = view_from_surface_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy, NULL);
 	if (surface) {
 		wlr_seat_pointer_notify_enter(server->seat, surface, sx, sy);
 		wlr_seat_pointer_notify_motion(server->seat, time, sx, sy);
 	} else {
-		wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, "default");
+		// the desktop, or a window frame: its edges show the resize arrows
+		uint32_t edges = WLR_EDGE_NONE;
+		enum frame_part part = view ? frame_part_at(view, server->cursor->x, server->cursor->y, &edges) : PART_NONE;
+		wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, frame_cursor(part, edges));
 		wlr_seat_pointer_clear_focus(server->seat);
 	}
 }
@@ -291,6 +439,15 @@ void input_refresh_pointer(struct server *server)
 static void process_motion(struct server *server, uint32_t time)
 {
 	activity(server);
+	if (server->frame_press_view) {
+		// a title button held: it shows pressed only while the pointer is
+		// over it (and acts on release only then)
+		struct view *view = server->frame_press_view;
+		uint32_t edges;
+		enum frame_part part = frame_part_at(view, server->cursor->x, server->cursor->y, &edges);
+		frame_set_pressed(view, part == server->frame_press_part ? part : PART_NONE);
+		return;
+	}
 	if (server->cursor_mode == CURSOR_MOVE) {
 		process_move(server);
 		return;
@@ -335,6 +492,69 @@ static void cursor_motion_absolute(struct wl_listener *listener, void *data)
 	process_motion(server, event->time_msec);
 }
 
+// ------------------------------------------------- window frames' clicks
+
+// a press on a window's frame (decoration.c): the title bar moves it (two
+// quick clicks maximize or restore it), the edges resize it, the buttons
+// act when released over them
+static void frame_pressed(struct server *server, struct view *view, uint32_t button, uint32_t time)
+{
+	if (button != BTN_LEFT)
+		return; // (the window menu on the right button: phase 4)
+	uint32_t edges;
+	enum frame_part part = frame_part_at(view, server->cursor->x, server->cursor->y, &edges);
+	switch (part) {
+	case PART_TITLE:
+		if (server->last_title_click_view == view
+				&& time - server->last_title_click_ms <= (uint32_t)server->settings.double_click_ms) {
+			server->last_title_click_view = NULL;
+			view_set_maximized(view, !view->maximized);
+			return;
+		}
+		server->last_title_click_view = view;
+		server->last_title_click_ms = time;
+		if (!view->maximized) // Win95 doesn't move maximized windows
+			view_begin_interactive(view, CURSOR_MOVE, 0);
+		break;
+	case PART_EDGE:
+		view_begin_interactive(view, CURSOR_RESIZE, edges);
+		break;
+	case PART_MINIMIZE:
+	case PART_MAXIMIZE:
+	case PART_CLOSE:
+		server->frame_press_view = view;
+		server->frame_press_part = part;
+		frame_set_pressed(view, part);
+		break;
+	default:
+		break;
+	}
+}
+
+static void frame_button_released(struct server *server)
+{
+	struct view *view = server->frame_press_view;
+	enum frame_part pressed = server->frame_press_part;
+	server->frame_press_view = NULL;
+	frame_set_pressed(view, PART_NONE);
+	uint32_t edges;
+	if (frame_part_at(view, server->cursor->x, server->cursor->y, &edges) != pressed)
+		return; // let go somewhere else: nothing happens
+	switch (pressed) {
+	case PART_MINIMIZE:
+		view_set_minimized(view, true);
+		break;
+	case PART_MAXIMIZE:
+		view_set_maximized(view, !view->maximized);
+		break;
+	case PART_CLOSE:
+		view_close(view);
+		break;
+	default:
+		break;
+	}
+}
+
 static void cursor_button(struct wl_listener *listener, void *data)
 {
 	struct server *server = wl_container_of(listener, server, cursor_button);
@@ -343,6 +563,8 @@ static void cursor_button(struct wl_listener *listener, void *data)
 	wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
 	if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
 		input_reset_cursor_mode(server);
+		if (server->frame_press_view && event->button == BTN_LEFT)
+			frame_button_released(server);
 		if (server->seat->pointer_state.button_count == 0) {
 			// the grab ends: the pointer goes to whatever is under it now
 			server->press_surface = NULL;
@@ -363,12 +585,16 @@ static void cursor_button(struct wl_listener *listener, void *data)
 	}
 	// a press raises and focuses what's under it
 	if (view) {
+		if (server->switching)
+			switch_end(server, false);
 		view_focus(view);
+		if (!surface)
+			frame_pressed(server, view, event->button, event->time_msec);
 	} else if (owner && owner->kind == NODE_LAYER) {
 		struct layer_surface *ls = (struct layer_surface *)owner;
 		if (ls->layer_surface->current.keyboard_interactive != ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE)
 			input_focus_surface(server, ls->layer_surface->surface);
-	} else if (owner && owner->kind == NODE_LOCK) {
+	} else if (owner && owner->kind == NODE_LOCK && surface) {
 		input_focus_surface(server, surface);
 	}
 }
@@ -546,7 +772,7 @@ void input_init(struct server *server)
 
 	server->seat = wlr_seat_create(server->display, "seat0");
 	server->kbd_group = wlr_keyboard_group_create();
-	set_default_keymap(&server->kbd_group->keyboard);
+	settings_apply_keyboard(server, &server->kbd_group->keyboard);
 	server->group_kbd = listen_keyboard(server, &server->kbd_group->keyboard, false);
 #ifndef WAYLAND95_TEST_BREAK_FOCUS
 	wlr_seat_set_keyboard(server->seat, &server->kbd_group->keyboard);

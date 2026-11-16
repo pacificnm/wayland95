@@ -1,3 +1,9 @@
+wayland95 (0.1.3) trixie; urgency=medium
+
+  * Add/Remove Programs > Updates says when Wayland 95 can't be updated from there, and can add the update source.
+
+ -- Wayland 95 <wayland95@localhost>  Sun, 15 Nov 2026 19:03:29 -0500
+
 wayland95 (0.1.2) trixie; urgency=medium
 
   * Crash handling: problem reports, the desktop restarts after a crash, Control Panel > Problem Reports.

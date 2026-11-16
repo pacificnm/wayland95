@@ -23,6 +23,34 @@
             },
             "presentation": { "panel": "dedicated", "reveal": "always" }
         },
+        {
+            "label": "Nested: new wlroots desktop",
+            "type": "shell",
+            "command": "tests/nested/run.sh new-desktop",
+            "dependsOn": "Build",
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": { "regexp": "^__never__$" },
+                "background": { "activesBegin": true, "beginsPattern": "Nested wlroots desktop on", "endsPattern": "WAYLAND_DISPLAY=" }
+            },
+            "presentation": { "panel": "dedicated", "reveal": "always" }
+        },
+        {
+            "label": "Tests: run all (headless)",
+            "type": "shell",
+            "command": "tests/run.sh",
+            "dependsOn": "Build",
+            "problemMatcher": [],
+            "presentation": { "panel": "dedicated", "reveal": "always" }
+        },
+        {
+            "label": "Tests: self-test (broken builds must fail)",
+            "type": "shell",
+            "command": "tests/selftest.sh",
+            "dependsOn": "Build",
+            "problemMatcher": [],
+            "presentation": { "panel": "dedicated", "reveal": "always" }
+        },
         { "label": "Nested: Chromium (test page)", "type": "shell", "command": "tests/nested/run.sh chromium", "problemMatcher": [] },
         { "label": "Nested: Firefox (test page)", "type": "shell", "command": "tests/nested/run.sh firefox", "problemMatcher": [] },
         { "label": "Nested: VS Code", "type": "shell", "command": "tests/nested/run.sh vscode", "problemMatcher": [] },

@@ -184,6 +184,15 @@ install(TARGETS win95compositor RUNTIME DESTINATION bin)
 # Each lives in apps/<name>/ as its own Wayland client executable, built into
 # the same output directory as win95compositor so the shell can launch it.
 
+# the wlroots compositor (being built: docs/migration.md)
+pkg_check_modules(WLROOTS_FOUND_CHECK QUIET wlroots-0.18)
+if(WLROOTS_FOUND_CHECK_FOUND)
+    add_subdirectory(compositor)    # wayland95-compositor
+    add_subdirectory(tests/tools)   # w95input... (tests/run.sh)
+else()
+    message(STATUS "wlroots 0.18 not found: skipping wayland95-compositor (sudo apt install libwlroots-0.18-dev)")
+endif()
+
 add_subdirectory(apps/common)   # Win95Ui shared QML controls
 add_subdirectory(apps/files)    # win95files
 add_subdirectory(apps/notepad)  # win95notepad

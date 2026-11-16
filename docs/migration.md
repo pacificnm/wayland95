@@ -17,6 +17,29 @@ and the results are recorded here.
 | 5 | Session, package, ISO: session script, libseat, `.deb`, live image; "Wayland 95 (classic)" kept as a second session | VM boot test; full `tests/run.sh`; nested check by hand | not started |
 | 6 | Switch: the wlroots desktop becomes "Wayland 95"; publish; then remove the Qt compositor | a release with both sessions has been used on the Optiplex and this machine without regressions | not started |
 
+## Phase results
+
+**Phase 1** (2026-11-16): `compositor/` (main, output, input, xdg) and the
+harness: `tests/run.sh`, `tests/tools/w95input` (virtual pointer), `wtype`,
+`grim`, the test page `tests/nested/clicktest.html`.
+- `tests/run.sh`: 14 of 14 checks pass, three runs in a row: a link click,
+  wheel down and up (Chromium scrolls; the Qt compositor needed a
+  workaround), a link after a shaky click (link drag), the drop-down list
+  (clicked, hovered then clicked, drawn under its box), a link after it,
+  the page menu (Back), no stuck button after clicking a menu's edge or
+  dismissing a menu, a link while a tooltip shows, typing, and the page
+  drawn where its clicks land. All with no workarounds in the compositor.
+- `tests/selftest.sh`: the real build passes everything; a build without
+  pointer frames fails exactly the two wheel checks; a build without the
+  always-present keyboard fails exactly the typing check.
+- Found and fixed by the tests: keyboard focus needs a keyboard with a
+  keymap from the start (Chromium crashed otherwise, and typed keys were
+  lost); fixed with a permanent keyboard group, as sway does.
+- Nested on the real GPU (Intel, GLES2): works through the X11 server of
+  the current (Qt) session, which has no linux-dmabuf for wlroots to use
+  directly; Chromium then uses `linux-dmabuf` v4 GPU buffers (it can't on
+  the Qt compositor). `tests/nested/run.sh new-desktop` does this.
+
 ## What changes for users
 
 - Nothing until phase 5: the update channel keeps delivering the Qt

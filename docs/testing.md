@@ -54,6 +54,11 @@ just that no error appeared. Suites:
 `tests/run.sh` runs everything and prints PASS/FAIL per check with what was
 expected and what happened; `tests/run.sh input` runs one suite.
 
+`tests/selftest.sh` tests the tests: it builds deliberately broken
+compositors (each reintroducing a real bug we've had) and checks that each
+fails exactly the checks meant to catch it, and that the real build passes.
+A new kind of check gets a broken build to prove it, where that's possible.
+
 ## 2. Nested, on your screen (VS Code)
 
 `tests/nested/run.sh` (VS Code: Terminal > Run Task > "Nested: ...")
@@ -62,7 +67,10 @@ runs the compositor as a window on your desktop, with the GPU, real
 programs inside it with throwaway profiles. This is where things are
 looked at and tried by hand, and where GPU-only problems show (black or
 torn windows, dmabuf formats). The input trace logs every press, release
-and wheel turn.
+and wheel turn. `tests/nested/run.sh new-desktop` (VS Code task "Nested:
+new wlroots desktop") runs the wlroots compositor the same way; inside the
+Qt compositor's session it nests through Xwayland, since that session can't
+give wlroots the GPU directly.
 
 ## 3. The real session, in a virtual machine
 

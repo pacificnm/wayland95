@@ -11,6 +11,7 @@ select{margin:20px;font-size:20px}
 <script>
 for (const t of ['mousedown','mouseup','click','dragstart','dragend','contextmenu'])
   document.addEventListener(t, e => console.log('EVT', t, e.clientX, e.clientY, e.target.id || e.target.tagName, 'buttons=' + e.buttons));
+document.addEventListener('keydown', e => console.log('EVT key', e.key));
 document.getElementById('sel').addEventListener('change', e => console.log('EVT selected', e.target.value));
 for (const id of ["link1","link2","sel","link3"]) { const r = document.getElementById(id).getBoundingClientRect(); console.log("EVT rect", id, Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)); }
 document.addEventListener('wheel', e => console.log('EVT wheel', e.deltaY, e.deltaMode)); let st; window.addEventListener('scroll', () => { clearTimeout(st); st = setTimeout(() => console.log('EVT scrolled', Math.round(window.scrollY)), 150); });

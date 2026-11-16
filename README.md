@@ -63,6 +63,18 @@ cmake -B build
 cmake --build build -j$(nproc)
 ```
 
+For the new wlroots compositor ([docs/migration.md](docs/migration.md)) and
+its tests, also:
+
+```sh
+sudo apt-get install libwlroots-0.18-dev libseat-dev libcairo2-dev libpango1.0-dev \
+    qt6-wayland-private-dev hwdata grim wlrctl wtype imagemagick
+tests/run.sh        # the automated tests (headless; docs/testing.md)
+tests/selftest.sh   # checks the tests catch deliberately broken builds
+```
+
+Without wlroots the build skips `wayland95-compositor` and the test tools.
+
 ## Switching windows
 
 - **Alt+Tab**, like Win95's: hold Alt and press Tab for a box of the open

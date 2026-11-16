@@ -545,6 +545,54 @@ QVariantMap SoftwareCenter::toVariant(const Program &p)
 // ---------------------------------------------------------------------------
 // SoftwareCenter
 
+#ifndef WAYLAND95_UPDATES_URL
+#define WAYLAND95_UPDATES_URL "https://pacificnm.github.io/wayland95"
+#endif
+
+QString SoftwareCenter::desktopUpdates() const
+{
+    if (!QFileInfo::exists(QStringLiteral("/var/lib/dpkg/info/wayland95.list")))
+        return QStringLiteral("source");
+    // any apt source naming the update repository
+    QStringList files{ QStringLiteral("/etc/apt/sources.list") };
+    const QDir dir(QStringLiteral("/etc/apt/sources.list.d"));
+    for (const QString &f : dir.entryList({ QStringLiteral("*.list"), QStringLiteral("*.sources") }, QDir::Files))
+        files << dir.filePath(f);
+    for (const QString &path : std::as_const(files)) {
+        QFile f(path);
+        if (f.open(QIODevice::ReadOnly) && f.readAll().contains(WAYLAND95_UPDATES_URL))
+            return QStringLiteral("package");
+    }
+    return QStringLiteral("no-source");
+}
+
+void SoftwareCenter::setUpDesktopUpdates()
+{
+    const QString pkexec = QStandardPaths::findExecutable(QStringLiteral("pkexec"));
+    QString helper = QStringLiteral(WAYLAND95_SERVICES_HELPER);
+    if (!QFileInfo::exists(helper))
+        helper = QStringLiteral(WAYLAND95_SERVICES_HELPER_SRC);
+    if (pkexec.isEmpty()) {
+        emit desktopUpdatesSetUp(false, QStringLiteral("pkexec isn't installed (sudo apt install pkexec)."));
+        return;
+    }
+    auto *p = new QProcess(this);
+    p->setProcessChannelMode(QProcess::MergedChannels);
+    connect(p, &QProcess::finished, this, [this, p](int code, QProcess::ExitStatus st) {
+        const QString out = QString::fromUtf8(p->readAll()).trimmed();
+        p->deleteLater();
+        emit desktopUpdatesChanged();
+        if (st == QProcess::NormalExit && code == 0) {
+            emit desktopUpdatesSetUp(true, QString());
+            checkUpdates(true);
+        } else {
+            emit desktopUpdatesSetUp(false, code == 126 || code == 127
+                                     ? QStringLiteral("You need an administrator's password to change this.") : out);
+        }
+    });
+    p->start(pkexec, { helper, QStringLiteral("update-source") });
+}
+
 SoftwareCenter::SoftwareCenter(QObject *parent)
     : QObject(parent)
 {

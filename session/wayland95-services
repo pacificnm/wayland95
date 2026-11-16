@@ -8,6 +8,7 @@
 #   ssh-config            < Port= PasswordAuthentication= PermitRootLogin= ...
 #   pg-config             < listen= port= max_connections= remote=
 #   pg-role NAME [superuser]
+#   update-source         Wayland 95's update repository, for apt
 set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
@@ -174,7 +175,21 @@ SELECT format('CREATE DATABASE %I OWNER %I', :'role', :'role')
 SQL
     ;;
 
+update-source)
+    # installs made before the repository existed lack it (the wayland95
+    # package adds this same file once it's there)
+    [ -f /usr/share/keyrings/wayland95-archive-keyring.gpg ] || die "Wayland 95's signing key is missing (/usr/share/keyrings/wayland95-archive-keyring.gpg)."
+    printf '%s\n' \
+        "# Wayland 95's updates (the wayland95 package): installed by it, so apt," \
+        "# Add/Remove Programs > Updates and the update notice find new versions." \
+        "Types: deb" \
+        "URIs: https://pacificnm.github.io/wayland95" \
+        "Suites: stable" \
+        "Components: main" \
+        "Signed-By: /usr/share/keyrings/wayland95-archive-keyring.gpg" | put /etc/apt/sources.list.d/wayland95.sources
+    ;;
+
 *)
-    die "usage: wayland95-services unit|ssh-config|pg-config|pg-role ..."
+    die "usage: wayland95-services unit|ssh-config|pg-config|pg-role|update-source ..."
     ;;
 esac

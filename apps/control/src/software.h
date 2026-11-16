@@ -71,6 +71,11 @@ class SoftwareCenter : public QObject
     Q_PROPERTY(bool packageKit READ packageKit CONSTANT)
     Q_PROPERTY(QString packageSource READ packageSource CONSTANT) // "Debian", "Fedora"...
     Q_PROPERTY(bool flatpak READ flatpak CONSTANT)
+    // how Wayland 95 itself gets updates here: "package" (the wayland95
+    // package, with its update source), "no-source" (the package, but apt
+    // doesn't know the update repository: ISOs from before it existed), or
+    // "source" (built and installed with install.sh: not a package at all)
+    Q_PROPERTY(QString desktopUpdates READ desktopUpdates NOTIFY desktopUpdatesChanged)
     Q_PROPERTY(QStringList flatpakRemotes READ flatpakRemotes NOTIFY catalogChanged)
     // installed programs: [{ key, source, id, name, summary, icon, version, installation }]
     Q_PROPERTY(QVariantList programs READ programs NOTIFY programsChanged)
@@ -95,6 +100,9 @@ public:
     bool packageKit() const { return m_packageKit; }
     QString packageSource() const { return m_packageSource; }
     bool flatpak() const { return !m_flatpakBin.isEmpty(); }
+    QString desktopUpdates() const;
+    // adds the update repository to apt (as root, through wayland95-services)
+    Q_INVOKABLE void setUpDesktopUpdates();
     QStringList flatpakRemotes() const { return m_remotes; }
     QVariantList programs() const { return m_programs; }
     bool loading() const { return m_loading > 0; }
@@ -136,6 +144,8 @@ public:
 
 signals:
     void programsChanged();
+    void desktopUpdatesChanged();
+    void desktopUpdatesSetUp(bool ok, const QString &message);
     void loadingChanged();
     void catalogChanged();
     void updatesChanged();

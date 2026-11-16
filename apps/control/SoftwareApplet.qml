@@ -152,7 +152,7 @@ PropertySheet {
             id: updateList
             y: 64
             width: parent.width
-            height: parent.height - y - installUpdates.height - 10
+            height: parent.height - y - installUpdates.height - 10 - (desktopNote.visible ? desktopNote.height + 8 : 0)
             model: Software.updates
             checkable: true
             checked: {
@@ -171,6 +171,40 @@ PropertySheet {
                 var u = Object.assign({}, updatesPage.unchecked);
                 if (on) delete u[key]; else u[key] = true;
                 updatesPage.unchecked = u;
+            }
+        }
+
+        // when Wayland 95 itself can't be updated from here, say why
+        Item {
+            id: desktopNote
+            visible: Software.desktopUpdates !== "package"
+            y: updateList.y + updateList.height + 6
+            width: parent.width
+            height: 46
+            AppletIcon { size: 16; kind: "updates"; y: 1 }
+            Label {
+                x: 22
+                width: parent.width - x - (setUpButton.visible ? setUpButton.width + 8 : 0)
+                text: Software.desktopUpdates === "source"
+                      ? "Wayland 95 itself was installed from its source code (install.sh), so it isn't updated here. "
+                        + "To update it, get the latest source and run install.sh again."
+                      : "This computer doesn't know where Wayland 95's own updates are, so it won't find them. "
+                        + "Click Set Up to add the Wayland 95 update source."
+            }
+            Button95 {
+                id: setUpButton
+                visible: Software.desktopUpdates === "no-source"
+                anchors.right: parent.right
+                width: 70
+                text: "Set <u>U</u>p"
+                onClicked: Software.setUpDesktopUpdates()
+            }
+            Connections {
+                target: Software
+                function onDesktopUpdatesSetUp(ok, message) {
+                    if (!ok)
+                        sheet.messageBox.show("Wayland 95 Update", message || "The update source couldn't be added.", "error", ["OK"]);
+                }
             }
         }
 

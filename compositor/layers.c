@@ -50,16 +50,21 @@ void layers_arrange(struct server *server)
 		view_arrange_all(server);
 }
 
-// keyboard: an exclusive panel takes it, and gives it back when it goes
+// keyboard: an exclusive panel takes it, and gives it back when it goes.
+// With several (a message box over the Run dialog), the one on top: the
+// highest layer, and in it the most recently shown.
 static void update_keyboard(struct server *server)
 {
 	struct layer_surface *found = NULL, *ls;
 	wl_list_for_each(ls, &server->layer_surfaces, link) {
 		struct wlr_layer_surface_v1 *l = ls->layer_surface;
-		if (l->surface->mapped
-				&& l->current.keyboard_interactive == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE
-				&& (l->current.layer == ZWLR_LAYER_SHELL_V1_LAYER_TOP
-					|| l->current.layer == ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY))
+		if (!l->surface->mapped
+				|| l->current.keyboard_interactive != ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE
+				|| (l->current.layer != ZWLR_LAYER_SHELL_V1_LAYER_TOP
+					&& l->current.layer != ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY))
+			continue;
+		if (!found || l->current.layer > found->layer_surface->current.layer
+				|| (l->current.layer == found->layer_surface->current.layer && ls->map_seq > found->map_seq))
 			found = ls;
 	}
 	if (found == server->exclusive_layer)
@@ -79,6 +84,7 @@ static void update_keyboard(struct server *server)
 static void layer_map(struct wl_listener *listener, void *data)
 {
 	struct layer_surface *ls = wl_container_of(listener, ls, map);
+	ls->map_seq = ++ls->server->layer_map_seq;
 	layers_arrange(ls->server);
 	update_keyboard(ls->server);
 	input_refresh_pointer(ls->server);

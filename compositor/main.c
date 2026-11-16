@@ -38,6 +38,39 @@ static void usage(const char *argv0)
 	fprintf(stderr, "usage: %s [--socket NAME] [--headless WIDTHxHEIGHT] [--run COMMAND]\n", argv0);
 }
 
+static void stop_listening(struct server *s)
+{
+	struct wl_listener *listeners[] = {
+		&s->new_output, &s->new_input, &s->new_layer_surface,
+		&s->new_xdg_toplevel, &s->new_xdg_popup, &s->new_xdg_decoration,
+		&s->cursor_motion, &s->cursor_motion_absolute, &s->cursor_button, &s->cursor_axis,
+		&s->cursor_frame, &s->swipe_begin, &s->swipe_update, &s->swipe_end, &s->pinch_begin,
+		&s->pinch_update, &s->pinch_end, &s->hold_begin, &s->hold_end,
+		&s->new_virtual_pointer, &s->new_virtual_keyboard, &s->new_constraint,
+		&s->request_set_cursor, &s->request_set_selection, &s->request_set_primary_selection,
+		&s->request_start_drag, &s->start_drag, &s->request_set_shape,
+	};
+	for (size_t i = 0; i < sizeof listeners / sizeof listeners[0]; ++i)
+		wl_list_remove(&listeners[i]->link);
+	if (s->active_constraint)
+		wl_list_remove(&s->active_constraint_destroy.link);
+	if (s->lock) { // a lock screen still up
+		wl_list_remove(&s->lock_new_surface.link);
+		wl_list_remove(&s->lock_unlock.link);
+		wl_list_remove(&s->lock_destroy.link);
+	}
+	protocols_finish(s);
+	if (s->settings_source)
+		wl_event_source_remove(s->settings_source);
+}
+
+static int stop(int signal, void *data)
+{
+	wlr_log(WLR_INFO, "signal %d: stopping", signal);
+	wl_display_terminate(data);
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	const char *socket_name = NULL;
@@ -167,6 +200,13 @@ int main(int argc, char *argv[])
 	}
 
 	setenv("WAYLAND_DISPLAY", socket, true);
+	// the shell ends the desktop (Start > Shut Down > exit) by asking this
+	// process to stop; SIGTERM and SIGINT stop it cleanly
+	char pid[16];
+	snprintf(pid, sizeof pid, "%d", (int)getpid());
+	setenv("WAYLAND95_COMPOSITOR_PID", pid, true);
+	wl_event_loop_add_signal(server.event_loop, SIGTERM, stop, server.display);
+	wl_event_loop_add_signal(server.event_loop, SIGINT, stop, server.display);
 	// DISPLAY is Xwayland's (xwayland.c), started when an X11 program connects
 	fprintf(stderr, "wayland95-compositor: WAYLAND_DISPLAY=%s DISPLAY=%s\n", socket,
 			getenv("DISPLAY") ? getenv("DISPLAY") : "");
@@ -188,9 +228,15 @@ int main(int argc, char *argv[])
 
 	wl_display_run(server.display);
 
-	if (server.xwayland)
-		wlr_xwayland_destroy(server.xwayland);
+	// shutting down: programs first (their windows go), then everything
+	// that listens to wlroots' objects stops (wlroots checks), then those
 	wl_display_destroy_clients(server.display);
+	if (server.xwayland) {
+		wl_list_remove(&server.xwayland_ready.link);
+		wl_list_remove(&server.new_xwayland_surface.link);
+		wlr_xwayland_destroy(server.xwayland);
+	}
+	stop_listening(&server);
 	wlr_scene_node_destroy(&server.scene->tree.node);
 	wlr_xcursor_manager_destroy(server.cursor_mgr);
 	wlr_cursor_destroy(server.cursor);

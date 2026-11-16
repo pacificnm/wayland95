@@ -56,9 +56,13 @@ QtObject {
             anchors.fill: parent
             popupParent: shell.popupArea
             tipParent: shell.tipArea
-            onRunRequested: console.info("win95shell: Run comes in step 4b")
-            onShutDownRequested: console.info("win95shell: Shut Down comes in step 4b")
-            onHelpRequested: console.info("win95shell: Help comes in step 4b")
+            onRunRequested: runDialog.open()
+            onShutDownRequested: shutDownDialog.open()
+            onHelpRequested: shellMessage.show("Wayland 95",
+                "Wayland 95\n\nA Windows 95-style desktop for Wayland, built with Qt.\n\n"
+                + "Programs started from the Start menu connect to WAYLAND_DISPLAY=" + ShellSession.socketName
+                + (ShellSession.x11Display ? ", and X11 programs to DISPLAY=" + ShellSession.x11Display : "")
+                + ".", "info", ["OK"])
         }
     }
 
@@ -111,6 +115,43 @@ QtObject {
         }
     }
     readonly property Item tipArea: tipArea
+
+    // --- the Start menu's dialogs (as on the Qt compositor: Main.qml) -------
+    property Window runLayer: DialogLayer {
+        showing: runDialog.visible
+        RunDialog {
+            id: runDialog
+            onFailed: (command, message) => shellMessage.show(command, message, "error", ["OK"],
+                                                              runDialog.refocus)
+        }
+    }
+    property Window shutDownLayer: DialogLayer {
+        showing: shutDownDialog.visible
+        ShutDownDialog {
+            id: shutDownDialog
+            onChosen: (option) => {
+                console.info("win95shell: Shut Down:", option);
+                if (option === "standby") {
+                    Ui.Power.suspend();
+                } else if (option === "hibernate") {
+                    Ui.Power.hibernate();
+                } else {
+                    Ui.Wayland95Settings.playSound("exit");
+                    if (option === "shutdown")
+                        Ui.Power.powerOff();
+                    else if (option === "restart")
+                        Ui.Power.reboot();
+                    else
+                        ShellSession.exitDesktop();
+                }
+            }
+        }
+    }
+    // (created after the others: a message over the Run dialog is on top)
+    property Window messageLayer: DialogLayer {
+        showing: shellMessage.visible
+        Ui.MessageBox95 { id: shellMessage }
+    }
 
     // the "Start Wayland 95" sound
     Component.onCompleted: Ui.Wayland95Settings.playSound("startup")

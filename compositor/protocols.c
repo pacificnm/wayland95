@@ -329,3 +329,18 @@ void protocols_init(struct server *server)
 	server->lock_cover = wlr_scene_rect_create(server->layer_lock, 0, 0, black);
 	wlr_scene_node_set_enabled(&server->lock_cover->node, false);
 }
+
+// at shutdown: wlroots requires everyone to stop listening to its objects
+// before they go
+void protocols_finish(struct server *server)
+{
+	wl_list_remove(&server->new_idle_inhibitor.link);
+	wl_list_remove(&activate_listener.link);
+	wl_list_remove(&server->new_shortcuts_inhibitor.link);
+	wl_list_remove(&server->output_manager_apply.link);
+	wl_list_remove(&server->output_manager_test.link);
+	wl_list_remove(&server->layout_change.link);
+	wl_list_remove(&output_power_listener.link);
+	wl_list_remove(&gamma_listener.link);
+	wl_list_remove(&server->new_lock.link);
+}

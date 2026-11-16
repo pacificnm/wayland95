@@ -6,6 +6,7 @@
 #include <QDBusReply>
 #include <QDBusVariant>
 #include <QDir>
+#include <QDebug>
 #include <QFile>
 #include <QGuiApplication>
 
@@ -203,8 +204,21 @@ void PowerManager::changeBrightness(int deltaPercent)
     setBrightness(m_brightness + deltaPercent);
 }
 
+// The automated tests run desktops inside your real session: with this set
+// (tests/run.sh does), nothing here suspends, powers off, restarts or ends
+// the session; it only says what it would have done.
+static bool powerActionsOff(const QString &what)
+{
+    if (!qEnvironmentVariableIsSet("WAYLAND95_NO_POWER_ACTIONS"))
+        return false;
+    qInfo().noquote() << "Power: would" << what << "(WAYLAND95_NO_POWER_ACTIONS)";
+    return true;
+}
+
 void PowerManager::logindCall(const QString &method)
 {
+    if (powerActionsOff(method))
+        return;
     QDBusMessage call = QDBusMessage::createMethodCall(Logind, LogindPath, LogindManager, method);
     call << false; // not interactive: polkit decides, no password prompt
     bus().asyncCall(call);
@@ -217,6 +231,8 @@ void PowerManager::reboot() { logindCall(QStringLiteral("Reboot")); }
 
 void PowerManager::logOff()
 {
+    if (powerActionsOff(QStringLiteral("TerminateSession")))
+        return;
     const QString session = qEnvironmentVariable("XDG_SESSION_ID");
     if (session.isEmpty())
         return;

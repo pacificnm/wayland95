@@ -153,6 +153,27 @@ Qt compositor passes what it used before, so it's unchanged there).
   the desktop's own keys such as Ctrl+Esc (4c), the shell starting with the
   compositor (4e; for now `--run`, as `tests/nested/run.sh new-desktop` does).
 
+**Phase 4, step 4b, first part** (2026-11-16): Start > Run, Help and Shut
+Down in win95shell. The dialogs are the Qt compositor's, each in a
+full-screen overlay panel (`shell/qml/DialogLayer.qml`) that has the
+keyboard while it shows, so they look and behave as before (Shut Down
+darkens the screen; a Run error appears over the Run dialog).
+- "Close all programs and exit Wayland 95" ends the compositor: it tells
+  the shell its process id (`WAYLAND95_COMPOSITOR_PID`) and now stops
+  cleanly on SIGTERM/SIGINT. That showed it had never shut down cleanly:
+  wlroots aborted because the compositor still listened to its objects;
+  it now lets go of them first.
+- With two panels wanting the keyboard (a message over the Run dialog),
+  the compositor gives it to the one on top.
+- Safety: `WAYLAND95_NO_POWER_ACTIONS=1` (set by the tests) makes the
+  power manager only log what it would do. Without it, testing Shut Down's
+  "shut down" or "restart" would really turn off or restart the machine
+  running the tests, and the Control Panel's "log off" would end your
+  session (a test desktop inherits its id).
+- `tests/run.sh`: new `dialogs` suite, 16 checks; 193 of 193 pass, three
+  full runs in a row (two, plus the self-test's). `tests/selftest.sh`: the
+  real build passes everything, and all four breaks are caught.
+
 ## What changes for users
 
 - Nothing until phase 5: the update channel keeps delivering the Qt

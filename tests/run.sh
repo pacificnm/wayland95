@@ -7,7 +7,7 @@
 #
 #   tests/run.sh [SUITE...]        all suites, or some of: input (Chromium) firefox
 #                                  windows popups x11 clipboard qt frames alttab
-#                                  settings shell classic vscode
+#                                  settings shell dialogs classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
 #
@@ -27,6 +27,9 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/wayland95-tests.XXXXXX")
 # desktops started by the tests never register with the system's polkit or
 # NetworkManager (they'd answer for your real session)
 export WAYLAND95_NO_SYSTEM_AGENTS=1
+# and never suspend, power off, restart or end the session (they log what
+# they would have done instead: the Shut Down tests check that)
+export WAYLAND95_NO_POWER_ACTIONS=1
 PIDS=()
 pass=0
 fail=0
@@ -67,6 +70,7 @@ fresh() { # [WIDTHxHEIGHT]
     # its own settings (settings.ini), not the user's
     CONFIG=$WORK/config-$RUN; mkdir -p "$CONFIG/wayland95"
     XDG_CONFIG_HOME=$CONFIG "$COMPOSITOR" --socket "$SOCKET" --headless "$size" >"$CLOG" 2>&1 &
+    COMP_PID=$!
     PIDS+=($!)
     for _ in $(seq 50); do
         grep -q "WAYLAND_DISPLAY=$SOCKET" "$CLOG" 2>/dev/null && break
@@ -736,7 +740,11 @@ Layout=nosuchlayout"
 start_shell() {
     local home=$WORK/home-$RUN
     mkdir -p "$home"
+    # never without the guards: Shut Down must only say what it would do
+    [ "${WAYLAND95_NO_POWER_ACTIONS:-}" = 1 ] && [ "${WAYLAND95_NO_SYSTEM_AGENTS:-}" = 1 ] \
+        || { echo "refusing to start a shell without WAYLAND95_NO_POWER_ACTIONS" >&2; exit 2; }
     HOME=$home XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET DISPLAY=$XDISPLAY QT_NO_XDG_DESKTOP_PORTAL=1 \
+        WAYLAND95_COMPOSITOR_PID=$COMP_PID \
         dbus-run-session -- "$SHELL_BIN" >"$WORK/$SUITE-shell.log" 2>&1 &
     PIDS+=($!)
     for _ in $(seq 100); do
@@ -831,6 +839,60 @@ suite_shell() {
 }
 
 
+
+# --- the Start menu's dialogs: Run, Help, Shut Down ----------------------------------
+start_menu() { pointer click:$START_X,$TASKBAR_Y wait:0.6 "$@" wait:0.8; }
+shell_said() { grep -q "$1" "$WORK/$SUITE-shell.log"; }
+suite_dialogs() {
+    say "dialogs: Run, Help and Shut Down (win95shell)"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    start_shell || return
+    away; shot empty
+
+    # Run: a program by name
+    start_menu key:r; away; shot run
+    expect_pixel "Start > Run opens the Run dialog (centred)" run 500 440 c0c0c0
+    pointer type:win95notepad key:Return
+    for _ in $(seq 20); do [ "$(windows_of win95notepad)" -ge 1 ] && break; sleep 0.5; done
+    [ "$(windows_of win95notepad)" -ge 1 ]; expect_true $? "typing a program's name and Enter starts it" "$(query list | tr '\n' ' ')"
+    away; shot run-done
+    expect_pixel "and the dialog closes" run-done 700 440 008080
+    query close "$(query list | sed -n 's/^\([^|]*\)|win95notepad|.*/\1/p' | head -1)"; sleep 0.8
+
+    # a Run error: a message over the dialog, with the keyboard
+    start_menu key:r; pointer type:nosuchprogram key:Return wait:0.8; away; shot run-error
+    differs run run-error 400 60 440 360; expect_true $? "a program that doesn't exist: a message over the dialog" "nothing changed"
+    shell_said 'program not found: "nosuchprogram"'; expect_true $? "(the shell's log says why)" "$(tail -3 "$WORK/$SUITE-shell.log")"
+    pointer key:Return wait:0.5; away; shot run-again
+    expect_pixel "Enter closes the message (it has the keyboard), the dialog stays" run-again 500 440 c0c0c0
+    pointer key:Escape wait:0.5; away; shot run-escaped
+    expect_pixel "and Escape closes the dialog (the keyboard is back with it)" run-escaped 500 440 008080
+
+    # Help
+    start_menu key:h; away; shot help
+    differs empty help 300 60 490 370; expect_true $? "Start > Help shows a message" "nothing changed"
+    pointer key:Return wait:0.5; away; shot help-closed
+    ! differs empty help-closed 300 60 490 370; expect_true $? "and Enter closes it" "it's still there"
+
+    # Shut Down (the guards make power choices only log what they'd do)
+    start_menu key:u key:u key:Return; away; shot shutdown
+    expect_color "Start > Shut Down darkens the screen" shutdown 100 300 004646
+    pointer key:Escape wait:0.5; away; shot shutdown-cancel
+    expect_pixel "Escape cancels it" shutdown-cancel 100 300 008080
+    start_menu key:u key:u key:Return; pointer key:s key:Return wait:0.8
+    shell_said "Power: would PowerOff"; expect_true $? "Shut down the computer: asks the system to power off" "$(grep Power "$WORK/$SUITE-shell.log")"
+    start_menu key:u key:u key:Return; pointer key:r key:Return wait:0.8
+    shell_said "Power: would Reboot"; expect_true $? "Restart: asks the system to restart" "$(grep Power "$WORK/$SUITE-shell.log")"
+    kill -0 "$COMP_PID" 2>/dev/null; expect_true $? "(the desktop is still running: nothing really happened)" "it stopped"
+    start_menu key:u key:u key:Return; pointer key:c key:Return
+    for _ in $(seq 20); do kill -0 "$COMP_PID" 2>/dev/null || break; sleep 0.25; done
+    ! kill -0 "$COMP_PID" 2>/dev/null; expect_true $? "Close all programs and exit: the desktop ends" "the compositor still runs"
+    local st; wait "$COMP_PID" 2>/dev/null; st=$?
+    [ "$st" -eq 0 ] && grep -q "signal 15: stopping" "$CLOG" && ! grep -q "Assertion" "$CLOG"
+    expect_true $? "(cleanly: it stopped on its signal, exit status 0, no failed assertion)" "exit status $st: $(tail -2 "$CLOG")"
+}
+
 # --- the Qt compositor's desktop, as a window in this one ---------------------------
 # The taskbar, Start menu and tray QML is shared with win95shell; this checks
 # a change to it didn't break the Qt compositor's desktop (still the session
@@ -869,7 +931,7 @@ suite_classic() {
 }
 
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

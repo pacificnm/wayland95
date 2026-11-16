@@ -129,6 +129,7 @@ struct server {
 	struct wl_listener new_layer_surface;
 	struct wl_list layer_surfaces; // struct layer_surface.link
 	struct layer_surface *exclusive_layer; // has the keyboard exclusively
+	uint32_t layer_map_seq;
 
 	struct wlr_xwayland *xwayland;
 	struct wl_listener xwayland_ready;
@@ -266,6 +267,7 @@ struct layer_surface {
 	struct wlr_layer_surface_v1 *layer_surface;
 	struct wlr_scene_layer_surface_v1 *scene;
 	struct wl_listener map, unmap, commit, destroy, new_popup;
+	uint32_t map_seq; // when it was last shown (the newest is on top)
 };
 
 struct popup {
@@ -353,3 +355,4 @@ void layers_arrange(struct server *server);
 
 // protocols.c: everything else (idle, activation, lock, outputs, ...)
 void protocols_init(struct server *server);
+void protocols_finish(struct server *server);

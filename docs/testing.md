@@ -40,6 +40,7 @@ fresh compositor. The suites (`tests/run.sh SUITE`):
 | `frames` | Win95 frames on Qt windows: the bevel's colours pixel by pixel, active and inactive title gradients, the buttons drawn; clicking a title bar activates; moving by the title bar (exactly with the pointer); resizing from a corner, the left edge (right edge stays) and the grab zone outside the border; maximize (size, title at the top, drawing fills the rest), no moving while maximized, restore to the same place; double-click maximize and restore; minimize; a button pressed then left doesn't act, a held button looks pressed, close closes; GTK keeps its own title bar; X11 windows get the frame and its close works |
 | `alttab` | three Qt windows: Alt+Tab to the previous window, twice for two back, Alt+Shift+Tab the other way, Escape stays, the Tab never reaches the program, a minimized window can be picked (and is restored), typing afterwards, Alt+F4 closes only the active window |
 | `shell` | win95shell (with a throwaway home, settings and D-Bus session): the desktop and taskbar drawn; a maximized window stops above the taskbar; a button per window, the active one pressed in; a button activates, minimizes and restores its window (and the keyboard follows); a button's menu opens at the pointer, Maximize and Close by key; the Start menu opens, closes by Escape (keyboard back to the window) and by a click outside, a submenu by its letter, an entry starts its program; double-clicking My Computer opens it; the clock's tooltip shows above it, stays while the pointer moves (its layer takes no pointer) and goes |
+| `dialogs` | Start > Run: opens centred, a program by name starts and the dialog closes; a name that doesn't exist: a message over the dialog, with the keyboard, then back to the dialog; Help shows and closes; Shut Down darkens the screen, Escape cancels, "shut down" and "restart" ask the system (only logged, see below), "close all programs and exit" ends the desktop cleanly (exit status 0, no failed assertion) |
 | `classic` | the Qt compositor's desktop as a window in the new one, since the taskbar QML is shared: its desktop and taskbar, its Start menu just above the taskbar, Escape, the clock's tooltip, a taskbar button's menu at the pointer |
 | `settings` | settings.ini changes apply at once: title and face colours (written as QSettings does, and edited in place), the double-click time (a slow double-click counts only with a long interval), an unknown keyboard layout is reported and typing still works |
 | `vscode` | VS Code: opens the file, the wheel scrolls the editor, typing and Ctrl+S save it |
@@ -48,7 +49,11 @@ Each compositor gets its own empty config folder (`XDG_CONFIG_HOME`), so
 your own settings.ini (colour scheme, double-click time) never changes a
 result. Desktops started by the tests run on a D-Bus session of their own
 and with `WAYLAND95_NO_SYSTEM_AGENTS=1`, so they never answer polkit or
-NetworkManager for your real session.
+NetworkManager for your real session, and `WAYLAND95_NO_POWER_ACTIONS=1`,
+so Shut Down's choices (power off, restart, stand by, hibernate, ending
+the session) only log what they would do: a test desktop inherits your
+session's id, and must never end it or turn the computer off. The tests
+refuse to start a shell without both.
 
 Not covered headless: the keyboard layout and repeat (they apply to real
 keyboards; the tests' virtual keyboard brings its own keymap) and touchpad

@@ -10,6 +10,7 @@ qt_add_executable(win95shell
     main.cpp
     layershell.h layershell.cpp
     toplevels.h toplevels.cpp
+    session.h session.cpp
     # services shared with the Qt compositor
     ${CMAKE_SOURCE_DIR}/src/launcher.h ${CMAKE_SOURCE_DIR}/src/launcher.cpp
     ${CMAKE_SOURCE_DIR}/src/programmenu.h ${CMAKE_SOURCE_DIR}/src/programmenu.cpp
@@ -40,6 +41,7 @@ set(shared_qml
     DesktopIcons.qml DesktopBackground.qml Theme.qml MenuIcon.qml
     Tray.qml TrayIcon.qml ClockTray.qml NotificationsTray.qml VolumeTray.qml
     NetworkTray.qml BluetoothTray.qml BatteryTray.qml
+    RunDialog.qml ShutDownDialog.qml
 )
 set(qml_paths)
 foreach(f ${shared_qml})
@@ -48,8 +50,10 @@ foreach(f ${shared_qml})
     list(APPEND qml_paths ${path})
 endforeach()
 set_source_files_properties(${CMAKE_SOURCE_DIR}/qml/Win95Shell/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
-set_source_files_properties(qml/Shell.qml PROPERTIES QT_RESOURCE_ALIAS Shell.qml)
-list(APPEND qml_paths qml/Shell.qml)
+foreach(f Shell.qml DialogLayer.qml)
+    set_source_files_properties(qml/${f} PROPERTIES QT_RESOURCE_ALIAS ${f})
+    list(APPEND qml_paths qml/${f})
+endforeach()
 
 qt_add_qml_module(win95shell
     URI Win95Shell

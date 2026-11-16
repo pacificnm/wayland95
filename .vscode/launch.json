@@ -1,0 +1,19 @@
+{
+    // Run and Debug: the nested desktop under the debugger (C/C++ extension).
+    // Programs then open in it with the "Nested: ..." tasks.
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug nested desktop",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/win95compositor",
+            "args": ["--wayland-socket-name", "win95-test"],
+            "cwd": "${workspaceFolder}",
+            "environment": [{ "name": "WAYLAND95_TRACE_INPUT", "value": "1" }],
+            "MIMode": "gdb",
+            "preLaunchTask": "Build",
+            "setupCommands": [{ "text": "-enable-pretty-printing", "ignoreFailures": true }]
+        }
+    ]
+}

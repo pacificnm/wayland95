@@ -1,4 +1,5 @@
 #include "inputfixes.h"
+#include "pointerframes.h"
 
 #include <algorithm>
 
@@ -7,6 +8,8 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QMouseEvent>
+#include <QWheelEvent>
+#include <qpa/qwindowsysteminterface.h>
 #include <QPointingDevice>
 #include <QQuickWindow>
 #include <QTimer>
@@ -73,14 +76,76 @@ static QWaylandQuickItem *surfaceItemAt(QQuickWindow *window, const QPointF &sce
     return window && window->contentItem() ? findSurfaceItem(window->contentItem(), scenePos) : nullptr;
 }
 
+void InputFixes::scheduleFrames()
+{
+    // the program the pointer is over now (and, after delivery, the one it's
+    // over then): both may have been sent events
+    auto noteFocus = [this] {
+        if (m_compositor && m_compositor->defaultSeat() && m_compositor->defaultSeat()->mouseFocus()
+            && m_compositor->defaultSeat()->mouseFocus()->surface())
+        {
+            QWaylandClient *c = m_compositor->defaultSeat()->mouseFocus()->surface()->client();
+            if (c && !m_frameClients.contains(c))
+                m_frameClients.append(c);
+        }
+    };
+    noteFocus();
+    if (m_framesPending)
+        return;
+    m_framesPending = true;
+    QTimer::singleShot(0, this, [this, noteFocus] {
+        m_framesPending = false;
+        noteFocus();
+        const auto clients = m_frameClients;
+        m_frameClients.clear();
+        for (const QPointer<QWaylandClient> &client : clients)
+            if (client)
+                sendPointerFrames(client);
+    });
+}
+
 bool InputFixes::eventFilter(QObject *watched, QEvent *event)
 {
+    switch (event->type()) {
+    case QEvent::MouseMove: case QEvent::MouseButtonPress: case QEvent::MouseButtonRelease:
+    case QEvent::MouseButtonDblClick: case QEvent::Wheel: case QEvent::Leave:
+        if (qobject_cast<QQuickWindow *>(watched))
+            scheduleFrames();
+        break;
+    default:
+        break;
+    }
+    if (event->type() == QEvent::Wheel) {
+        auto *window = qobject_cast<QQuickWindow *>(watched);
+        if (window && tracing()) {
+            auto *wheel = static_cast<QWheelEvent *>(event);
+            QWaylandQuickItem *under = surfaceItemAt(window, wheel->position());
+            qInfo().noquote() << QStringLiteral("input: wheel %1,%2 at %3,%4 (under it: %5)")
+                                 .arg(wheel->angleDelta().x()).arg(wheel->angleDelta().y())
+                                 .arg(wheel->position().x()).arg(wheel->position().y())
+                                 .arg(under && under->surface() ? describe(under->surface()) : QStringLiteral("the desktop"));
+        }
+        return false;
+    }
     if (event->type() != QEvent::MouseButtonPress && event->type() != QEvent::MouseButtonRelease)
         return false;
     auto *window = qobject_cast<QQuickWindow *>(watched);
     if (!window)
         return false;
     auto *mouse = static_cast<QMouseEvent *>(event);
+
+    // Testing only (WAYLAND95_TEST_WHEEL_BUTTONS=1): Qt's VNC backend drops
+    // the wheel, so a middle click stands for one notch down (with Shift:
+    // up), entering Qt the way a real mouse wheel's events do
+    static const bool wheelButtons = qEnvironmentVariableIntValue("WAYLAND95_TEST_WHEEL_BUTTONS") == 1;
+    if (wheelButtons && mouse->button() == Qt::MiddleButton) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            const int dy = (mouse->modifiers() & Qt::ShiftModifier) ? 120 : -120;
+            QWindowSystemInterface::handleWheelEvent(window, mouse->position(), mouse->globalPosition(),
+                                                     QPoint(), QPoint(0, dy));
+        }
+        return true;
+    }
 
     if (event->type() == QEvent::MouseButtonPress) {
         QWaylandQuickItem *target = surfaceItemAt(window, mouse->scenePosition());
@@ -110,6 +175,7 @@ bool InputFixes::eventFilter(QObject *watched, QEvent *event)
                 qInfo().noquote() << "input: the popup that was clicked closed before the release; sent the release to pid"
                                   << client->processId();
                 seat->sendMouseReleaseEvent(button);
+                sendPointerFrames(client);
             });
         }
         m_pressSurface = nullptr;

@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QQuickItem>
 #include <QtQmlIntegration/qqmlintegration.h>
 
@@ -75,6 +76,10 @@ private:
     void traceDelivered(QQuickWindow *window, const QString &what, const QPointF &scenePos);
     bool tracing() const;
     void placePopup(QQuickItem *popupItem);
+    // wl_pointer.frame after the events of one input event (pointerframes.h)
+    void scheduleFrames();
+    bool m_framesPending = false;
+    QList<QPointer<QWaylandClient>> m_frameClients;
 
     // the press in progress: the program's surface it went to
     QPointer<QWaylandSurface> m_pressSurface;

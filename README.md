@@ -624,6 +624,11 @@ Electron, GTK, Qt) in several places, and
   (Qt would otherwise hijack the next drag or keep the next release).
 - Sub-surfaces that existed before their window appeared are put where the
   program placed them, not at its top left corner.
+- **The mouse wheel**: Qt offers the seat at protocol version 4, without
+  pointer frames, and Chromium-based programs (Chrome, VS Code, other
+  Electron apps) only scroll when a frame arrives. The desktop offers
+  version 5 and ends each group of pointer events with a frame
+  ([src/pointerframes.cpp](src/pointerframes.cpp)).
 
 Each of these is logged as an `input:` line in `~/.wayland95-session.log`.
 To log every press and release too (where, which window, and the position
@@ -737,6 +742,19 @@ to validate this build), run a throwaway nested Weston first:
 weston --backend=x11-backend.so --width=1280 --height=900 &
 WAYLAND_DISPLAY=weston-0 QT_QPA_PLATFORM=wayland ./build/win95compositor
 ```
+
+## Testing with real programs (VS Code)
+
+[tests/nested/run.sh](tests/nested/run.sh) runs the desktop nested in a
+window, with input tracing on, and opens programs inside it with throwaway
+profiles: Chromium and Firefox on [a test page](tests/nested/clicktest.html)
+that logs every mouse event the browser gets, VS Code, xterm and xeyes (X11
+through Xwayland), and Wayland 95's Terminal. In VS Code these are tasks
+(Terminal > Run Task: "Nested: desktop", then "Nested: Chromium (test
+page)" and the others), and "Debug nested desktop" runs it under gdb. Logs
+go to `$XDG_RUNTIME_DIR/wayland95-test/`: `desktop.log` has the `input:`
+lines (where each press, release and wheel turn went), `chromium.log` the
+page's `EVT` lines (what the browser received).
 
 ## Bootable live system
 

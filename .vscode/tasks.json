@@ -1,0 +1,41 @@
+{
+    // Terminal > Run Task... (or Ctrl+Shift+B to build)
+    // "Nested: desktop" opens Wayland 95 in a window; the "Nested: ..." tasks
+    // open programs inside it. See tests/nested/run.sh.
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build",
+            "type": "shell",
+            "command": "cmake -S . -B build && cmake --build build -j$(nproc)",
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "Nested: desktop",
+            "type": "shell",
+            "command": "tests/nested/run.sh desktop",
+            "dependsOn": "Build",
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": { "regexp": "^__never__$" },
+                "background": { "activesBegin": true, "beginsPattern": "Nested desktop on", "endsPattern": "clients connect with" }
+            },
+            "presentation": { "panel": "dedicated", "reveal": "always" }
+        },
+        { "label": "Nested: Chromium (test page)", "type": "shell", "command": "tests/nested/run.sh chromium", "problemMatcher": [] },
+        { "label": "Nested: Firefox (test page)", "type": "shell", "command": "tests/nested/run.sh firefox", "problemMatcher": [] },
+        { "label": "Nested: VS Code", "type": "shell", "command": "tests/nested/run.sh vscode", "problemMatcher": [] },
+        { "label": "Nested: xterm (X11)", "type": "shell", "command": "tests/nested/run.sh xterm", "problemMatcher": [] },
+        { "label": "Nested: xeyes (X11)", "type": "shell", "command": "tests/nested/run.sh xeyes", "problemMatcher": [] },
+        { "label": "Nested: Wayland 95 Terminal", "type": "shell", "command": "tests/nested/run.sh terminal", "problemMatcher": [] },
+        {
+            "label": "Nested: input log",
+            "type": "shell",
+            "command": "tests/nested/run.sh log",
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": { "panel": "dedicated" }
+        }
+    ]
+}

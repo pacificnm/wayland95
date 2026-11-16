@@ -17,6 +17,7 @@ qt_add_executable(win95shell
     displaypower.h displaypower.cpp
     sessionlock.h sessionlock.cpp
     screensaverservice.h screensaverservice.cpp
+    screencopy.h screencopy.cpp
     # services shared with the Qt compositor
     ${CMAKE_SOURCE_DIR}/src/launcher.h ${CMAKE_SOURCE_DIR}/src/launcher.cpp
     ${CMAKE_SOURCE_DIR}/src/programmenu.h ${CMAKE_SOURCE_DIR}/src/programmenu.cpp
@@ -38,6 +39,7 @@ qt6_generate_wayland_protocol_client_sources(win95shell FILES
     ${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-foreign-toplevel-management-unstable-v1.xml
     ${CMAKE_SOURCE_DIR}/protocols/wayland95/wayland95-shell-v1.xml
     ${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-output-power-management-unstable-v1.xml
+    ${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-screencopy-unstable-v1.xml
     ${WAYLAND_PROTOCOLS_DIR}/staging/ext-idle-notify/ext-idle-notify-v1.xml
     ${WAYLAND_PROTOCOLS_DIR}/staging/ext-session-lock/ext-session-lock-v1.xml
 )
@@ -56,7 +58,7 @@ set(shared_qml
     NetworkTray.qml BluetoothTray.qml BatteryTray.qml
     RunDialog.qml ShutDownDialog.qml
     SystemNotices.qml NotificationPopup.qml LevelOsd.qml PasswordDialog.qml NetworkPasswordDialog.qml
-    UnlockDialog.qml
+    UnlockDialog.qml ScreenCapture.qml
 )
 set(qml_paths)
 foreach(f ${shared_qml})

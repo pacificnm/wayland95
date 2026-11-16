@@ -244,8 +244,78 @@ QtObject {
         case DesktopKeys.VolumeUp: levelOsd.changeVolume(0.05); break;
         case DesktopKeys.VolumeDown: levelOsd.changeVolume(-0.05); break;
         case DesktopKeys.VolumeMute: levelOsd.toggleMute(); break;
+        case DesktopKeys.Print: shell.printScreen(); break;
+        case DesktopKeys.Capture:
+            if (screenCapture.active)
+                screenCapture.close();
+            else
+                screenCapture.open();
+            break;
         default: shell.powerPolicy.key(key); break;
         }
+    }
+
+    // --- Print Screen and the screen capture tool (Ctrl+Shift+5) --------
+    // The tool is an overlay with the keyboard while it's open, gone while
+    // the picture is taken (screencopy: ScreenCopy); its thumbnail has a
+    // little panel of its own at the bottom right, so the desktop stays
+    // usable while it shows.
+    property Window captureLayer: Window {
+        LayerShell.layer: LayerShell.Overlay
+        LayerShell.anchors: LayerShell.AnchorTop | LayerShell.AnchorBottom | LayerShell.AnchorLeft | LayerShell.AnchorRight
+        LayerShell.exclusiveZone: -1
+        LayerShell.keyboard: LayerShell.KeyboardExclusive
+        LayerShell.scope: "capture"
+        title: "Screen Capture"
+        color: "transparent"
+        width: 640; height: 480
+        visible: (screenCapture.active || screenCapture.countdown > 0) && !screenCapture.capturing
+        Item {
+            width: Screen.width
+            height: Screen.height
+            ScreenCapture {
+                id: screenCapture
+                thumbParent: thumbArea
+                takePicture: function (r, destination) {
+                    shell.captureId = ScreenCopy.take(Qt.rect(r.x, r.y, r.width, r.height),
+                                                      destination === "Clipboard" ? "Clipboard" : ScreenCopy.folder(destination));
+                }
+                onWindowsWanted: ScreenCopy.listWindows()
+            }
+        }
+    }
+    property Window captureThumbLayer: Window {
+        LayerShell.layer: LayerShell.Overlay
+        LayerShell.anchors: LayerShell.AnchorBottom | LayerShell.AnchorRight
+        LayerShell.exclusiveZone: 0
+        LayerShell.marginRight: 16
+        LayerShell.marginBottom: 16
+        LayerShell.keyboard: LayerShell.KeyboardNone
+        LayerShell.scope: "capture-thumbnail"
+        title: "Screenshot"
+        color: "transparent"
+        width: Math.max(1, screenCapture.thumbWidth)
+        height: Math.max(1, screenCapture.thumbHeight)
+        visible: screenCapture.thumbShowing
+        Item { id: thumbArea; anchors.fill: parent }
+    }
+    property int captureId: 0
+    property int printId: 0
+    property Connections screenCopy: Connections {
+        target: ScreenCopy
+        function onTaken(id, path) {
+            if (id === shell.captureId) {
+                screenCapture.pictureTaken(path);
+            } else if (id === shell.printId) {
+                Ui.Wayland95Settings.playSound(path ? "notification" : "critical");
+                Notifications.notify("Wayland 95", path ? "Screenshot saved" : "The screenshot couldn't be saved",
+                                     path ? path : ScreenCopy.printFolder(), "", 1, 5000);
+            }
+        }
+        function onWindowsListed(windows) { screenCapture.windowRects = windows; }
+    }
+    function printScreen() {
+        shell.printId = ScreenCopy.take(Qt.rect(0, 0, 0, 0), ScreenCopy.printFolder());
     }
 
     // --- the screen saver ----------------------------------------------

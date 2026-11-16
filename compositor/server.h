@@ -362,5 +362,5 @@ void protocols_init(struct server *server);
 void protocols_finish(struct server *server);
 void shell_init(struct server *server);
 void shell_finish(struct server *server);
-uint32_t shell_key_for(xkb_keysym_t sym); // 0: not one of the shell's keys
+uint32_t shell_key_for(xkb_keysym_t sym, uint32_t modifiers); // 0: not one of the shell's keys
 bool shell_send_key(struct server *server, uint32_t key, bool pressed); // false: no shell

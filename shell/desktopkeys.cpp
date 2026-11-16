@@ -1,20 +1,25 @@
 #include "desktopkeys.h"
 
+#include <QGuiApplication>
 #include <cstdio>
 
-DesktopKeys::DesktopKeys(QObject *parent)
-    : QObject(parent)
-    , m_extension(new DesktopKeysExtension)
+ShellExtension *ShellExtension::instance()
 {
-    m_extension->setParent(this);
-    connect(m_extension, &DesktopKeysExtension::key, this, [this](uint key, bool down) {
+    static ShellExtension *extension = new ShellExtension;
+    return extension;
+}
+
+DesktopKeys::DesktopKeys(QObject *parent) : QObject(parent)
+{
+    ShellExtension *extension = ShellExtension::instance();
+    connect(extension, &ShellExtension::key, this, [this](uint key, bool down) {
         if (down)
             Q_EMIT pressed(int(key));
         else
             Q_EMIT released(int(key));
     });
-    connect(m_extension, &DesktopKeysExtension::activeChanged, this, [this] {
-        if (m_extension->isActive())
+    connect(extension, &ShellExtension::activeChanged, this, [this] {
+        if (ShellExtension::instance()->isActive())
             std::fprintf(stderr, "win95shell: the compositor sends the desktop's keys here\n");
         Q_EMIT activeChanged();
     });
@@ -22,5 +27,5 @@ DesktopKeys::DesktopKeys(QObject *parent)
 
 bool DesktopKeys::active() const
 {
-    return m_extension->isActive();
+    return ShellExtension::instance()->isActive();
 }

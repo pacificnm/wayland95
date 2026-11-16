@@ -8,6 +8,7 @@
 #   tests/run.sh [SUITE...]        all suites, or some of: input (Chromium) firefox
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
+#                                  capture
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -1340,6 +1341,70 @@ suite_power() {
     shell_said "Power: would Hibernate"; expect_true $? "and then it hibernates (only logged)" "$(grep Power: "$WORK/$SUITE-shell.log" | tail -2)"
 }
 
+# --- Print Screen and the screen capture tool ---------------------------------
+# The tool's toolbar (Ctrl+Shift+5) along the bottom: Entire Screen, Window,
+# Selection, then Options and Capture.
+newest() { ls -t "$1"/Screenshot*.png 2>/dev/null | head -1; }
+img_size() { magick "$1" -format "%wx%h" info: 2>/dev/null; }
+img_pixel() { magick "$1" -format "%[hex:p{$2,$3}]" info: 2>/dev/null | cut -c1-6 | tr 'A-F' 'a-f'; }
+suite_capture() {
+    say "capture: Print Screen and the screen capture tool (win95shell, screencopy)"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    start_probe A qt cc0000 || return
+    start_shell || return
+    query activate A; sleep 0.3
+    locate_probe A 240 228 || return
+    local home=$WORK/home-$RUN f n
+    n=$(pmark A)
+    pointer key:Print wait:1
+    f=$(newest "$home")
+    [ -n "$f" ] && [ "$(img_size "$f")" = 1280x800 ]; expect_true $? "Print Screen: a picture of the whole screen in the home folder (no Pictures folder)" "${f:-no file}: $(img_size "$f")"
+    [ "$(img_pixel "$f" 1200 400)" = 008080 ] && [ "$(img_pixel "$f" $((PX + 40)) $((PY + 40)))" = cc0000 ] && [ "$(img_pixel "$f" 640 790)" = c0c0c0 ]
+    expect_true $? "(what's on the screen: the desktop, the window, the taskbar)" "$(img_pixel "$f" 1200 400) $(img_pixel "$f" $((PX + 40)) $((PY + 40))) $(img_pixel "$f" 640 790)"
+    shell_said "notice from Wayland 95: Screenshot saved"; expect_true $? "(a notice says where)" "$(grep -i "screen" "$WORK/$SUITE-shell.log" | tail -2)"
+    pexpect_not "(the program didn't get the key)" A "$n" "key"
+    in_bus gdbus call --session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
+        --method org.freedesktop.Notifications.CloseNotification 1 >/dev/null 2>&1; sleep 0.5
+
+    away; shot empty
+    pointer key:ctrl+shift+5 wait:0.6; away; shot tool
+    differs empty tool 440 60 420 680; expect_true $? "Ctrl+Shift+5 opens the capture tool (its toolbar along the bottom)" "nothing changed"
+    pointer key:Escape wait:0.5; away; shot tool-closed
+    ! differs empty tool-closed 440 60 420 680; expect_true $? "Escape closes it" "it's still there"
+
+    # a selection (the middle of the screen at first), Return to take it
+    pointer key:ctrl+shift+5 wait:0.6 key:Return wait:1.2
+    f=$(newest "$home/Pictures")
+    [ -n "$f" ] && [ "$(img_size "$f")" = 640x400 ]; expect_true $? "Selection: Return takes the selected part, saved in Pictures" "${f:-no file}: $(img_size "$f")"
+    [ "$(img_pixel "$f" 600 380)" = 008080 ]; expect_true $? "(the picture has none of the tool in it: not dimmed)" "$(img_pixel "$f" 600 380)"
+    away; shot thumb
+    differs empty thumb 200 146 1064 604 && [ "$(pixel thumb 1100 746)" != 008080 ] && [ "$(pixel thumb 1100 752)" = 008080 ] \
+        && [ "$(pixel thumb 1100 600)" = 008080 ] && [ "$(pixel thumb 1062 700)" = 008080 ]
+    expect_true $? "its thumbnail shows at the bottom right, 16 pixels clear of the edge and the taskbar" \
+        "$(pixel thumb 1100 746) at its bottom, $(pixel thumb 1100 752) below, $(pixel thumb 1100 600) above, $(pixel thumb 1062 700) left"
+    n=$(pmark A)
+    pointer click:$((PX + 30)),$((PY + 30)) wait:0.3
+    pexpect "(the desktop works meanwhile: a click reaches the window)" A "$n" "press 1"
+    sleep 5; away; shot thumb-gone
+    ! differs empty thumb-gone 200 146 1064 604; expect_true $? "(and goes after a few seconds)" "it's still there"
+
+    # a window: its frame and all
+    local size; size=$(last_size A)
+    pointer key:ctrl+shift+5 wait:0.6 click:542,716 wait:0.5 move:$((PX + 50)),$((PY + 50)) wait:0.3 click:$((PX + 50)),$((PY + 50)) wait:1.2
+    f=$(newest "$home/Pictures")
+    local w=${size%x*} h=${size#*x}
+    [ "$(img_size "$f")" = "$((w + 6))x$((h + 28))" ]; expect_true $? "Window: a click on a window takes it, frame and all" "$(img_size "$f"), the window is $size"
+    [ "$(img_pixel "$f" 40 60)" = cc0000 ] && [ "$(img_pixel "$f" 0 0)" != 008080 ]
+    expect_true $? "(its picture: the window, from the frame's corner)" "$(img_pixel "$f" 40 60) inside, $(img_pixel "$f" 0 0) at the corner"
+
+    # the entire screen: a click anywhere
+    pointer key:ctrl+shift+5 wait:0.6 click:464,716 wait:0.5 click:900,300 wait:1.2
+    f=$(newest "$home/Pictures")
+    [ "$(img_size "$f")" = 1280x800 ] && [ "$(img_pixel "$f" 640 716)" = 008080 ] && [ "$(img_pixel "$f" 1200 400)" = 008080 ]
+    expect_true $? "Entire Screen: a click takes all of it, without the tool" "$(img_size "$f"): $(img_pixel "$f" 640 716) where the toolbar was"
+}
+
 # --- the Qt compositor's desktop, as a window in this one ---------------------------
 # The taskbar, Start menu and tray QML is shared with win95shell; this checks
 # a change to it didn't break the Qt compositor's desktop (still the session
@@ -1380,7 +1445,7 @@ suite_classic() {
 }
 
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

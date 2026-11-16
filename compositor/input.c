@@ -165,7 +165,7 @@ static void keyboard_key(struct wl_listener *listener, void *data)
 		// asked for every key (a virtual machine's window)
 		uint32_t shell_key = 0;
 		for (int i = 0; i < nsyms && !shell_key; ++i)
-			shell_key = shell_key_for(syms[i]);
+			shell_key = shell_key_for(syms[i], wlr_keyboard_get_modifiers(keyboard->wlr_keyboard));
 		if (shell_key && event->keycode < KEY_CNT && !shortcuts_inhibited(server)
 				&& shell_send_key(server, shell_key, true)) {
 			shell_held[event->keycode] = shell_key;

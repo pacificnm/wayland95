@@ -1,6 +1,7 @@
 #pragma once
 
-// The desktop's own keys (volume, brightness, the power and sleep buttons), which wayland95-compositor
+// The desktop's own keys (volume, brightness, the power and sleep buttons,
+// Print Screen and Ctrl+Shift+5), which wayland95-compositor
 // catches and sends to its shell over wayland95-shell-v1
 // (protocols/wayland95/). In QML:
 //
@@ -19,12 +20,15 @@
 
 #include "qwayland-wayland95-shell-v1.h"
 
-class DesktopKeysExtension : public QWaylandClientExtensionTemplate<DesktopKeysExtension>,
-                             public QtWayland::wayland95_shell_v1
+// The one binding of wayland95_shell_v1 (the compositor allows one): the
+// keys come here, and the window list is asked for here (ScreenGrab).
+class ShellExtension : public QWaylandClientExtensionTemplate<ShellExtension>,
+                       public QtWayland::wayland95_shell_v1
 {
     Q_OBJECT
 public:
-    DesktopKeysExtension() : QWaylandClientExtensionTemplate<DesktopKeysExtension>(1) { initialize(); }
+    ShellExtension() : QWaylandClientExtensionTemplate<ShellExtension>(1) { initialize(); }
+    static ShellExtension *instance();
 
 Q_SIGNALS:
     void key(uint key, bool pressed);
@@ -52,6 +56,8 @@ public:
         Power = 6,
         Sleep = 7,
         Hibernate = 8,
+        Print = 9,
+        Capture = 10, // Ctrl+Shift+5
     };
     Q_ENUM(Key)
 
@@ -65,6 +71,4 @@ Q_SIGNALS:
     void released(int key);
     void activeChanged();
 
-private:
-    DesktopKeysExtension *m_extension;
 };

@@ -28,6 +28,8 @@
       <entry name="power" value="6" summary="the power button"/>
       <entry name="sleep" value="7" summary="the sleep button"/>
       <entry name="hibernate" value="8"/>
+      <entry name="print" value="9" summary="Print Screen: a picture of the whole screen"/>
+      <entry name="capture" value="10" summary="Ctrl+Shift+5: the screen capture tool"/>
     </enum>
 
     <enum name="key_state">
@@ -37,6 +39,14 @@
 
     <request name="destroy" type="destructor"/>
 
+    <request name="list_windows">
+      <description summary="where the windows are, topmost first">
+        For the screen capture tool's "a window": the windows on screen
+        (not minimized), each as the rectangle it covers, frame included.
+      </description>
+      <arg name="id" type="new_id" interface="wayland95_window_list_v1"/>
+    </request>
+
     <event name="key">
       <description summary="one of the desktop's keys went down or up">
         Each press is followed by its release. The compositor doesn't
@@ -45,5 +55,20 @@
       <arg name="key" type="uint" enum="key"/>
       <arg name="state" type="uint" enum="key_state"/>
     </event>
+  </interface>
+
+  <interface name="wayland95_window_list_v1" version="1">
+    <description summary="the windows, once">
+      A window event for each window, topmost first, then done. Nothing
+      more is sent; the client destroys it.
+    </description>
+    <request name="destroy" type="destructor"/>
+    <event name="window">
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </event>
+    <event name="done"/>
   </interface>
 </protocol>

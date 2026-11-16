@@ -3,6 +3,7 @@
 // caught in input.c and sent here, to the one bound shell.
 #include <stdlib.h>
 #include <wayland-server-core.h>
+#include <wlr/types/wlr_keyboard.h>
 #include <wlr/util/log.h>
 
 #include "server.h"
@@ -13,8 +14,40 @@ static void shell_destroy_request(struct wl_client *client, struct wl_resource *
 	wl_resource_destroy(resource);
 }
 
+static const struct wayland95_window_list_v1_interface window_list_impl = {
+	.destroy = shell_destroy_request,
+};
+
+// the windows on screen, topmost first, frames included
+static void shell_list_windows(struct wl_client *client, struct wl_resource *resource, uint32_t id)
+{
+	struct server *server = wl_resource_get_user_data(resource);
+	struct wl_resource *list = wl_resource_create(client, &wayland95_window_list_v1_interface,
+			wl_resource_get_version(resource), id);
+	if (!list) {
+		wl_client_post_no_memory(client);
+		return;
+	}
+	wl_resource_set_implementation(list, &window_list_impl, NULL, NULL);
+	if (server) {
+		struct view *view;
+		wl_list_for_each(view, &server->views, link) {
+			if (!view->mapped || view->minimized)
+				continue;
+			struct wlr_box geo;
+			view_geometry(view, &geo);
+			int left, top, right, bottom;
+			view_frame_insets(view, &left, &top, &right, &bottom);
+			wayland95_window_list_v1_send_window(list, view->x - left, view->y - top,
+					geo.width + left + right, geo.height + top + bottom);
+		}
+	}
+	wayland95_window_list_v1_send_done(list);
+}
+
 static const struct wayland95_shell_v1_interface shell_impl = {
 	.destroy = shell_destroy_request,
+	.list_windows = shell_list_windows,
 };
 
 static void shell_resource_destroyed(struct wl_resource *resource)
@@ -60,8 +93,15 @@ void shell_finish(struct server *server)
 	server->shell_global = NULL;
 }
 
-uint32_t shell_key_for(xkb_keysym_t sym)
+uint32_t shell_key_for(xkb_keysym_t sym, uint32_t modifiers)
 {
+	// Ctrl+Shift+5 (with Shift, the key may say %)
+	const uint32_t ctrl_shift = WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT;
+	if ((modifiers & (ctrl_shift | WLR_MODIFIER_ALT | WLR_MODIFIER_LOGO)) == ctrl_shift
+			&& (sym == XKB_KEY_5 || sym == XKB_KEY_percent))
+		return WAYLAND95_SHELL_V1_KEY_CAPTURE;
+	if (sym == XKB_KEY_Print)
+		return (modifiers & (WLR_MODIFIER_ALT | WLR_MODIFIER_CTRL)) ? 0 : WAYLAND95_SHELL_V1_KEY_PRINT;
 	switch (sym) {
 	case XKB_KEY_XF86AudioRaiseVolume: return WAYLAND95_SHELL_V1_KEY_VOLUME_UP;
 	case XKB_KEY_XF86AudioLowerVolume: return WAYLAND95_SHELL_V1_KEY_VOLUME_DOWN;

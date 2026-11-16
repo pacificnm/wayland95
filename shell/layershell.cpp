@@ -33,10 +33,17 @@ public:
     void applyConfigure() override { place(m_pendingSize); }
     void setWindowGeometry(const QRect &rect) override
     {
-        // the program resized the window (its QML width/height): ask for it
-        if (!m_attached || rect.size() == m_requested)
+        // the program resized the window (its QML width/height): ask for it,
+        // and commit, so the compositor hears even if nothing is redrawn
+        // (otherwise its answer to an earlier size can be the last word:
+        // a panel that grew and shrank again stayed big)
+        // (not the compositor's own answer being applied: an answer to an
+        // earlier size, echoed back as a request, was the last word)
+        if (!m_attached || m_applying || rect.size() == m_requested)
             return;
         sendSize(rect.size());
+        if (m_configured)
+            window()->commit();
     }
     void setWindowPosition(const QPoint &) override {} // the anchors decide
 
@@ -88,11 +95,14 @@ private:
             p.setY(screen.top() + m.top());
         else
             p.setY(screen.top() + (screen.height() - size.height()) / 2);
+        m_applying = true;
         setGeometryFromApplyConfigure(p, size);
+        m_applying = false;
     }
 
     QPointer<LayerShellAttached> m_attached;
     bool m_configured = false;
+    bool m_applying = false;
     QSize m_pendingSize;
     QSize m_requested;
 };

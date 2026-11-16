@@ -10,10 +10,23 @@ import Win95Shell
 Item {
     id: tool
 
-    // what to capture from
+    // what to capture from (the Qt compositor: its window, and its window
+    // items for "Window")
     property QtObject targetWindow       // the QQuickWindow
     property QtObject waylandCompositor    // for the clipboard
     property Item windows       // the windows, for "Window"
+    // or (win95shell): the windows as [{x, y, width, height}], topmost
+    // first, asked for whenever wanted (windowsWanted); and the picture
+    // taken by the host: takePicture(rect, destination), which answers
+    // later with pictureTaken(path)
+    property var windowRects: []
+    property var takePicture: null
+    signal windowsWanted()
+    // where the thumbnail goes (its own window in win95shell)
+    property Item thumbParent: null
+    readonly property bool thumbShowing: thumb.showing
+    readonly property int thumbWidth: thumb.width
+    readonly property int thumbHeight: thumb.height
 
     anchors.fill: parent
     visible: active || countdown > 0 || capturing || thumb.showing
@@ -25,7 +38,7 @@ Item {
     property bool thumbnail: true
     property rect selection: Qt.rect(0, 0, 0, 0)
     property rect lastSelection: Qt.rect(0, 0, 0, 0)
-    property Item hovered: null             // Window mode: the window under the pointer
+    property var hovered: null              // Window mode: the window under the pointer (a rect)
     property int countdown: 0
     property bool capturing: false
 
@@ -34,6 +47,7 @@ Item {
             return;
         active = true;
         hovered = null;
+        windowsWanted();
         // the Mac remembers the last selection
         selection = lastSelection.width > 4 ? lastSelection
                   : Qt.rect(width / 4, height / 4, width / 2, height / 2);
@@ -49,12 +63,8 @@ Item {
     function target() {
         if (mode === "screen")
             return Qt.rect(0, 0, width, height);
-        if (mode === "window") {
-            if (!hovered)
-                return null;
-            var p = hovered.mapToItem(tool, 0, 0);
-            return Qt.rect(p.x, p.y, hovered.width, hovered.height);
-        }
+        if (mode === "window")
+            return hovered ? Qt.rect(hovered.x, hovered.y, hovered.width, hovered.height) : null;
         return selection.width > 2 && selection.height > 2 ? selection : null;
     }
 
@@ -84,19 +94,25 @@ Item {
         interval: 80
         onTriggered: {
             var r = tool.pending;
-            var path = tool.destination === "Clipboard"
-                    ? ScreenGrab.copy(tool.waylandCompositor, tool.targetWindow, r)
-                    : ScreenGrab.save(tool.targetWindow, r, ScreenGrab.folder(tool.destination));
-            tool.capturing = false;
-            if (!path) {
-                Ui.Wayland95Settings.playSound("critical");
-                Notifications.notify("Screen Capture", "The screenshot couldn't be saved", "", "", 1, 5000);
+            if (tool.takePicture) {
+                tool.takePicture(r, tool.destination); // answers with pictureTaken()
                 return;
             }
-            Ui.Wayland95Settings.playFile("/usr/share/sounds/freedesktop/stereo/camera-shutter.oga");
-            if (tool.thumbnail)
-                thumb.show(path, tool.destination === "Clipboard");
+            tool.pictureTaken(tool.destination === "Clipboard"
+                    ? ScreenGrab.copy(tool.waylandCompositor, tool.targetWindow, r)
+                    : ScreenGrab.save(tool.targetWindow, r, ScreenGrab.folder(tool.destination)));
         }
+    }
+    function pictureTaken(path) {
+        tool.capturing = false;
+        if (!path) {
+            Ui.Wayland95Settings.playSound("critical");
+            Notifications.notify("Screen Capture", "The screenshot couldn't be saved", "", "", 1, 5000);
+            return;
+        }
+        Ui.Wayland95Settings.playFile("/usr/share/sounds/freedesktop/stereo/camera-shutter.oga");
+        if (tool.thumbnail)
+            thumb.show(path, tool.destination === "Clipboard");
     }
     Timer {
         id: countdownTimer
@@ -227,9 +243,16 @@ Item {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         function windowAt(x, y) {
-            var best = null;
-            if (!tool.windows)
+            if (!tool.windows) {
+                // a list, topmost first
+                for (var j = 0; j < tool.windowRects.length; ++j) {
+                    var r = tool.windowRects[j];
+                    if (x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height)
+                        return r;
+                }
                 return null;
+            }
+            var best = null;
             for (var i = 0; i < tool.windows.children.length; ++i) {
                 var w = tool.windows.children[i];
                 if (!w.visible || w.width <= 0)
@@ -238,7 +261,10 @@ Item {
                 if (x >= p.x && x < p.x + w.width && y >= p.y && y < p.y + w.height && (!best || w.z > best.z))
                     best = w;
             }
-            return best;
+            if (!best)
+                return null;
+            var q = best.mapToItem(tool, 0, 0);
+            return { x: q.x, y: q.y, width: best.width, height: best.height };
         }
         onPositionChanged: (mouse) => tool.hovered = windowAt(mouse.x, mouse.y)
         onClicked: (mouse) => {
@@ -332,7 +358,13 @@ Item {
                 }
                 MouseArea {
                     anchors.fill: parent
-                    onClicked: { tool.mode = mb.modeName; tool.hovered = null; tool.forceActiveFocus(); }
+                    onClicked: {
+                        tool.mode = mb.modeName;
+                        tool.hovered = null;
+                        if (tool.mode === "window")
+                            tool.windowsWanted();
+                        tool.forceActiveFocus();
+                    }
                 }
             }
 
@@ -399,13 +431,14 @@ Item {
     // ---- the floating thumbnail, bottom right, for a few seconds ----------
     Item {
         id: thumb
+        parent: tool.thumbParent || tool
         property string path
         property bool clipboard: false
         property bool showing: false
         width: 200
         height: pic.paintedHeight > 0 ? pic.paintedHeight + 26 : 140
-        x: tool.width - width - 16
-        y: tool.height - height - 50
+        x: tool.thumbParent ? 0 : tool.width - width - 16
+        y: tool.thumbParent ? 0 : tool.height - height - 50
         visible: showing
         opacity: hideTimer.running || area.containsMouse ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: 250 } }

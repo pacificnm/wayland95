@@ -1,4 +1,5 @@
 #include "accessibility.h"
+#include "wayland95settings.h"
 
 #include <QCoreApplication>
 #include <QCursor>
@@ -528,37 +529,5 @@ bool AccessibilityController::eventFilter(QObject *watched, QEvent *event)
 
 void AccessibilityController::playTone(const QString &tone)
 {
-    // tiny WAV files, made once
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/wayland95/tones");
-    const QString path = dir + QLatin1Char('/') + tone + QStringLiteral(".wav");
-    if (!QFile::exists(path)) {
-        QList<std::pair<double, int>> notes; // frequency, milliseconds
-        if (tone == QLatin1String("on")) notes = { { 600, 70 }, { 900, 90 } };
-        else if (tone == QLatin1String("off")) notes = { { 900, 70 }, { 600, 90 } };
-        else if (tone == QLatin1String("high")) notes = { { 880, 110 } };
-        else if (tone == QLatin1String("low")) notes = { { 440, 110 } };
-        else notes = { { 1400, 12 } };
-        const int rate = 22050;
-        QByteArray pcm;
-        for (const auto &[freq, ms] : notes) {
-            const int n = rate * ms / 1000;
-            for (int i = 0; i < n; ++i) {
-                // a short fade in and out, so it doesn't click
-                const double env = qMin(1.0, qMin(i, n - i) / (rate * 0.004));
-                const qint16 v = qint16(9000 * env * std::sin(2 * M_PI * freq * i / rate));
-                pcm.append(char(v & 0xff)).append(char((v >> 8) & 0xff));
-            }
-        }
-        QByteArray wav;
-        auto u32 = [&wav](quint32 v) { for (int i = 0; i < 4; ++i) wav.append(char((v >> (8 * i)) & 0xff)); };
-        auto u16 = [&wav](quint16 v) { wav.append(char(v & 0xff)).append(char(v >> 8)); };
-        wav += "RIFF"; u32(36 + pcm.size()); wav += "WAVEfmt ";
-        u32(16); u16(1); u16(1); u32(rate); u32(rate * 2); u16(2); u16(16);
-        wav += "data"; u32(pcm.size()); wav += pcm;
-        QDir().mkpath(dir);
-        QFile f(path);
-        if (f.open(QIODevice::WriteOnly))
-            f.write(wav);
-    }
-    emit toneReady(path);
+    emit toneReady(Wayland95Settings::toneFile(tone));
 }

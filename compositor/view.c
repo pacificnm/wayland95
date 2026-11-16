@@ -314,8 +314,19 @@ void view_update_title(struct view *view)
 
 // --------------------------------------------------------- map and unmap
 
+struct view *view_by_id(struct server *server, uint32_t id)
+{
+	struct view *view;
+	wl_list_for_each(view, &server->views, link)
+		if (view->id == id)
+			return view;
+	return NULL;
+}
+
 void view_init_common(struct view *view, struct server *server, enum view_type type)
 {
+	static uint32_t next_id = 1;
+	view->id = next_id++;
 	view->tag.kind = NODE_VIEW;
 	view->server = server;
 	view->type = type;

@@ -18,6 +18,7 @@ qt_add_executable(win95shell
     sessionlock.h sessionlock.cpp
     screensaverservice.h screensaverservice.cpp
     screencopy.h screencopy.cpp
+    accessibilityservice.h accessibilityservice.cpp
     # services shared with the Qt compositor
     ${CMAKE_SOURCE_DIR}/src/launcher.h ${CMAKE_SOURCE_DIR}/src/launcher.cpp
     ${CMAKE_SOURCE_DIR}/src/programmenu.h ${CMAKE_SOURCE_DIR}/src/programmenu.cpp
@@ -58,7 +59,7 @@ set(shared_qml
     NetworkTray.qml BluetoothTray.qml BatteryTray.qml
     RunDialog.qml ShutDownDialog.qml
     SystemNotices.qml NotificationPopup.qml LevelOsd.qml PasswordDialog.qml NetworkPasswordDialog.qml
-    UnlockDialog.qml ScreenCapture.qml
+    UnlockDialog.qml ScreenCapture.qml TaskSwitcher.qml
 )
 set(qml_paths)
 foreach(f ${shared_qml})
@@ -67,7 +68,7 @@ foreach(f ${shared_qml})
     list(APPEND qml_paths ${path})
 endforeach()
 set_source_files_properties(${CMAKE_SOURCE_DIR}/qml/Win95Shell/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
-foreach(f Shell.qml DialogLayer.qml ScreenSaver.qml SaverInput.qml PowerPolicy.qml)
+foreach(f Shell.qml DialogLayer.qml ScreenSaver.qml SaverInput.qml PowerPolicy.qml Accessibility.qml)
     set_source_files_properties(qml/${f} PROPERTIES QT_RESOURCE_ALIAS ${f})
     list(APPEND qml_paths qml/${f})
 endforeach()

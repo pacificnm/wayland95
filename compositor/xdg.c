@@ -90,6 +90,7 @@ static void toplevel_destroy(struct wl_listener *listener, void *data)
 	wl_list_remove(&view->request_resize.link);
 	wl_list_remove(&view->request_maximize.link);
 	wl_list_remove(&view->request_minimize.link);
+	wl_list_remove(&view->request_show_window_menu.link);
 	wl_list_remove(&view->request_fullscreen.link);
 	wl_list_remove(&view->set_title.link);
 	wl_list_remove(&view->set_app_id.link);
@@ -145,6 +146,17 @@ static void toplevel_request_fullscreen(struct wl_listener *listener, void *data
 	wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
 }
 
+// a program drawing its own title bar asked for the window menu (GTK's
+// right-click on it)
+static void toplevel_request_show_window_menu(struct wl_listener *listener, void *data)
+{
+	struct view *view = wl_container_of(listener, view, request_show_window_menu);
+	struct wlr_xdg_toplevel_show_window_menu_event *event = data;
+	struct wlr_box geo;
+	view_geometry(view, &geo);
+	shell_window_menu(view, view->x + event->x - geo.x, view->y + event->y - geo.y);
+}
+
 static void toplevel_request_minimize(struct wl_listener *listener, void *data)
 {
 	struct view *view = wl_container_of(listener, view, request_minimize);
@@ -197,6 +209,8 @@ static void new_xdg_toplevel(struct wl_listener *listener, void *data)
 	wl_signal_add(&xdg_toplevel->events.request_maximize, &view->request_maximize);
 	view->request_minimize.notify = toplevel_request_minimize;
 	wl_signal_add(&xdg_toplevel->events.request_minimize, &view->request_minimize);
+	view->request_show_window_menu.notify = toplevel_request_show_window_menu;
+	wl_signal_add(&xdg_toplevel->events.request_show_window_menu, &view->request_show_window_menu);
 	view->request_fullscreen.notify = toplevel_request_fullscreen;
 	wl_signal_add(&xdg_toplevel->events.request_fullscreen, &view->request_fullscreen);
 	view->set_title.notify = toplevel_set_title;

@@ -4,7 +4,7 @@ import Win95Shell
 
 // Control Panel > Power, for win95shell: turning the display off and
 // sleeping when idle, the lid, the power and sleep buttons, and a
-// critically low battery. Only as the session's desktop (--session; the
+// critically low battery. Only as the session's desktop (--desktop-session; the
 // power manager's primarySession): a shell started by hand or nested in
 // another desktop leaves all this to that desktop, or to logind.
 QtObject {

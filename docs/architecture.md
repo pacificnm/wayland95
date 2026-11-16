@@ -76,7 +76,8 @@ one file per concern):
 | `decoration.c` | the Win95 frame: title bar (active/inactive gradients, bold title cut short with "..."), minimize/maximize/close buttons, 3-D borders, an invisible 4-pixel grab zone outside the border for resizing; drawn with cairo and pango into one scene buffer behind the program, re-drawn only when its size, title, state or the colour scheme changes |
 | `layers.c` | layer-shell surfaces (the shell's panels), exclusive zones (the taskbar's edge), keyboard interactivity |
 | `shell.c` | `wayland95-shell-v1`, the shell's private protocol (below) |
-| `settings.c` | reads `~/.config/wayland95/settings.ini` (the colour scheme for frames, keyboard layout and repeat, double-click time, touchpad) and watches it with inotify: changes apply at once, as the Qt compositor does today |
+| `accessibility.c` | Accessibility Options where keys arrive: StickyKeys, FilterKeys (bounce and slow keys), ToggleKeys, MouseKeys and their shortcut keys; while StickyKeys or FilterKeys is on, programs see the modifiers of the keys that got through, not the keyboard's own |
+| `settings.c` | reads `~/.config/wayland95/settings.ini` (the colour scheme for frames, keyboard layout and repeat, double-click time, touchpad, Accessibility Options) and watches it with inotify: changes apply at once, as the Qt compositor does today |
 
 Window frames are server-side (`xdg-decoration`): programs that leave
 decorations to the desktop (no preference, or server side: Qt, Electron)
@@ -91,9 +92,13 @@ screen with its borders just off it, and doesn't move by dragging.
 
 Keys the compositor keeps for itself: Alt+Tab and Alt+Shift+Tab step
 through the windows, most recently used first, and letting go of Alt
-activates the one reached (Escape goes back); Alt+F4 closes the active
-window. Until the shell draws the Alt+Tab box (phase 4), each step brings
-that window to the front. A program that asks for every key
+activates the one reached (Escape goes back); the shell draws Win95's box
+for it, and without a shell each step brings that window to the front
+instead. Alt+F4 closes the active window; Alt+Space, or a right-click on a
+title bar, opens the window menu (the shell draws it; programs drawing
+their own title bar, GTK's, ask for it themselves). The menu's Move and
+Size make the window, or its corner, follow the pointer until a click,
+Return or Escape. A program that asks for every key
 (`keyboard-shortcuts-inhibit`: remote desktops, virtual machines) gets
 these too while it has the keyboard.
 
@@ -162,35 +167,66 @@ watcher, update check, trash watcher, problem reports). What changes:
   files themselves are the Qt compositor's (`qml/Win95Shell/`), shared:
   the taskbar takes a `popupParent` for where its pop-ups go, and the
   desktop's own notices are `SystemNotices.qml` in both.
-- **As the session** (`win95shell --session`, as the Qt compositor is when
+- **As the session** (`win95shell --desktop-session`, as the Qt compositor is when
   it runs on the screen as `WAYLAND95_SESSION`): autostart, telling systemd
   and D-Bus where the display is, NetworkManager's agent and the update
   check. A shell started by hand, or nested, does none of these.
-- **Screen saver and locking** use `ext-idle-notify` (when to start) and
-  `ext-session-lock` (password-protected: nothing else is shown or gets input
-  until it unlocks). Turning the display off is `wlr-output-power-management`.
-- **Screen captures** (the Print Screen tool) use screencopy.
+- **Screen saver and locking** (`shell/qml/ScreenSaver.qml`) use
+  `ext-idle-notify` (when to start; programs keeping the screen awake hold
+  it off, as do programs asking over D-Bus, `org.freedesktop.ScreenSaver`)
+  and, password-protected, `ext-session-lock`: nothing else is shown or gets
+  input until it unlocks, and if the shell dies the screen stays locked.
+  Qt has no lock surfaces either, so `shell/sessionlock.*` is a second
+  shell integration (its role is given just after Qt's first, empty
+  commit, which a lock surface mustn't have).
+- **Power** (`shell/qml/PowerPolicy.qml`, the session's desktop only):
+  the display off (`wlr-output-power-management`) and sleep when idle, the
+  lid (logind), the power and sleep buttons (sent by the compositor),
+  a critically low battery; logind is told the lid and buttons are ours.
+- **Screen captures**: Print Screen and the capture tool (Ctrl+Shift+5)
+  take their pictures with screencopy; the tool's "a window" asks the
+  compositor where the windows are (`wayland95-shell-v1`).
+- **Accessibility Options** (`shell/qml/Accessibility.qml`): the keys are
+  the compositor's (`accessibility.c`); the shell plays their tones,
+  shows what StickyKeys holds, turns a feature on or off from its shortcut
+  key, flashes the screen for SoundSentry, captions sounds for ShowSounds,
+  and resets them after a while without input.
 
 ### wayland95-shell-v1 (`protocols/wayland95/wayland95-shell-v1.xml`)
 
-Only for what no standard protocol covers, kept small. Version 1 (4b) has
-the desktop's own keys: the compositor catches the volume and brightness
-keys (whatever has focus, except a program that asked for every key) and
-sends their presses and releases to the shell, which acts, repeats a held
-key and shows the level; with no shell bound they go to programs as usual.
-Later versions add:
+Only for what no standard protocol covers, kept small. Version 1 (4b-4d)
+has:
 
-- Alt+Tab: the compositor owns the keys (they must work whatever has focus)
-  and tells the shell to show, step and close the switcher; the shell says
-  which window was picked.
-- The window menu (right-click on a title bar, Alt+Space): the compositor
-  asks the shell to show it at a position for a window.
-- The minimize/restore animation target (taskbar button rectangle) is
-  already in foreign-toplevel (`set_rectangle`).
+- the desktop's own keys: the compositor catches the volume, brightness,
+  power and sleep keys, Print Screen, Ctrl+Shift+5, Ctrl+Esc (the Start
+  menu) and Ctrl+Shift+Esc (the System Monitor) (whatever has focus,
+  except a program that asked for every key) and sends their presses and
+  releases to the shell, which acts, repeats a held level key and shows
+  the level; with no shell bound they go to programs as usual
+- the windows' rectangles, topmost first (the capture tool's "a window")
+- Accessibility Options' tones, their shortcut keys and the keys
+  StickyKeys holds
+- Alt+Tab's box: the compositor owns the keys (they must work whatever
+  has focus) and sends the windows (title, app id, minimized) and the
+  selection as it changes; the shell draws it
+- the window menu: the compositor asks for it at a position, with the
+  window's id; the shell answers with the choice (`window_action`)
+- End Task: the taskbar's foreign-toplevel handle; the compositor kills
+  that window's process (the client's, or the X11 window's `_NET_WM_PID`),
+  never its own, the shell's or Xwayland's
 
-One client at a time can bind it (a second gets an error). Once the
-compositor starts the shell itself (4e), over a private socket, only that
-`win95shell` will be able to see it (wlroots' global filter).
+The minimize/restore animation target (the taskbar button's rectangle) is
+already in foreign-toplevel (`set_rectangle`).
+
+With `--shell PROGRAM` the compositor starts the shell itself, on a
+private connection (a socket pair, `WAYLAND_SOCKET`), and only that client
+can see `wayland95-shell-v1` (a global filter). If the shell goes away it's
+started again a second later, with `--restarted` (no start-up sound or
+autostart again); five times within a minute and it's left, so a broken
+shell can't make the screen flicker forever. With the compositor's
+`--session` the shell gets `--desktop-session` (not `--session`: Qt takes
+that, and the argument after it, for X11 session management). Without
+`--shell` (the tests' own shells) any one client may bind it.
 
 ## Sessions and packaging
 

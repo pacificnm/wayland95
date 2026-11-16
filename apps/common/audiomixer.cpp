@@ -1,4 +1,6 @@
 #include "audiomixer.h"
+#include <csignal>
+#include <sys/prctl.h>
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -63,6 +65,9 @@ void AudioMixer::startMonitor()
     m_monitor->setProgram(program);
     m_monitor->setArguments({ QStringLiteral("--monitor"), QStringLiteral("--no-colors") });
     m_monitor->setProcessChannelMode(QProcess::SeparateChannels);
+    // it ends with us, even if we crash (otherwise one more is left
+    // running each time the desktop is started again)
+    m_monitor->setChildProcessModifier([] { ::prctl(PR_SET_PDEATHSIG, SIGTERM); });
     m_monitor->setStandardInputFile(QProcess::nullDevice());
     connect(m_monitor, &QProcess::readyReadStandardOutput, this, &AudioMixer::readMonitor);
     connect(m_monitor, &QProcess::finished, this, [this] {

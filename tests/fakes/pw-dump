@@ -1,10 +1,11 @@
 #!/bin/sh
 # Stand-in for PipeWire's `pw-dump --monitor` (see README.md): one sound
-# output at 50% (channel volumes are cubic: 0.125 is 50%), then nothing new.
+# output at 50% (channel volumes are cubic: 0.125 is 50%), then nothing new,
+# for as long as the program that started it runs.
 cat <<'JSON'
 [
   {"id": 30, "type": "PipeWire:Interface:Metadata", "props": {"metadata.name": "default"}, "metadata": [{"subject": 0, "key": "default.audio.sink", "type": "Spa:String:JSON", "value": {"name": "test_sink"}}]},
   {"id": 42, "type": "PipeWire:Interface:Node", "info": {"props": {"media.class": "Audio/Sink", "node.name": "test_sink", "node.description": "Test Speakers"}, "params": {"Props": [{"channelVolumes": [0.125, 0.125], "mute": false}]}}}
 ]
 JSON
-exec sleep infinity
+while kill -0 "$PPID" 2>/dev/null; do sleep 1; done

@@ -23,3 +23,8 @@ bool ShellSession::session() const
 {
     return Launcher::isSession();
 }
+
+bool ShellSession::restarted() const
+{
+    return QCoreApplication::arguments().contains(QStringLiteral("--restarted"));
+}

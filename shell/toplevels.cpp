@@ -1,4 +1,5 @@
 #include "toplevels.h"
+#include "desktopkeys.h"
 
 #include <QGuiApplication>
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
@@ -86,7 +87,13 @@ void Toplevel::closeWindow()
 
 void Toplevel::forceClose()
 {
-    close();
+    // End Task: the compositor ends the program's process
+    // (wayland95-shell-v1); without it, all we can do is ask
+    ShellExtension *shell = ShellExtension::instance();
+    if (shell->isActive())
+        shell->end_task(object());
+    else
+        close();
 }
 
 // ----------------------------------------------------------- WindowManager

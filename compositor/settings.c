@@ -90,6 +90,23 @@ static void defaults(struct settings *s)
 	s->disable_while_typing = true;
 	s->middle_emulation = false;
 	s->pointer_speed = 0;
+	// (Wayland95Settings::accessibility()'s defaults)
+	s->a11y.sticky_keys = false;
+	s->a11y.sticky_lock = true;
+	s->a11y.sticky_sound = true;
+	s->a11y.sticky_shortcut = true;
+	s->a11y.filter_keys = false;
+	s->a11y.filter_shortcut = true;
+	s->a11y.filter_bounce_ms = 0;
+	s->a11y.filter_slow_ms = 500;
+	s->a11y.toggle_keys = false;
+	s->a11y.toggle_shortcut = true;
+	s->a11y.mouse_keys = false;
+	s->a11y.mouse_keys_numlock_on = true;
+	s->a11y.mouse_keys_shortcut = true;
+	s->a11y.mouse_keys_speed = 5;
+	s->a11y.mouse_keys_acceleration = 5;
+	s->a11y.high_contrast_shortcut = true;
 }
 
 static const char *config_dir(char *buf, size_t size)
@@ -159,6 +176,23 @@ static void load(struct server *server)
 				else if (strcmp(key, "disableWhileTyping") == 0) s->disable_while_typing = is_true(value);
 				else if (strcmp(key, "middleEmulation") == 0) s->middle_emulation = is_true(value);
 				else if (strcmp(key, "speed") == 0) s->pointer_speed = clampi(atoi(value), -10, 10) / 10.0;
+			} else if (strcmp(group, "Accessibility") == 0) {
+				if (strcmp(key, "stickyKeys") == 0) s->a11y.sticky_keys = is_true(value);
+				else if (strcmp(key, "stickyLock") == 0) s->a11y.sticky_lock = is_true(value);
+				else if (strcmp(key, "stickySound") == 0) s->a11y.sticky_sound = is_true(value);
+				else if (strcmp(key, "stickyShortcut") == 0) s->a11y.sticky_shortcut = is_true(value);
+				else if (strcmp(key, "filterKeys") == 0) s->a11y.filter_keys = is_true(value);
+				else if (strcmp(key, "filterShortcut") == 0) s->a11y.filter_shortcut = is_true(value);
+				else if (strcmp(key, "filterBounceMs") == 0) s->a11y.filter_bounce_ms = clampi(atoi(value), 0, 2000);
+				else if (strcmp(key, "filterSlowMs") == 0) s->a11y.filter_slow_ms = clampi(atoi(value), 0, 2000);
+				else if (strcmp(key, "toggleKeys") == 0) s->a11y.toggle_keys = is_true(value);
+				else if (strcmp(key, "toggleShortcut") == 0) s->a11y.toggle_shortcut = is_true(value);
+				else if (strcmp(key, "mouseKeys") == 0) s->a11y.mouse_keys = is_true(value);
+				else if (strcmp(key, "mouseKeysNumLockOn") == 0) s->a11y.mouse_keys_numlock_on = is_true(value);
+				else if (strcmp(key, "mouseKeysShortcut") == 0) s->a11y.mouse_keys_shortcut = is_true(value);
+				else if (strcmp(key, "mouseKeysSpeed") == 0) s->a11y.mouse_keys_speed = clampi(atoi(value), 1, 10);
+				else if (strcmp(key, "mouseKeysAcceleration") == 0) s->a11y.mouse_keys_acceleration = clampi(atoi(value), 1, 10);
+				else if (strcmp(key, "highContrastShortcut") == 0) s->a11y.high_contrast_shortcut = is_true(value);
 			}
 		}
 		fclose(f);
@@ -233,6 +267,7 @@ void settings_apply_pointer(struct server *server, struct wlr_input_device *devi
 static void apply_all(struct server *server)
 {
 	apply_keyboards(server);
+	a11y_settings_changed(server);
 	struct pointer_device *pd;
 	wl_list_for_each(pd, &server->pointers, link)
 		settings_apply_pointer(server, pd->device);
@@ -271,6 +306,7 @@ void settings_init(struct server *server)
 	wl_list_init(&server->physical_keyboards);
 	wl_list_init(&server->pointers);
 	load(server);
+	a11y_settings_changed(server); // (Accessibility Options already on)
 	char dir[512];
 	config_dir(dir, sizeof dir);
 	// watch the folder (created if missing, so a first save is seen too):

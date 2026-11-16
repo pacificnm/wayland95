@@ -8,7 +8,7 @@
 #   tests/run.sh [SUITE...]        all suites, or some of: input (Chromium) firefox
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
-#                                  capture
+#                                  capture accessibility windowkeys shellstart screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -33,6 +33,7 @@ export WAYLAND95_NO_SYSTEM_AGENTS=1
 # they would have done instead: the Shut Down tests check that)
 export WAYLAND95_NO_POWER_ACTIONS=1
 PIDS=()
+COMP_EXTRA=()   # more arguments for the next compositor (fresh)
 pass=0
 fail=0
 SUITE=""
@@ -50,6 +51,14 @@ stop_all() {
     sleep 0.3
     for p in "${PIDS[@]}"; do kill -9 "$p" 2>/dev/null; done
     PIDS=()
+    # and whatever was started on the test desktops, by programs or the
+    # shell (they'd be left running otherwise), and their sockets
+    local p d
+    for p in $(pgrep -u "$(id -u)"); do
+        d=$(tr '\0' '\n' 2>/dev/null <"/proc/$p/environ" | sed -n 's/^WAYLAND_DISPLAY=//p')
+        case "$d" in "w95test-$$-"*|"w95inner-$$") kill -9 "$p" 2>/dev/null ;; esac
+    done
+    rm -f "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/w95test-$$-* "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/w95inner-$$*
 }
 cleanup() {
     stop_all
@@ -64,14 +73,17 @@ bad() { echo "FAIL  [$SUITE] $1"; [ -n "${2:-}" ] && echo "      $2"; fail=$((fa
 # --- the compositor ---------------------------------------------------------
 # a fresh one for each suite: nothing left over from the last
 fresh() { # [WIDTHxHEIGHT]
-    local size=${1:-1280x800}
     stop_all
+    start_compositor "$@"
+}
+start_compositor() { # [WIDTHxHEIGHT]  (COMP_EXTRA: more arguments)
+    local size=${1:-1280x800}
     RUN=$((RUN + 1))
     SOCKET="w95test-$$-$RUN"
     CLOG=$WORK/$SUITE-compositor.log
     # its own settings (settings.ini), not the user's
     CONFIG=$WORK/config-$RUN; mkdir -p "$CONFIG/wayland95"
-    XDG_CONFIG_HOME=$CONFIG "$COMPOSITOR" --socket "$SOCKET" --headless "$size" >"$CLOG" 2>&1 &
+    XDG_CONFIG_HOME=$CONFIG "$COMPOSITOR" --socket "$SOCKET" --headless "$size" "${COMP_EXTRA[@]}" >"$CLOG" 2>&1 &
     COMP_PID=$!
     PIDS+=($!)
     for _ in $(seq 50); do
@@ -739,8 +751,13 @@ Layout=nosuchlayout"
 # --- the shell (win95shell: desktop, taskbar, Start menu) --------------------------
 # It runs as it will in the session, but with a throwaway home, settings and
 # D-Bus session: your files, notifications and tray stay out of it.
-start_shell() { # [ARGS...]  (--session: as the login session's desktop)
-    local home=$WORK/home-$RUN
+# The shell's surroundings: a D-Bus session of its own, the system's
+# stand-ins, and $SHELL_WRAPPER, which runs the shell in them (appending to
+# $WORK/$SUITE-shell.log). What depends on the compositor (its socket, its
+# Xwayland, its process, its settings folder) comes from whoever starts the
+# wrapper: start_shell, or the compositor itself (--shell).
+shell_prepare() {
+    local home=$WORK/home-$SUITE
     mkdir -p "$home"
     # never without the guards: Shut Down must only say what it would do
     [ "${WAYLAND95_NO_POWER_ACTIONS:-}" = 1 ] && [ "${WAYLAND95_NO_SYSTEM_AGENTS:-}" = 1 ] \
@@ -758,6 +775,11 @@ start_shell() { # [ARGS...]  (--session: as the login session's desktop)
     # the system's stand-ins (tests/fakes): sound, polkit's password check,
     # and PackageKit (only where a suite asks for it)
     FAKE_LOG=$WORK/$SUITE-fakes.log; : >"$FAKE_LOG"
+    # (no battery, unless a suite gives one: this computer's own mustn't
+    # pop up "battery low" in the middle of a test)
+    mkdir -p "$WORK/no-power-supply"
+    # (nor this computer's autostart programs: only the test's own)
+    mkdir -p "$WORK/no-config-dirs"
     if [ -n "${WITH_LOGIND:-}" ]; then
         DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS python3 -I "$HERE/fakes/logind.py" "$FAKE_LOG" &
         PIDS+=($!)
@@ -768,21 +790,37 @@ start_shell() { # [ARGS...]  (--session: as the login session's desktop)
         PIDS+=($!)
         for _ in $(seq 50); do grep -q "packagekit: ready" "$FAKE_LOG" && break; sleep 0.1; done
     fi
-    HOME=$home XDG_CONFIG_HOME=$CONFIG XDG_DATA_HOME=$home/.local/share XDG_STATE_HOME=$home/.local/state \
-        XDG_CACHE_HOME=$home/.cache WAYLAND_DISPLAY=$SOCKET DISPLAY=$XDISPLAY QT_NO_XDG_DESKTOP_PORTAL=1 \
-        WAYLAND95_COMPOSITOR_PID=$COMP_PID DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
-        PATH="$HERE/fakes:$PATH" W95_FAKE_LOG=$FAKE_LOG WAYLAND95_TEST_AGENTS_ON_SESSION_BUS=1 \
-        WAYLAND95_TEST_POLKIT_HELPER=$HERE/fakes/polkit-agent-helper-1 WAYLAND95_TEST_CHKPWD=$HERE/fakes/unix_chkpwd \
-        WAYLAND95_TEST_MINUTE_MS=${MINUTE_MS:-} WAYLAND95_TEST_POWER_SUPPLY=${POWER_SUPPLY:-} \
-        "$SHELL_BIN" "$@" >"$WORK/$SUITE-shell.log" 2>&1 &
-    SHELL_PID=$!
-    PIDS+=($!)
+    : >"$WORK/$SUITE-shell.log"
+    SHELL_WRAPPER=$WORK/$SUITE-shell.sh
+    cat >"$SHELL_WRAPPER" <<WRAPPER
+#!/bin/sh
+exec env HOME='$home' XDG_DATA_HOME='$home/.local/share' XDG_STATE_HOME='$home/.local/state' \\
+    XDG_CACHE_HOME='$home/.cache' QT_NO_XDG_DESKTOP_PORTAL=1 DBUS_SESSION_BUS_ADDRESS='$SHELL_BUS' \\
+    PATH='$HERE/fakes:$PATH' W95_FAKE_LOG='$FAKE_LOG' WAYLAND95_TEST_AGENTS_ON_SESSION_BUS=1 \\
+    XDG_CONFIG_DIRS='$WORK/no-config-dirs' \\
+    WAYLAND95_NO_SYSTEM_AGENTS=1 WAYLAND95_NO_POWER_ACTIONS=1 \\
+    WAYLAND95_TEST_POLKIT_HELPER='$HERE/fakes/polkit-agent-helper-1' WAYLAND95_TEST_CHKPWD='$HERE/fakes/unix_chkpwd' \\
+    WAYLAND95_TEST_MINUTE_MS='${MINUTE_MS:-}' WAYLAND95_TEST_POWER_SUPPLY='${POWER_SUPPLY:-$WORK/no-power-supply}' \\
+    '$SHELL_BIN' "\$@" >>'$WORK/$SUITE-shell.log' 2>&1
+WRAPPER
+    chmod +x "$SHELL_WRAPPER"
+}
+wait_shell_ready() { # [COUNT]: until the shell has said it's ready COUNT times
+    local want=${1:-1}
     for _ in $(seq 100); do
-        grep -q "win95shell: ready" "$WORK/$SUITE-shell.log" 2>/dev/null && break
+        [ "$(grep -c "win95shell: ready" "$WORK/$SUITE-shell.log" 2>/dev/null)" -ge "$want" ] && break
         sleep 0.1
     done
     sleep 1.5
-    grep -q "win95shell: ready" "$WORK/$SUITE-shell.log" || { bad "the shell starts" "$(tail -5 "$WORK/$SUITE-shell.log")"; return 1; }
+    [ "$(grep -c "win95shell: ready" "$WORK/$SUITE-shell.log")" -ge "$want" ]
+}
+start_shell() { # [ARGS...]  (--desktop-session: as the login session's desktop)
+    shell_prepare || return 1
+    XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET DISPLAY=$XDISPLAY WAYLAND95_COMPOSITOR_PID=$COMP_PID \
+        "$SHELL_WRAPPER" "$@" &
+    SHELL_PID=$!
+    PIDS+=($!)
+    wait_shell_ready || { bad "the shell starts" "$(tail -5 "$WORK/$SUITE-shell.log")"; return 1; }
 }
 in_bus() { DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS "$@"; }
 TASKBAR_Y=783                 # the middle of the 34-pixel taskbar at the bottom
@@ -964,7 +1002,7 @@ suite_notifications() {
     pexpect "with no shell, the volume key goes to the program" A "$n" "key (XF86AudioRaiseVolume|Volume Up)"
     # a crash from before the desktop started (Notepad's, a minute ago),
     # and an autostart entry, which must not start (not the session)
-    local home=$WORK/home-$RUN crashes
+    local home=$WORK/home-$SUITE crashes
     crashes=$home/.local/state/wayland95/crashes; mkdir -p "$crashes" "$CONFIG/autostart"
     printf 'Wayland 95 problem report\nProgram: win95notepad\nVersion: test\nTime: %s\nSignal: 11 SIGSEGV (invalid memory access)\n\n== Backtrace\n' \
         "$(($(date +%s) - 60))" >"$crashes/win95notepad-1-1.crash"
@@ -1073,13 +1111,13 @@ suite_notifications() {
 }
 
 # --- the login session's desktop: passwords, updates, autostart -------------
-# win95shell --session, with the system's stand-ins (tests/fakes) on its own
+# win95shell --desktop-session, with the system's stand-ins (tests/fakes) on its own
 # D-Bus: polkit and NetworkManager are the tests calling its agents, and
 # PackageKit is tests/fakes/packagekit.py.
 agent() { in_bus gdbus call --session --timeout 60 --dest "$AGENT" "$@"; }
 dialog_shown() { [ "$(pixel "$1" "$2" "$3")" = c0c0c0 ]; }
 suite_session() {
-    say "session: password prompts, the update check, autostart (win95shell --session)"
+    say "session: password prompts, the update check, autostart (win95shell --desktop-session)"
     [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
     fresh
     mkdir -p "$CONFIG/autostart"
@@ -1087,7 +1125,7 @@ suite_session() {
     printf '[Desktop Entry]\nType=Application\nName=Off\nExec=%s\nHidden=true\n' "$BUILD/win95files" >"$CONFIG/autostart/w95-hidden.desktop"
     printf '[Desktop Entry]\nType=Application\nName=Other\nExec=%s\nOnlyShowIn=GNOME;\n' "$BUILD/win95sysmon" >"$CONFIG/autostart/w95-gnome.desktop"
     start_probe A qt cc0000 || return
-    WITH_PACKAGEKIT=1 start_shell --session || return
+    WITH_PACKAGEKIT=1 start_shell --desktop-session || return
     AGENT=$(in_bus gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
         --method org.freedesktop.DBus.GetNameOwner org.freedesktop.Notifications | sed "s/^('\(.*\)',)$/\1/")
 
@@ -1162,7 +1200,7 @@ suite_session() {
     grep -q "UserCanceled" "$WORK/$SUITE-wifi2.out"; expect_true $? "Escape: NetworkManager is told it was canceled" "$(cat "$WORK/$SUITE-wifi2.out")"
 
     # only one shell: a second one is refused the desktop's keys
-    HOME=$WORK/home-$RUN XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+    HOME=$WORK/home-$SUITE XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
         PATH="$HERE/fakes:$PATH" W95_FAKE_LOG=$FAKE_LOG timeout 10 "$SHELL_BIN" >"$WORK/$SUITE-second.log" 2>&1
     grep -q "error 0: another shell has wayland95_shell_v1" "$WORK/$SUITE-second.log"; expect_true $? "a second shell on the same desktop is refused" "$(tail -3 "$WORK/$SUITE-second.log")"
     kill -0 "$SHELL_PID" 2>/dev/null; expect_true $? "(and the first carries on)" "it stopped"
@@ -1271,7 +1309,7 @@ suite_screensaver() {
 }
 
 # --- the power policy ---------------------------------------------------------
-# win95shell --session with tests/fakes/logind.py (a laptop; the test opens
+# win95shell --desktop-session with tests/fakes/logind.py (a laptop; the test opens
 # and closes its lid) and a pretend battery (POWER_SUPPLY). A minute is 2
 # seconds here. Power actions are only logged ("Power: would ...").
 battery() { # ONLINE STATUS PERCENT
@@ -1281,17 +1319,17 @@ lid() { in_bus gdbus call --session --dest org.freedesktop.login1 --object-path 
     --method org.freedesktop.login1.Manager.SetLid "$1" >/dev/null; }
 display_turned() { grep -c "output HEADLESS-1 turned $1" "$CLOG"; }
 suite_power() {
-    say "power: display off, sleep, the lid, the power buttons, a low battery (win95shell --session)"
+    say "power: display off, sleep, the lid, the power buttons, a low battery (win95shell --desktop-session)"
     [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
     fresh
-    POWER_SUPPLY=$WORK/power-$RUN
+    local POWER_SUPPLY=$WORK/power-$RUN
     mkdir -p "$POWER_SUPPLY/AC" "$POWER_SUPPLY/BAT0"
     echo Mains >"$POWER_SUPPLY/AC/type"; echo Battery >"$POWER_SUPPLY/BAT0/type"
     battery 1 Charging 80
     printf '[ScreenSaver]\nName=none\n[Power]\ndisplayOffAC=1\nsleepAC=2\ndisplayOffBattery=1\nsleepBattery=0\nlidAction=display\npowerButton=ask\nsleepButton=sleep\ncriticalBattery=hibernate\n' \
         >"$CONFIG/wayland95/settings.ini"
     start_probe A qt cc0000 || return
-    WITH_LOGIND=1 MINUTE_MS=2000 start_shell --session || return
+    WITH_LOGIND=1 MINUTE_MS=2000 start_shell --desktop-session || return
     grep -q "logind: Inhibit ('handle-power-key:handle-suspend-key:handle-hibernate-key:handle-lid-switch'" "$FAKE_LOG"
     expect_true $? "as the session, the power keys and the lid are the desktop's (logind is told)" "$(grep logind: "$FAKE_LOG")"
     query activate A; sleep 0.3
@@ -1355,7 +1393,7 @@ suite_capture() {
     start_shell || return
     query activate A; sleep 0.3
     locate_probe A 240 228 || return
-    local home=$WORK/home-$RUN f n
+    local home=$WORK/home-$SUITE f n
     n=$(pmark A)
     pointer key:Print wait:1
     f=$(newest "$home")
@@ -1405,6 +1443,377 @@ suite_capture() {
     expect_true $? "Entire Screen: a click takes all of it, without the tool" "$(img_size "$f"): $(img_pixel "$f" 640 716) where the toolbar was"
 }
 
+# --- Accessibility Options (the compositor's keys, the shell's sounds) ---------
+access_write() { settings_write "[Accessibility]"$'\n'"$1"; sleep 0.3; }
+tone_played() { grep -c "^sound: .*tones/$1.wav" "$FAKE_LOG"; }
+setting_is() { grep -q "^$1=$2" "$CONFIG/wayland95/settings.ini"; }
+suite_accessibility() {
+    say "accessibility: StickyKeys, FilterKeys, ToggleKeys, MouseKeys, their shortcuts, SoundSentry (compositor and win95shell)"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    start_probe A qt cc0000 || return
+    MINUTE_MS=2000 start_shell || return
+    query activate A; sleep 0.3
+    locate_probe A 240 228 || return
+    local n t
+
+    # StickyKeys. A keyboard's held keys go with it, and each w95input is a
+    # keyboard of its own: each sequence is typed by one, as a person types
+    # on one keyboard
+    access_write "stickyKeys=true"
+    away; shot sticky-before
+    n=$(pmark A); t=$(tone_played click)
+    ( sleep 0.7; shot sticky-held ) &
+    pointer key:Shift_L wait:1.2 type:a wait:0.2 type:b wait:0.3
+    wait $!
+    [ "$(tone_played click)" -gt "$t" ]; expect_true $? "StickyKeys: Shift pressed and let go clicks" "$(grep sound: "$FAKE_LOG" | tail -2)"
+    differs sticky-before sticky-held 300 40 490 690; expect_true $? "(and says it's holding Shift, above the taskbar)" "nothing shown"
+    [ "$(pevents A "$n" | tr '|' '\n' | grep "^key [aAbB]" | tr '\n' ' ')" = "key A key b " ]
+    expect_true $? "the next key gets it (A), the one after doesn't (b)" "$(pevents A "$n")"
+    away; shot sticky-used
+    ! differs sticky-before sticky-used 300 40 490 690; expect_true $? "(then nothing's shown)" "still shown"
+    n=$(pmark A); t=$(tone_played high); local lo; lo=$(tone_played low)
+    pointer key:Shift_L wait:0.2 key:Shift_L wait:0.3 type:c wait:0.2 type:d wait:0.3 key:Shift_L wait:0.3 type:e wait:0.3
+    [ "$(tone_played high)" -gt "$t" ]; expect_true $? "Shift twice locks it (a high tone)" "$(grep sound: "$FAKE_LOG" | tail -3)"
+    [ "$(tone_played low)" -gt "$lo" ]; expect_true $? "once more unlocks it (a low tone)" "$(grep sound: "$FAKE_LOG" | tail -3)"
+    [ "$(pevents A "$n" | tr '|' '\n' | grep "^key [cCdDeE]" | tr '\n' ' ')" = "key C key D key e " ]
+    expect_true $? "(every key gets it while locked: C, D; then e)" "$(pevents A "$n")"
+    n=$(pmark A)
+    pointer key:shift+f wait:0.2 type:g wait:0.3
+    [ "$(pevents A "$n" | tr '|' '\n' | grep "^key [fFgG]" | tr '\n' ' ')" = "key F key g " ]
+    expect_true $? "Shift held with a key works as ever (F), and isn't kept (g)" "$(pevents A "$n")"
+    n=$(pmark A)
+    pointer key:Shift_L wait:0.3 click:$((PX + 30)),$((PY + 30)) wait:0.3 type:h wait:0.3
+    pexpect "a click uses it too (the key after is h)" A "$n" "key h"
+    n=$(pmark A)
+    ( sleep 0.6; access_write "stickyKeys=false" ) &
+    pointer key:Shift_L wait:1.5 type:i wait:0.3
+    wait $!
+    pexpect "turned off while it holds Shift, Shift is let go (i)" A "$n" "key i"
+
+    # FilterKeys
+    access_write $'filterKeys=true\nfilterSlowMs=500\nfilterBounceMs=0'
+    n=$(pmark A); t=$(tone_played click)
+    pointer key:j wait:0.3 keydown:k wait:0.8 keyup:k wait:0.3
+    pexpect_not "FilterKeys (slow keys): a quick tap is ignored" A "$n" "key j"
+    pexpect "(a key held long enough counts, with a click)" A "$n" "key k"
+    [ "$(tone_played click)" -gt "$t" ]; expect_true $? "(the click)" "$(grep sound: "$FAKE_LOG" | tail -1)"
+    access_write $'filterKeys=true\nfilterSlowMs=0\nfilterBounceMs=500'
+    n=$(pmark A)
+    pointer type:m wait:0.1 type:m wait:0.7 type:m wait:0.3
+    [ "$(pevents A "$n" | tr '|' '\n' | grep -c "^key m")" = 2 ]
+    expect_true $? "(bounce keys: pressed again at once is ignored, after a moment counts)" "$(pevents A "$n")"
+    access_write "filterKeys=false"
+    n=$(pmark A); pointer type:o wait:0.3
+    pexpect "(turned off, keys are keys again)" A "$n" "key o"
+
+    # ToggleKeys
+    access_write "toggleKeys=true"
+    t=$(tone_played high); lo=$(tone_played low)
+    pointer key:Caps_Lock wait:0.4 key:Caps_Lock wait:0.4
+    [ "$(tone_played high)" -gt "$t" ]; expect_true $? "ToggleKeys: Caps Lock on, a high tone" "$(grep sound: "$FAKE_LOG" | tail -2)"
+    [ "$(tone_played low)" -gt "$lo" ]; expect_true $? "(off, a low one)" "$(grep sound: "$FAKE_LOG" | tail -2)"
+    access_write "toggleKeys=false"
+
+    # MouseKeys (with Num Lock on, the digits move the pointer)
+    access_write $'mouseKeys=true\nmouseKeysNumLockOn=true\nmouseKeysSpeed=5'
+    n=$(pmark A)
+    pointer move:$((PX + 30)),$((PY + 60)) wait:0.2 key:Num_Lock wait:0.2 keydown:KP_Right wait:0.6 keyup:KP_Right wait:0.2 \
+        key:KP_Begin wait:0.4 key:KP_Subtract wait:0.1 key:KP_Begin wait:0.4 key:KP_Divide wait:0.2 key:Num_Lock wait:0.2
+    local line x
+    line=$(pevents A "$n" | tr '|' '\n' | grep "^press 1" | tail -1); x=$(echo "$line" | awk '{print $3}')
+    [ -n "$x" ] && [ "$x" -gt 60 ]; expect_true $? "MouseKeys: 6 on the number pad moves the pointer right, 5 clicks" "$(pevents A "$n")"
+    pexpect "(- chooses the right button)" A "$n" "press 3"
+    pexpect_not "(the number pad's keys don't reach the program)" A "$n" "key [^N]"
+    access_write "mouseKeys=false"
+
+    # the shortcuts: the shell turns the feature on (settings.ini) and says so
+    access_write ""
+    pointer key:Shift_L key:Shift_L key:Shift_L key:Shift_L key:Shift_L wait:1
+    setting_is stickyKeys true && shell_said "accessibility shortcut: stickyKeys on" && shell_said "notice from Accessibility Options: StickyKeys is on"
+    expect_true $? "Shift five times turns StickyKeys on (and says so)" "$(grep -i accessib "$WORK/$SUITE-shell.log" | tail -2)"
+    pointer key:Shift_L key:Shift_L key:Shift_L key:Shift_L key:Shift_L wait:1
+    setting_is stickyKeys false; expect_true $? "(five more turn it off)" "$(grep stickyKeys "$CONFIG/wayland95/settings.ini")"
+    pointer key:Shift_L wait:0.2
+    pointer keydown:Alt_L keydown:Shift_L key:Num_Lock keyup:Shift_L keyup:Alt_L wait:1
+    setting_is mouseKeys true; expect_true $? "Left Alt + Left Shift + Num Lock: MouseKeys" "$(grep -i accessib "$WORK/$SUITE-shell.log" | tail -1)"
+    pointer key:Num_Lock wait:0.2
+    pointer keydown:Num_Lock wait:5.5 keyup:Num_Lock wait:0.5
+    setting_is toggleKeys true; expect_true $? "Num Lock held five seconds: ToggleKeys" "$(grep -i accessib "$WORK/$SUITE-shell.log" | tail -1)"
+    pointer keydown:Shift_R wait:8.5 keyup:Shift_R wait:0.5
+    setting_is filterKeys true; expect_true $? "right Shift held eight seconds: FilterKeys" "$(grep -i accessib "$WORK/$SUITE-shell.log" | tail -1)"
+    access_write $'highContrastShortcut=true'
+    pointer keydown:Alt_L keydown:Shift_L key:Print keyup:Shift_L keyup:Alt_L wait:1
+    shell_said "accessibility shortcut: highContrast on"; expect_true $? "Left Alt + Left Shift + Print Screen: High Contrast" "$(grep -i accessib "$WORK/$SUITE-shell.log" | tail -1)"
+    access_write $'stickyShortcut=false'
+    pointer key:Shift_L key:Shift_L key:Shift_L key:Shift_L key:Shift_L wait:1
+    ! setting_is stickyKeys true; expect_true $? "(a shortcut that's turned off does nothing)" "$(grep stickyKeys "$CONFIG/wayland95/settings.ini")"
+
+    # SoundSentry and ShowSounds: a program's sound, seen
+    access_write $'soundSentry=true\nsoundSentryFlash=desktop\nshowSounds=true'
+    away; shot quiet
+    in_bus gdbus call --session --dest org.wayland95.Accessibility --object-path /org/wayland95/Accessibility \
+        --method org.wayland95.Accessibility.SoundPlayed notification >/dev/null; shot flash
+    local p; p=$(pixel flash 1200 400)
+    [ "$p" != 008080 ] && [ "$((16#${p:0:2}))" -gt 128 ]; expect_true $? "SoundSentry: the screen flashes when a sound plays" "$p at 1200,400"
+    sleep 0.5; shot caption
+    differs quiet caption 300 40 490 690; expect_true $? "ShowSounds: a caption names it" "nothing shown"
+
+    # Automatic reset: after a while without input (a minute is 2 seconds here)
+    access_write $'stickyKeys=true\nautoReset=true\nautoResetMinutes=1'
+    away; sleep 3
+    setting_is stickyKeys false && shell_said "automatic reset: stickyKeys"
+    expect_true $? "Automatic reset turns them off after its time without input" "$(grep -i "reset" "$WORK/$SUITE-shell.log" | tail -1)"
+}
+
+# --- Alt+Tab's box, the desktop's keys, the window menu, End Task -------------
+windowkeys_menu_shown() { [ "$(pixel "$1" "$2" "$3")" = c0c0c0 ]; }   # SHOT X Y: a menu's face there
+suite_windowkeys() {
+    say "windowkeys: the Alt+Tab box, Ctrl+Esc, the window menu, End Task (win95shell)"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    # (the shell first: the taskbar's buttons are then A, B, C in order)
+    start_shell || return
+    start_probe A qt cc0000 || return
+    start_probe B qt 00cc00 || return
+    start_probe C qt 0000cc || return
+    query activate C; sleep 0.4; away; shot before
+    local n
+
+    # Alt+Tab: the shell draws the box; the windows stay where they are
+    ( sleep 0.8; shot box ) &
+    pointer keydown:alt key:Tab wait:1.4 keyup:alt
+    wait $!
+    differs before box 200 120 540 340; expect_true $? "Alt+Tab shows the box in the middle of the screen" "nothing there"
+    ! differs before box 400 260 0 0; expect_true $? "(the windows stay as they are while it shows)" "they moved"
+    expect_active "letting go of Alt picks the window used before" B
+    away; shot box-gone
+    ! differs before box-gone 200 120 540 340; expect_true $? "(and the box goes)" "still there"
+    ( sleep 0.8; shot box2 ) &
+    pointer keydown:alt key:Tab key:Tab wait:1.4 key:Escape keyup:alt
+    wait $!
+    differs before box2 200 120 540 340; expect_true $? "(with two Tabs too)" "nothing there"
+    expect_active "Escape: no change" B
+
+    # Ctrl+Esc and Ctrl+Shift+Esc
+    n=$(pmark B)
+    pointer key:ctrl+Escape wait:0.7; away; shot start
+    expect_pixel "Ctrl+Esc opens the Start menu" start 120 600 c0c0c0
+    pointer key:Escape wait:0.5
+    pexpect_not "(the program doesn't get the Escape)" B "$n" "key Escape"
+    pointer key:ctrl+shift+Escape wait:0.5
+    for _ in $(seq 20); do [ "$(windows_of win95sysmon)" -ge 1 ] && break; sleep 0.5; done
+    [ "$(windows_of win95sysmon)" -ge 1 ]; expect_true $? "Ctrl+Shift+Esc opens the System Monitor" "$(query list | tr '\n' ' ')"
+    query list | sed -n 's/^\([^|]*\)|win95sysmon|.*/\1/p' | while read -r t; do query close "$t"; done; sleep 0.8
+
+    # the window menu: right-click on the title bar
+    query activate B; sleep 0.4
+    locate_probe B 400 360 || return
+    local tx=$((PX + 40)) ty; ty=$(title_y "$PY")
+    pointer click:$tx,$ty,right wait:0.6; shot menu
+    windowkeys_menu_shown menu $((tx + 125)) $((ty + 25)); expect_true $? "a right-click on a title bar opens the window menu there" "$(pixel menu $((tx + 125)) $((ty + 25)))"
+    pointer key:n wait:0.6
+    query list | grep -q "^B|.*minimized"; expect_true $? "its Minimize minimizes it" "$(query list | tr '\n' ' ')"
+    query activate B; sleep 0.5
+    pointer key:alt+space wait:0.6; shot altspace
+    windowkeys_menu_shown altspace $((PX + 125)) $((PY + 25)); expect_true $? "Alt+Space opens it at the window's corner" "$(pixel altspace $((PX + 125)) $((PY + 25)))"
+    pointer key:x wait:0.8
+    query list | grep -q "^B|.*maximized"; expect_true $? "Maximize" "$(query list | tr '\n' ' ')"
+    pointer key:alt+space wait:0.6 key:r wait:0.8
+    ! query list | grep -q "^B|.*maximized"; expect_true $? "Restore" "$(query list | tr '\n' ' ')"
+    # Move: the window follows the pointer until a click
+    local size; size=$(last_size B)
+    local w=${size%x*} h=${size#*x} ox=$PX oy=$PY
+    # (Move puts the pointer in the middle of the title bar)
+    local mx=$((ox + w / 2 + 100)) my=$((oy - 11 + 60))
+    pointer key:alt+space wait:0.6 key:m wait:0.4 move:$((mx - 50)),$((my - 30)) wait:0.2 move:$mx,$my wait:0.3 click:$mx,$my wait:0.4
+    locate_probe B $((ox + 100 + 40)) $((oy + 60 + 40)) || return
+    near "$PX" $((ox + 100)) 3 && near "$PY" $((oy + 60)) 3; expect_true $? "Move: the window follows the pointer, and a click puts it down" "from $ox,$oy to $PX,$PY"
+    # Size: the bottom right corner follows
+    # (Size puts it on the bottom right corner)
+    local cx=$((PX + w + 60)) cy=$((PY + h + 40))
+    pointer key:alt+space wait:0.6 key:s wait:0.4 move:$((cx - 30)),$((cy - 20)) wait:0.2 move:$cx,$cy wait:0.3 click:$cx,$cy wait:0.6
+    local nw nh; nw=$(last_size B); nh=${nw#*x}; nw=${nw%x*}
+    near "$nw" $((w + 60)) 1 && near "$nh" $((h + 40)) 1; expect_true $? "Size: the corner follows the pointer" "$(last_size B), was $size"
+    pointer key:alt+space wait:0.6 key:c wait:0.8
+    ! kill -0 "$PID_B" 2>/dev/null; expect_true $? "Close closes it" "B still runs"
+
+    # a program drawing its own title bar (GTK) asks for the menu itself
+    start_probe G gtk 00cccc || return
+    locate_probe G 300 300 || return
+    pointer click:$((PX + 60)),$((PY - 20)),right wait:0.6; shot gtk-menu
+    windowkeys_menu_shown gtk-menu $((PX + 185)) $((PY + 5)); expect_true $? "GTK's own title bar: a right-click opens the same menu" "$(pixel gtk-menu $((PX + 185)) $((PY + 5)))"
+    pointer key:Escape wait:0.4
+
+    # End Task, from a taskbar button's menu: the program's process ends
+    query activate A; sleep 0.3
+    pointer click:$(task_button 0),$TASKBAR_Y,right wait:0.6 key:e wait:0.6 key:Return wait:1
+    # (a killed process stays a zombie until the test reaps it: its window
+    # and its state say it's gone)
+    gone() { ! query list | grep -q "^$1|" && ! ps -o stat= -p "$2" 2>/dev/null | grep -qv Z; }
+    sleep 0.5
+    gone A "$PID_A" && grep -q "End Task: ending process $PID_A" "$CLOG"
+    expect_true $? "End Task (taskbar button's menu, then yes): the program's process is ended" "$(grep "End Task" "$CLOG")"
+    query list | grep -q "^C|" && kill -0 "$SHELL_PID" 2>/dev/null && kill -0 "$COMP_PID" 2>/dev/null
+    expect_true $? "(nothing else: the other programs, the shell and the desktop carry on)" "something else ended"
+    start_probe X x11 cccc00 || return
+    # (the buttons now: C, G, X)
+    pointer click:$(task_button 2),$TASKBAR_Y,right wait:0.6 key:e wait:0.6 key:Return wait:1.5
+    gone X "$PID_X"; expect_true $? "End Task on an X11 program ends it too" "$(grep "End Task" "$CLOG" | tail -1)"
+}
+
+# --- the compositor starts the shell (--shell), and starts it again -----------
+suite_shellstart() {
+    say "shellstart: the compositor starts the shell, privately, and again if it goes (wayland95-compositor --shell)"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    stop_all
+    shell_prepare || return
+    local home=$WORK/home-$SUITE
+    # an autostart program: it must start once, not again with the shell
+    COMP_EXTRA=(--shell "$SHELL_WRAPPER" --session)
+    start_compositor
+    COMP_EXTRA=()
+    mkdir -p "$CONFIG/autostart"
+    wait_shell_ready; expect_true $? "the compositor starts the shell" "$(tail -3 "$WORK/$SUITE-shell.log"; grep -i shell "$CLOG" | tail -2)"
+    away; shot started
+    expect_pixel "(its taskbar is there)" started 640 790 c0c0c0
+    grep -q "win95shell: ready (the session's desktop)" "$WORK/$SUITE-shell.log"; expect_true $? "(as the session's: the compositor's --session gives the shell --desktop-session)" "$(grep ready "$WORK/$SUITE-shell.log")"
+    grep -q "the compositor sends the desktop's keys here" "$WORK/$SUITE-shell.log"; expect_true $? "(and it has the desktop's keys)" "$(tail -3 "$WORK/$SUITE-shell.log")"
+    local shell_pid; shell_pid=$(sed -n 's/.*started the shell .* (pid \([0-9]*\)).*/\1/p' "$CLOG" | tail -1)
+
+    # nothing else can take the shell's part: the protocol is the shell's alone
+    XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET timeout 8 "$SHELL_BIN" >"$WORK/$SUITE-other.log" 2>&1 &
+    local other=$!
+    sleep 4
+    ! grep -q "sends the desktop's keys here\|another shell" "$WORK/$SUITE-other.log"
+    expect_true $? "another program doesn't even see the shell's protocol" "$(tail -3 "$WORK/$SUITE-other.log")"
+    kill "$other" 2>/dev/null; wait "$other" 2>/dev/null
+
+    # the shell dies: it's started again, without the start-up's sound or autostart
+    local sounds; sounds=$(grep -c "service-login" "$FAKE_LOG")
+    kill -9 "$shell_pid"
+    wait_shell_ready 2; expect_true $? "the shell dies: the compositor starts it again" "$(grep -i shell "$CLOG" | tail -3)"
+    grep -q "win95shell: ready (the session's desktop) (started again)" "$WORK/$SUITE-shell.log"
+    expect_true $? "(saying so: --restarted)" "$(grep ready "$WORK/$SUITE-shell.log")"
+    away; shot restarted
+    expect_pixel "(the taskbar is back)" restarted 640 790 c0c0c0
+    [ "$(grep -c "service-login" "$FAKE_LOG")" = "$sounds" ]; expect_true $? "(no start-up sound again)" "$(grep sound: "$FAKE_LOG")"
+    [ "$(grep -c "Session: would tell systemd" "$WORK/$SUITE-shell.log")" = 1 ]; expect_true $? "(nor the session's start-up again)" "$(grep Session: "$WORK/$SUITE-shell.log")"
+    pointer key:ctrl+Escape wait:0.7; away; shot start
+    expect_pixel "(and it has the desktop's keys again: Ctrl+Esc)" start 120 600 c0c0c0
+    pointer key:Escape wait:0.4
+
+    # dying over and over: after five times in a minute, it's left
+    local i
+    for i in 1 2 3 4 5 6; do
+        shell_pid=$(sed -n 's/.*started the shell .* (pid \([0-9]*\)).*/\1/p' "$CLOG" | tail -1)
+        kill -9 "$shell_pid" 2>/dev/null
+        for _ in $(seq 40); do
+            grep -q "not starting it again" "$CLOG" && break
+            [ "$(sed -n 's/.*started the shell .* (pid \([0-9]*\)).*/\1/p' "$CLOG" | tail -1)" != "$shell_pid" ] && break
+            sleep 0.1
+        done
+        grep -q "not starting it again" "$CLOG" && break
+    done
+    grep -q "keeps going away (five times in a minute): not starting it again" "$CLOG"
+    expect_true $? "a shell that keeps dying is left after five times in a minute" "$(grep -i shell "$CLOG" | tail -3)"
+    kill -0 "$COMP_PID" 2>/dev/null; expect_true $? "(the desktop itself carries on)" "it stopped"
+    # the compositor stops: no shell started again, a clean exit
+    kill "$COMP_PID"; local st; wait "$COMP_PID" 2>/dev/null; st=$?
+    [ "$st" -eq 0 ] && ! grep -q "Assertion" "$CLOG"; expect_true $? "(and stops cleanly)" "status $st: $(tail -2 "$CLOG")"
+}
+
+# --- the new desktop next to today's (the Qt compositor's) --------------------
+# The same scenes on both, compared pixel by pixel: the Qt compositor runs
+# as a window here (its 1280x800 at 43,55), the new desktop on its own. The
+# clock is left out (the minute can turn in between). Side by side pictures
+# and the differences are in $WORK/screen-report.
+screen_scenes() { # PREFIX X Y BUS DISPLAY: the scenes, offset by X,Y; pictures as PREFIX-SCENE
+    local pre=$1 X=$2 Y=$3 bus=$4 out=$WORK/screen-report
+    mkdir -p "$out"
+    grab() { shot "$pre-$1"; magick "$WORK/$SUITE-$pre-$1.png" -crop 1280x800+$X+$Y +repage \
+        -fill black -draw "rectangle 1180,766 1279,799" "$out/$pre-$1.png"; }
+    pointer move:$((X + 1000)),$((Y + 300)) wait:0.3; grab desktop
+    pointer click:$((X + 35)),$((Y + 783)) wait:0.7 move:$((X + 1000)),$((Y + 300)) wait:0.3; grab start
+    pointer key:Escape wait:0.4 click:$((X + 35)),$((Y + 783)) wait:0.7 key:r wait:0.8 move:$((X + 1000)),$((Y + 300)) wait:0.3; grab run
+    pointer key:Escape wait:0.5 click:$((X + 35)),$((Y + 783)) wait:0.7 key:u key:u key:Return wait:1 move:$((X + 1000)),$((Y + 300)) wait:0.3; grab shutdown
+    pointer key:Escape wait:0.6
+    DBUS_SESSION_BUS_ADDRESS=$bus "$BUILD/win95notify" -t 30000 -a "Screen test" "A notification" "The same on both desktops." >/dev/null 2>&1
+    sleep 1; grab notification
+    DBUS_SESSION_BUS_ADDRESS=$bus gdbus call --session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
+        --method org.freedesktop.Notifications.CloseNotification 1 >/dev/null 2>&1
+    sleep 0.6
+    pointer key:XF86AudioRaiseVolume; grab osd
+    sleep 2
+    # a window's frame (drawn by QML on the one, cairo on the other): the
+    # window found by its colour, the frame around it compared
+    local fifo=$WORK/$SUITE-$pre-probe.in
+    rm -f "$fifo"; mkfifo "$fifo"; sleep 100000 >"$fifo" &
+    PIDS+=($!)
+    WAYLAND_DISPLAY=$5 QT_QPA_PLATFORM=wayland "$PROBE_QT" --title "Frame" --color cc0000 <"$fifo" >"$WORK/$SUITE-$pre-probe.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 50); do grep -q "EVT ready" "$WORK/$SUITE-$pre-probe.log" 2>/dev/null && break; sleep 0.1; done
+    sleep 0.8
+    pointer move:$((X + 1000)),$((Y + 600)) wait:0.3
+    shot "$pre-window"
+    local box; box=$(magick "$WORK/$SUITE-$pre-window.png" -crop 1280x800+$X+$Y +repage -fuzz 2% -fill black +opaque "#cc0000" \
+        -fill white -opaque "#cc0000" -trim -format "%w %h %X %Y" info: 2>/dev/null)
+    local w h x y; read -r w h x y <<<"$box"; x=${x#+}; y=${y#+}
+    magick "$WORK/$SUITE-$pre-window.png" -crop 1280x800+$X+$Y +repage -crop $((w + 6))x$((h + 28))+$((x - 3))+$((y - 25)) +repage \
+        "$out/$pre-window.png"
+    echo "$w $h $x $y" >"$out/$pre-window.box"
+}
+screen_compare() { # SCENE: how much differs (percent of the picture, colours more than 10% apart)
+    local out=$WORK/screen-report a b
+    a=$out/classic-$1.png; b=$out/new-$1.png
+    [ "$(magick "$a" -format %wx%h info:)" = "$(magick "$b" -format %wx%h info:)" ] || { echo 100; return; }
+    magick compare -metric AE -fuzz 10% "$a" "$b" "$out/diff-$1.png" 2>&1 >/dev/null \
+        | awk -v px="$(magick "$a" -format '%[fx:w*h]' info:)" '{printf "%.2f", $1 * 100 / px}'
+    magick "$a" "$b" "$out/diff-$1.png" +append -resize 50% "$out/side-by-side-$1.png" 2>/dev/null
+}
+suite_screen() {
+    say "screen: the new desktop against today's (scene by scene)"
+    local OLD=$BUILD/win95compositor
+    [ -x "$OLD" ] || { bad "win95compositor" "not built"; return; }
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    # today's: the Qt compositor as a window, with the same stand-ins
+    fresh 1400x900
+    shell_prepare || return
+    local classic_bus=$SHELL_BUS home=$WORK/home-$SUITE inner=w95inner-$$
+    HOME=$home XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 \
+        XDG_DATA_HOME=$home/.local/share XDG_STATE_HOME=$home/.local/state XDG_CACHE_HOME=$home/.cache \
+        PATH="$HERE/fakes:$PATH" W95_FAKE_LOG=$FAKE_LOG XDG_CONFIG_DIRS=$WORK/no-config-dirs \
+        WAYLAND95_TEST_POWER_SUPPLY=$WORK/no-power-supply DBUS_SESSION_BUS_ADDRESS=$classic_bus \
+        "$OLD" --wayland-socket-name "$inner" --no-xwayland >"$WORK/screen-classic.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 60); do query list | grep -q "^Wayland 95|" && break; sleep 0.25; done
+    query list | grep -q "^Wayland 95|" || { bad "the Qt compositor starts" "$(tail -3 "$WORK/screen-classic.log")"; return; }
+    sleep 3
+    pointer click:700,400 wait:0.3   # (its window has the keyboard)
+    screen_scenes classic 43 55 "$classic_bus" "$inner"
+    # the new one
+    fresh
+    # (with a stand-in logind saying the computer can stand by and
+    # hibernate, as the Qt one was told by the real one)
+    WITH_LOGIND=1 start_shell || return
+    screen_scenes new 0 0 "$SHELL_BUS" "$SOCKET"
+    local scene pct
+    for scene in desktop start run shutdown notification osd; do
+        pct=$(screen_compare "$scene")
+        awk -v p="$pct" 'BEGIN { exit !(p <= 0.5) }'
+        expect_true $? "$scene: as on today's desktop (${pct}% differs)" "${pct}% differs: see $WORK/screen-report/side-by-side-$scene.png"
+    done
+    # The frame is drawn anew (cairo, not QML), as Win95's: a bevel all
+    # round and the title bar inside it, where today's has its title bar
+    # against the edge, a gap under it, and smaller button symbols. Same
+    # size and place; the rest is in the report until it's decided.
+    pct=$(screen_compare window)
+    [ "$(cut -d' ' -f1,2 "$WORK/screen-report/classic-window.box")" = "$(cut -d' ' -f1,2 "$WORK/screen-report/new-window.box")" ] \
+        && awk -v p="$pct" 'BEGIN { exit !(p <= 3.5) }'
+    expect_true $? "a window's frame: the same size and place, drawn as Win95's (${pct}% differs: the title bar's bevel, gap and buttons)" \
+        "${pct}% differs: see $WORK/screen-report/side-by-side-window.png"
+}
+
 # --- the Qt compositor's desktop, as a window in this one ---------------------------
 # The taskbar, Start menu and tray QML is shared with win95shell; this checks
 # a change to it didn't break the Qt compositor's desktop (still the session
@@ -1415,11 +1824,11 @@ suite_classic() {
     local OLD=$BUILD/win95compositor
     [ -x "$OLD" ] || { bad "win95compositor" "not built"; return; }
     fresh 1400x900
-    local home=$WORK/home-$RUN inner=w95inner-$$
+    local home=$WORK/home-$SUITE inner=w95inner-$$
     mkdir -p "$home"
     HOME=$home XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 \
         XDG_DATA_HOME=$home/.local/share XDG_STATE_HOME=$home/.local/state XDG_CACHE_HOME=$home/.cache \
-        PATH="$HERE/fakes:$PATH" W95_FAKE_LOG=$WORK/classic-fakes.log \
+        PATH="$HERE/fakes:$PATH" W95_FAKE_LOG=$WORK/classic-fakes.log XDG_CONFIG_DIRS=$WORK/no-config-dirs \
         dbus-run-session -- "$OLD" --wayland-socket-name "$inner" --no-xwayland >"$WORK/classic.log" 2>&1 &
     PIDS+=($!)
     for _ in $(seq 60); do query list | grep -q "^Wayland 95|" && break; sleep 0.25; done
@@ -1445,7 +1854,7 @@ suite_classic() {
 }
 
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

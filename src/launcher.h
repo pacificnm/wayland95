@@ -39,7 +39,7 @@ public:
 
     // Is this the login session's desktop, on the screen itself? The Qt
     // compositor is when started as the session (WAYLAND95_SESSION) on
-    // eglfs/linuxfb; win95shell is when started with --session (by the
+    // eglfs/linuxfb; win95shell is when started with --desktop-session (by the
     // session, never by hand or by a desktop nested in another). Only then
     // do autostart, NetworkManager's passwords and the update check run.
     static bool isSession();

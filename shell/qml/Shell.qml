@@ -79,7 +79,7 @@ QtObject {
         title: "Pop-ups"
         color: "transparent"
         width: 640; height: 480
-        visible: taskbar.anyPopupVisible
+        visible: taskbar.anyPopupVisible || windowMenu.visible
 
         // the screen-sized parent of the pop-ups: sized before the layer is
         // first shown (its window's own content item isn't), since the tray
@@ -93,7 +93,12 @@ QtObject {
                 anchors.fill: parent
                 z: -1
                 acceptedButtons: Qt.AllButtons
-                onPressed: taskbar.closePopups()
+                onPressed: { taskbar.closePopups(); windowMenu.close(); }
+            }
+            // a window's own menu (right-click on its title bar, Alt+Space)
+            Ui.Menu95 {
+                id: windowMenu
+                z: 3000
             }
         }
     }
@@ -217,6 +222,10 @@ QtObject {
         LevelOsd { id: levelOsd }
     }
     property DesktopKeys desktopKeys: DesktopKeys {
+        onSwitcherShown: (windows, selected) => taskSwitcher.showList(windows, selected)
+        onSwitcherSelected: (selected) => taskSwitcher.select(selected)
+        onSwitcherHidden: taskSwitcher.hide()
+        onWindowMenu: (window, x, y, state) => shell.showWindowMenu(window, x, y, state)
         onPressed: (key) => {
             shell.desktopKey(key);
             // (only the level keys repeat; a held power button acts once)
@@ -245,6 +254,8 @@ QtObject {
         case DesktopKeys.VolumeDown: levelOsd.changeVolume(-0.05); break;
         case DesktopKeys.VolumeMute: levelOsd.toggleMute(); break;
         case DesktopKeys.Print: shell.printScreen(); break;
+        case DesktopKeys.StartMenu: taskbar.toggleStartMenu(); break;
+        case DesktopKeys.TaskManager: Launcher.launch("win95sysmon"); break;
         case DesktopKeys.Capture:
             if (screenCapture.active)
                 screenCapture.close();
@@ -253,6 +264,40 @@ QtObject {
             break;
         default: shell.powerPolicy.key(key); break;
         }
+    }
+
+    // --- Alt+Tab's box: the compositor runs Alt+Tab, we draw it ----------
+    property Window switcherLayer: Window {
+        LayerShell.layer: LayerShell.Overlay
+        LayerShell.anchors: LayerShell.AnchorTop | LayerShell.AnchorBottom | LayerShell.AnchorLeft | LayerShell.AnchorRight
+        LayerShell.exclusiveZone: -1
+        LayerShell.keyboard: LayerShell.KeyboardNone
+        LayerShell.scope: "switcher"
+        title: "Switcher"
+        color: "transparent"
+        flags: Qt.WindowTransparentForInput
+        width: 640; height: 480
+        visible: taskSwitcher.visible
+        Item {
+            width: Screen.width
+            height: Screen.height
+            TaskSwitcher { id: taskSwitcher }
+        }
+    }
+
+    // --- a window's menu (Restore, Move, Size, Minimize, Maximize, Close)
+    function showWindowMenu(window, x, y, state) {
+        var maximized = (state & 1) !== 0, minimized = (state & 2) !== 0;
+        taskbar.closePopups();
+        windowMenu.popup(x, y, [
+            { text: "&Restore", enabled: maximized || minimized, action: function () { desktopKeys.windowAction(window, DesktopKeys.Restore); } },
+            { text: "&Move", enabled: !maximized, action: function () { desktopKeys.windowAction(window, DesktopKeys.Move); } },
+            { text: "&Size", enabled: !maximized && !minimized, action: function () { desktopKeys.windowAction(window, DesktopKeys.Size); } },
+            { text: "Mi&nimize", enabled: !minimized, action: function () { desktopKeys.windowAction(window, DesktopKeys.Minimize); } },
+            { text: "Ma&ximize", enabled: !maximized, action: function () { desktopKeys.windowAction(window, DesktopKeys.Maximize); } },
+            { separator: true },
+            { text: "&Close", shortcut: "Alt+F4", action: function () { desktopKeys.windowAction(window, DesktopKeys.Close); } },
+        ]);
     }
 
     // --- Print Screen and the screen capture tool (Ctrl+Shift+5) --------
@@ -280,7 +325,7 @@ QtObject {
                     shell.captureId = ScreenCopy.take(Qt.rect(r.x, r.y, r.width, r.height),
                                                       destination === "Clipboard" ? "Clipboard" : ScreenCopy.folder(destination));
                 }
-                onWindowsWanted: ScreenCopy.listWindows()
+                onWindowsWanted: ScreenCopy.listWindows("capture")
             }
         }
     }
@@ -312,7 +357,7 @@ QtObject {
                                      path ? path : ScreenCopy.printFolder(), "", 1, 5000);
             }
         }
-        function onWindowsListed(windows) { screenCapture.windowRects = windows; }
+        function onWindowsListed(tag, windows) { if (tag === "capture") screenCapture.windowRects = windows; }
     }
     function printScreen() {
         shell.printId = ScreenCopy.take(Qt.rect(0, 0, 0, 0), ScreenCopy.printFolder());
@@ -322,10 +367,14 @@ QtObject {
     property ScreenSaver screenSaver: ScreenSaver {
         onActiveChanged: if (active) taskbar.closePopups()
     }
+    property Accessibility accessibility: Accessibility {
+        keys: desktopKeys
+    }
     property PowerPolicy powerPolicy: PowerPolicy {
         onAskRequested: { taskbar.closePopups(); shutDownDialog.open(); }
     }
 
     // the "Start Wayland 95" sound
-    Component.onCompleted: Ui.Wayland95Settings.playSound("startup")
+    // (not when the compositor started us again: nothing was started)
+    Component.onCompleted: if (!ShellSession.restarted) Ui.Wayland95Settings.playSound("startup")
 }

@@ -55,6 +55,18 @@ Item {
         visible = false;
         windows = [];
     }
+    // win95shell: the compositor runs Alt+Tab and says what to show
+    // (windows as [{title, appId, minimized}])
+    function showList(list, selected) {
+        windows = list;
+        index = selected;
+        visible = list.length > 1;
+    }
+    function select(selected) { index = selected; }
+    function hide() {
+        visible = false;
+        windows = [];
+    }
 
     Item {
         id: box
@@ -74,7 +86,8 @@ Item {
                 Item {
                     required property var modelData
                     required property int index
-                    readonly property string appId: switcher.appIdOf(modelData.frame)
+                    readonly property string appId: modelData.appId !== undefined ? modelData.appId
+                                                                                  : switcher.appIdOf(modelData.frame)
                     readonly property string iconUrl: switcher.ownIcons[appId] ? "" : ProgramMenu.iconFor(appId)
                     width: switcher.cell
                     height: switcher.cell

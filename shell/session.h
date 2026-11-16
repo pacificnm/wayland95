@@ -20,8 +20,10 @@ class ShellSession : public QObject
     // sleep), which are in minutes. The tests shorten it
     // (WAYLAND95_TEST_MINUTE_MS, only with WAYLAND95_NO_POWER_ACTIONS).
     Q_PROPERTY(int minuteMs READ minuteMs CONSTANT)
-    // started as the login session's desktop (--session)
+    // started as the login session's desktop (--desktop-session)
     Q_PROPERTY(bool session READ session CONSTANT)
+    // started again by the compositor after the shell went away (--restarted)
+    Q_PROPERTY(bool restarted READ restarted CONSTANT)
 
 public:
     explicit ShellSession(QObject *parent = nullptr) : QObject(parent) {}
@@ -35,6 +37,7 @@ public:
         return ok && test > 0 && qEnvironmentVariableIsSet("WAYLAND95_NO_POWER_ACTIONS") ? test : 60000;
     }
     bool session() const;
+    bool restarted() const;
 
     // ends the desktop: asks wayland95-compositor (which started the shell
     // and told it its process id) to stop; the session ends with it

@@ -8,8 +8,8 @@
   <interface name="wayland95_shell_v1" version="1">
     <description summary="the compositor's link to its desktop shell">
       The desktop's own keys are the shell's to act on (volume,
-      brightness, the power and sleep buttons now; Ctrl+Esc and the others
-      in later versions). The compositor catches them before any program sees them and sends them
+      brightness, the power and sleep buttons, Print Screen, Ctrl+Esc and
+      the others below). The compositor catches them before any program sees them and sends them
       here, but only while a shell is bound: without one they go to the
       program with the keyboard as usual. Only one client may bind it at a
       time; a second gets the already_bound error.
@@ -30,12 +30,114 @@
       <entry name="hibernate" value="8"/>
       <entry name="print" value="9" summary="Print Screen: a picture of the whole screen"/>
       <entry name="capture" value="10" summary="Ctrl+Shift+5: the screen capture tool"/>
+      <entry name="start_menu" value="11" summary="Ctrl+Esc: the Start menu"/>
+      <entry name="task_manager" value="12" summary="Ctrl+Shift+Esc: the System Monitor"/>
     </enum>
 
     <enum name="key_state">
       <entry name="released" value="0"/>
       <entry name="pressed" value="1"/>
     </enum>
+
+    <enum name="tone">
+      <entry name="click" value="1" summary="StickyKeys latched a key; a slow key was accepted"/>
+      <entry name="high" value="2" summary="locked, or a lock key turned on (ToggleKeys)"/>
+      <entry name="low" value="3" summary="unlocked, or a lock key turned off"/>
+    </enum>
+
+    <enum name="feature">
+      <entry name="sticky_keys" value="1"/>
+      <entry name="filter_keys" value="2"/>
+      <entry name="toggle_keys" value="3"/>
+      <entry name="mouse_keys" value="4"/>
+      <entry name="high_contrast" value="5"/>
+    </enum>
+
+    <event name="tone">
+      <description summary="Accessibility Options: play this tone">
+        The compositor does StickyKeys, FilterKeys, ToggleKeys and
+        MouseKeys where the keys arrive; the shell makes their sounds.
+      </description>
+      <arg name="tone" type="uint" enum="tone"/>
+    </event>
+
+    <event name="shortcut">
+      <description summary="an Accessibility Options shortcut key was used">
+        Shift five times, right Shift held for eight seconds, Num Lock held
+        for five, Left Alt+Left Shift+Num Lock or +Print Screen (each only
+        if its shortcut is allowed). The shell turns the feature on or off
+        (in settings.ini, which the compositor follows) and says so.
+      </description>
+      <arg name="feature" type="uint" enum="feature"/>
+    </event>
+
+    <event name="sticky_modifiers">
+      <description summary="the keys StickyKeys holds down">
+        For example "Shift" or "Ctrl + Shift (locked)"; empty when none.
+      </description>
+      <arg name="held" type="string"/>
+    </event>
+
+    <enum name="window_state" bitfield="true">
+      <entry name="maximized" value="1"/>
+      <entry name="minimized" value="2"/>
+    </enum>
+
+    <enum name="window_action">
+      <entry name="restore" value="1"/>
+      <entry name="move" value="2" summary="the window follows the pointer until a click"/>
+      <entry name="size" value="3" summary="its bottom right corner follows the pointer until a click"/>
+      <entry name="minimize" value="4"/>
+      <entry name="maximize" value="5"/>
+      <entry name="close" value="6"/>
+    </enum>
+
+    <event name="switcher_entry">
+      <description summary="Alt+Tab: one window for the box">
+        Alt+Tab is the compositor's (it must work whatever has the
+        keyboard); the shell draws the box. When it starts, every window
+        comes as a switcher_entry, most recently used first, then
+        switcher_show; each further Tab is a switcher_select, and letting
+        go of Alt (or Escape) a switcher_hide. Without a shell, the
+        windows themselves come to the front in turn.
+      </description>
+      <arg name="title" type="string"/>
+      <arg name="app_id" type="string"/>
+      <arg name="minimized" type="uint"/>
+    </event>
+    <event name="switcher_show">
+      <arg name="selected" type="uint" summary="index into the entries"/>
+    </event>
+    <event name="switcher_select">
+      <arg name="selected" type="uint"/>
+    </event>
+    <event name="switcher_hide"/>
+
+    <event name="window_menu">
+      <description summary="show a window's menu">
+        Right-clicked on its title bar, Alt+Space, or the program asked:
+        Restore, Move, Size, Minimize, Maximize, Close, at x, y (screen
+        coordinates). The choice comes back as window_action.
+      </description>
+      <arg name="window" type="uint" summary="the compositor's id for it"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="state" type="uint" enum="window_state"/>
+    </event>
+
+    <request name="window_action">
+      <arg name="window" type="uint"/>
+      <arg name="action" type="uint" enum="window_action"/>
+    </request>
+
+    <request name="end_task">
+      <description summary="End Task: end the program at once">
+        The taskbar's End Task: the program the window belongs to is
+        killed (it may lose what it hasn't saved; the shell asks first).
+        Never the compositor, the shell or Xwayland.
+      </description>
+      <arg name="toplevel" type="object" interface="zwlr_foreign_toplevel_handle_v1"/>
+    </request>
 
     <request name="destroy" type="destructor"/>
 

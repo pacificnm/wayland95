@@ -42,7 +42,14 @@ fresh compositor. The suites (`tests/run.sh SUITE`):
 | `shell` | win95shell (with a throwaway home, settings and D-Bus session): the desktop and taskbar drawn; a maximized window stops above the taskbar; a button per window, the active one pressed in; a button activates, minimizes and restores its window (and the keyboard follows); a button's menu opens at the pointer, Maximize and Close by key; the Start menu opens, closes by Escape (keyboard back to the window) and by a click outside, a submenu by its letter, an entry starts its program; double-clicking My Computer opens it; the clock's tooltip shows above it, stays while the pointer moves (its layer takes no pointer) and goes |
 | `dialogs` | Start > Run: opens centred, a program by name starts and the dialog closes; a name that doesn't exist: a message over the dialog, with the keyboard, then back to the dialog; Help shows and closes; Shut Down darkens the screen, Escape cancels, "shut down" and "restart" ask the system (only logged, see below), "close all programs and exit" ends the desktop cleanly (exit status 0, no failed assertion) |
 | `notifications` | win95shell's notifications (sent with `win95notify`, our notify-send, and D-Bus): a crash from before the desktop started gets one notice, at the bottom right 8 pixels clear of the taskbar, marked seen, and clicking it opens Problem Reports; a crash while running gets one at once; a program's notification shows (logged by program, never by what it says), with its sound, clicking runs its default action, its close box closes it, it expires by itself (the program is told which), at most four at once, the program can close them; Do Not Disturb keeps them (a critical one still shows); the active window keeps the keyboard throughout. The volume keys: without a shell they're a program's; with one, Volume Up/Down and Mute change the volume (55%, 50%, muted), the level shows above the taskbar with the right number of blocks, a held key repeats, it goes by itself, no program sees the keys; Brightness Up (where there's a backlight) asks for a brighter screen. Autostart doesn't run when the shell isn't the session's |
-| `session` | `win95shell --session`: autostart starts its programs (not one turned off, nor one only for another desktop) and would tell systemd where the display is; the update check (against a stand-in PackageKit) refreshes, lists, never interactively, and gives its notice; polkit's password prompt (called as polkit would): the password goes to polkit's helper with the cookie, typing goes to the prompt, a wrong one keeps it up, the right one says yes, Escape says no and the keyboard goes back; NetworkManager's network password: shown, the password goes back, would be saved, Escape cancels; a second shell is refused |
+| `session` | `win95shell --desktop-session`: autostart starts its programs (not one turned off, nor one only for another desktop) and would tell systemd where the display is; the update check (against a stand-in PackageKit) refreshes, lists, never interactively, and gives its notice; polkit's password prompt (called as polkit would): the password goes to polkit's helper with the cookie, typing goes to the prompt, a wrong one keeps it up, the right one says yes, Escape says no and the keyboard goes back; NetworkManager's network password: shown, the password goes back, would be saved, Escape cancels; a second shell is refused |
+| `screensaver` | win95shell's screen saver (a minute is 2 seconds here): after its wait it covers everything, a key ends it (and doesn't reach the program, which has the keyboard again), a nudge of the mouse doesn't, a real move or a click does (no click reaches the window), Control Panel's Preview ignores the mouse for a moment, a program holding it off over D-Bus keeps it away and it starts once that program has gone; password protected it locks the session (ext-session-lock), a key asks for the password over it, a wrong one keeps it locked and nothing typed reaches a program, Escape goes back to the saver, the right one unlocks and the keyboard is back; Preview never locks; if the shell dies while locked the screen stays locked and no program gets keys |
+| `power` | `win95shell --desktop-session` with a stand-in logind (a laptop) and a pretend battery: the lid and power keys are taken from logind, the display turns off when idle and a key turns it on, the computer sleeps after longer, a program holding the screen saver off keeps the display on, closing the lid does its action and opening it turns the display on, the power button asks Shut Down (the program never sees it), the sleep button sleeps, unplugged at 4% a warning then (a "minute" later) hibernation. Without `--desktop-session` the power button does nothing (`notifications`) |
+| `capture` | Print Screen saves the whole screen (screencopy: the desktop, the window, the taskbar) and says where, the program never sees the key; Ctrl+Shift+5 opens the capture tool, Escape closes it; a selection, saved in Pictures, with none of the tool in it; its thumbnail at the bottom right, 16 pixels clear of the taskbar, while the desktop stays usable, gone after a few seconds; a window, frame and all; the entire screen without the tool |
+| `accessibility` | Accessibility Options (in the compositor; sounds and captions from the shell): StickyKeys (a click; "holding Shift" shown; the next key gets it, the one after doesn't; twice locks with a high tone, every key gets it, again unlocks with a low one; Shift held with a key as ever; a click uses it; turned off while holding, it lets go), FilterKeys (slow keys: a tap is ignored, a held key counts with a click; bounce keys), ToggleKeys (high and low tones), MouseKeys (the number pad moves the pointer, clicks, - picks the right button, none of its keys reach the program), the shortcuts (Shift five times, Left Alt+Left Shift+Num Lock, Num Lock held five seconds, right Shift held eight, Left Alt+Left Shift+Print Screen; a disallowed shortcut does nothing), SoundSentry's flash, ShowSounds' caption, the automatic reset |
+| `windowkeys` | win95shell with the compositor's keys: Alt+Tab shows the box in the middle (the windows stay put meanwhile), letting go of Alt picks the window used before, the box goes, Escape changes nothing; Ctrl+Esc opens the Start menu (the program doesn't get the Escape), Ctrl+Shift+Esc the System Monitor; the window menu by a right-click on a title bar (Minimize) and Alt+Space (Maximize, Restore, Move following the pointer until a click, Size by its corner, Close), and from GTK's own title bar; End Task from a taskbar button's menu ends that program's process and nothing else, an X11 program's too |
+| `shellstart` | `wayland95-compositor --shell ... --session`: it starts the shell (its taskbar shows; it's the session's, with the desktop's keys); another program doesn't even see the shell's protocol; the shell killed: started again, saying so, with no start-up sound or autostart a second time, its keys back; dying five times in a minute it's left, the desktop carries on and stops cleanly |
+| `screen` | the new desktop against today's (the Qt compositor, as a window here, with the same stand-ins), the same scenes pixel by pixel (clock left out): the desktop, the Start menu, Run, Shut Down, a notification, the volume level (all must match within 0.5%); a window's frame, same size and place (its drawing differs, see migration.md). Side by side pictures and the differences: `$WORK/screen-report` |
 | `classic` | the Qt compositor's desktop as a window in the new one, since the taskbar QML is shared: its desktop and taskbar, its Start menu just above the taskbar, Escape, the clock's tooltip, a taskbar button's menu at the pointer |
 | `settings` | settings.ini changes apply at once: title and face colours (written as QSettings does, and edited in place), the double-click time (a slow double-click counts only with a long interval), an unknown keyboard layout is reported and typing still works |
 | `vscode` | VS Code: opens the file, the wheel scrolls the editor, typing and Ctrl+S save it |
@@ -59,12 +66,25 @@ refuse to start a shell without both. With them the desktop also never
 changes the screen's brightness or power profile, saves a network password
 into NetworkManager, or changes systemd's environment.
 
+Everything a test starts is ended with it, including what programs and
+the shell started on the test's desktop (found by their `WAYLAND_DISPLAY`),
+and the long-running helpers the desktop starts end with it even if it
+crashes. Test shells see none of this computer's autostart programs
+(`XDG_CONFIG_DIRS` is an empty folder): a test shell started as the
+session once ran them (KDE Connect, a Bluetooth applet) against the test
+desktop.
+
 The rest of the system has stand-ins (`tests/fakes/`, first on the shell's
 `PATH`): the sound players (the tests' desktops make no sound; the
 stand-ins log what would have played), PipeWire's `pw-dump` and `wpctl`
 (one pretend output at 50%; volume changes are only logged), polkit's
 password checker (`right-password` is right; no PAM involved), and
-PackageKit (on the test's own D-Bus). The shell's D-Bus session is the
+PackageKit and logind (on the test's own D-Bus), PAM's `unix_chkpwd` (the
+screen saver's password), and the battery (an empty folder unless a suite
+pretends one, so this computer's own never shows "battery low" mid-test).
+Idle times are in minutes; a suite can make a minute 2 seconds
+(`WAYLAND95_TEST_MINUTE_MS`, only honoured with
+`WAYLAND95_NO_POWER_ACTIONS`). The shell's D-Bus session is the
 test's own `dbus-daemon`, which the tests reach too: with
 `WAYLAND95_TEST_AGENTS_ON_SESSION_BUS=1` the polkit and NetworkManager
 agents answer there, so the tests call them as polkit and NetworkManager
@@ -74,8 +94,9 @@ Not covered headless: the keyboard layout and repeat (they apply to real
 keyboards; the tests' virtual keyboard brings its own keymap) and touchpad
 settings (no touchpad). Those are checked nested, with your real keyboard
 and touchpad. Still to come (phase 4): the Alt+Tab box and the desktop's
-own keys, the lock screen and screen saver, the power policy, drag and drop
-between programs, robustness (crashing and hung programs).
+drag and drop between programs, robustness (crashing and hung programs),
+the Alt+Tab box against today's (today's can't get Alt+Tab as a window
+here: the outer compositor keeps it).
 
 `tests/run.sh` runs everything and prints PASS/FAIL per check with what was
 expected and what happened; `tests/run.sh input` runs one suite.
@@ -88,7 +109,7 @@ The breaks: no pointer frames (the wheel in Chromium), no keyboard until
 one is plugged in (typing lost), no Win95 frames, panels' exclusive zones
 ignored (windows under the taskbar), the volume and brightness keys never
 sent to the shell, panels arranged in one pass (notifications over the
-taskbar).
+taskbar), StickyKeys never holding a key.
 
 ## 2. Nested, on your screen (VS Code)
 

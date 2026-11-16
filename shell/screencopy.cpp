@@ -117,8 +117,8 @@ private:
 class WindowList : public QObject, public QtWayland::wayland95_window_list_v1
 {
 public:
-    WindowList(ScreenCopy *owner, ::wayland95_window_list_v1 *list)
-        : QtWayland::wayland95_window_list_v1(list), m_owner(owner) {}
+    WindowList(ScreenCopy *owner, const QString &tag, ::wayland95_window_list_v1 *list)
+        : QtWayland::wayland95_window_list_v1(list), m_owner(owner), m_tag(tag) {}
     ~WindowList() override { destroy(); }
 
 protected:
@@ -129,12 +129,13 @@ protected:
     }
     void wayland95_window_list_v1_done() override
     {
-        emit m_owner->windowsListed(m_windows);
+        emit m_owner->windowsListed(m_tag, m_windows);
         deleteLater();
     }
 
 private:
     ScreenCopy *m_owner;
+    QString m_tag;
     QVariantList m_windows;
 };
 
@@ -219,12 +220,12 @@ QString ScreenCopy::printFolder() const
     return QFileInfo(pictures).isDir() ? pictures : QDir::homePath();
 }
 
-void ScreenCopy::listWindows()
+void ScreenCopy::listWindows(const QString &tag)
 {
     ShellExtension *shell = ShellExtension::instance();
     if (!shell->isActive()) {
-        QMetaObject::invokeMethod(this, [this] { emit windowsListed({}); }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, [this, tag] { emit windowsListed(tag, {}); }, Qt::QueuedConnection);
         return;
     }
-    new WindowList(this, shell->list_windows());
+    new WindowList(this, tag, shell->list_windows());
 }

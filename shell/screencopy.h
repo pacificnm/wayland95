@@ -40,12 +40,13 @@ public:
     // it isn't there; Print Screen's: Pictures, or the home folder
     Q_INVOKABLE QString folder(const QString &name) const;
     Q_INVOKABLE QString printFolder() const;
-    // where the windows are, topmost first: windowsListed([{x, y, width, height}...])
-    Q_INVOKABLE void listWindows();
+    // where the windows are, topmost first: windowsListed(tag, [{x, y,
+    // width, height}...]) (the tag says who asked)
+    Q_INVOKABLE void listWindows(const QString &tag);
 
 Q_SIGNALS:
     void taken(int id, const QString &path);
-    void windowsListed(const QVariantList &windows);
+    void windowsListed(const QString &tag, const QVariantList &windows);
 
 private:
     friend class CaptureFrame;

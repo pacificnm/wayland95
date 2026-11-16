@@ -3,6 +3,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <sys/types.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
 #include <wlr/render/allocator.h>
@@ -54,6 +55,16 @@ struct settings {
 	// touchpad
 	bool tap_to_click, natural_scroll, disable_while_typing, middle_emulation;
 	double pointer_speed; // -1..1
+	// Control Panel > Accessibility Options (accessibility.c)
+	struct {
+		bool sticky_keys, sticky_lock, sticky_sound, sticky_shortcut;
+		bool filter_keys, filter_shortcut;
+		int filter_bounce_ms, filter_slow_ms;
+		bool toggle_keys, toggle_shortcut;
+		bool mouse_keys, mouse_keys_numlock_on, mouse_keys_shortcut;
+		int mouse_keys_speed, mouse_keys_acceleration; // 1-10
+		bool high_contrast_shortcut;
+	} a11y;
 };
 
 enum cursor_mode {
@@ -111,6 +122,8 @@ struct server {
 	// Alt+Tab: switching through the windows, most recent first
 	bool switching;
 	struct view *switch_current;
+	bool switch_box;     // the shell draws the box (else the windows come forward)
+	bool keyboard_grab;  // a Move or Size from the window menu
 
 	struct wl_list outputs; // struct output.link
 	struct wl_listener new_output;
@@ -175,6 +188,16 @@ struct server {
 	// the shell (wayland95-shell-v1, shell.c): the one bound, if any
 	struct wl_global *shell_global;
 	struct wl_resource *shell_resource;
+	// --shell: the compositor starts it on a private connection (only it
+	// may bind wayland95-shell-v1) and restarts it if it goes away
+	const char *shell_program;
+	bool shell_session;           // --session: it's the login session's
+	struct wl_client *shell_client;
+	struct wl_listener shell_client_destroy;
+	pid_t shell_pid;
+	struct wl_event_source *shell_restart_timer;
+	int shell_restarts[5];        // when the last restarts were (s), oldest first
+	bool stopping;
 
 	struct wlr_idle_notifier_v1 *idle_notifier;
 	struct wlr_idle_inhibit_manager_v1 *idle_inhibit;
@@ -218,6 +241,7 @@ enum view_type { VIEW_XDG, VIEW_XWAYLAND };
 struct view {
 	struct node_tag tag; // NODE_VIEW
 	struct wl_list link;
+	uint32_t id; // for the shell (wayland95-shell-v1: its window menu)
 	struct server *server;
 	enum view_type type;
 	struct wlr_xdg_toplevel *xdg_toplevel;   // VIEW_XDG
@@ -247,7 +271,7 @@ struct view {
 
 	struct wl_listener map, unmap, commit, destroy;
 	struct wl_listener request_move, request_resize, request_maximize;
-	struct wl_listener request_minimize, request_fullscreen;
+	struct wl_listener request_minimize, request_fullscreen, request_show_window_menu;
 	struct wl_listener set_title, set_app_id;
 	// X11 only
 	struct wl_listener associate, dissociate, request_configure, request_activate;
@@ -286,6 +310,10 @@ struct keyboard {
 	struct wl_list link;
 	struct server *server;
 	struct wlr_keyboard *wlr_keyboard;
+	// while StickyKeys or FilterKeys is on, programs see the keys that got
+	// through: this follows those (not the keyboard itself)
+	struct xkb_state *delivered;
+	struct xkb_keymap *delivered_keymap;
 	struct wl_listener modifiers;
 	struct wl_listener key;
 	struct wl_listener destroy;
@@ -361,6 +389,33 @@ void layers_arrange(struct server *server);
 void protocols_init(struct server *server);
 void protocols_finish(struct server *server);
 void shell_init(struct server *server);
+void shell_launch(struct server *server); // --shell: start it (if given)
 void shell_finish(struct server *server);
 uint32_t shell_key_for(xkb_keysym_t sym, uint32_t modifiers); // 0: not one of the shell's keys
 bool shell_send_key(struct server *server, uint32_t key, bool pressed); // false: no shell
+void shell_send_tone(struct server *server, uint32_t tone);
+void shell_send_shortcut(struct server *server, uint32_t feature);
+void shell_send_sticky(struct server *server, const char *held);
+// Alt+Tab's box and the window menu are the shell's to draw: false if
+// there's no shell (the compositor then does without)
+bool shell_switcher_show(struct server *server, struct view **views, int n, int selected);
+void shell_switcher_select(struct server *server, int selected);
+void shell_switcher_hide(struct server *server);
+bool shell_window_menu(struct view *view, int x, int y);
+struct view *view_by_id(struct server *server, uint32_t id);
+// the window menu's Move and Size: follow the pointer until a click
+void input_begin_keyboard_grab(struct view *view, enum cursor_mode mode);
+// Accessibility Options (accessibility.c): keys pass through here first
+struct keyboard;
+void a11y_key(struct server *server, struct keyboard *keyboard, uint32_t time, uint32_t keycode, bool pressed);
+void a11y_pointer_released(struct server *server); // a button let go: latched keys go too
+void a11y_settings_changed(struct server *server);
+void a11y_keyboard_gone(struct server *server, struct keyboard *keyboard);
+bool a11y_owns_modifiers(struct server *server); // StickyKeys or FilterKeys: modifiers are ours
+void a11y_finish(struct server *server);
+// input.c, for accessibility.c: deliver a key as if it had just arrived;
+// the modifiers programs see; the pointer
+void input_key(struct server *server, struct keyboard *keyboard, uint32_t time, uint32_t keycode, bool pressed);
+void input_modifiers(struct keyboard *keyboard, struct wlr_keyboard_modifiers *out);
+void input_pointer_move(struct server *server, uint32_t time, double dx, double dy);
+void input_pointer_button(struct server *server, uint32_t time, uint32_t button, bool pressed);

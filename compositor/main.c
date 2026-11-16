@@ -35,7 +35,7 @@
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s [--socket NAME] [--headless WIDTHxHEIGHT] [--run COMMAND]\n", argv0);
+	fprintf(stderr, "usage: %s [--socket NAME] [--headless WIDTHxHEIGHT] [--shell PROGRAM] [--session] [--run COMMAND]\n", argv0);
 }
 
 static void stop_listening(struct server *s)
@@ -61,14 +61,17 @@ static void stop_listening(struct server *s)
 	}
 	protocols_finish(s);
 	shell_finish(s);
+	a11y_finish(s);
 	if (s->settings_source)
 		wl_event_source_remove(s->settings_source);
 }
 
 static int stop(int signal, void *data)
 {
+	struct server *server = data;
 	wlr_log(WLR_INFO, "signal %d: stopping", signal);
-	wl_display_terminate(data);
+	server->stopping = true; // (the shell isn't started again)
+	wl_display_terminate(server->display);
 	return 0;
 }
 
@@ -76,6 +79,8 @@ int main(int argc, char *argv[])
 {
 	const char *socket_name = NULL;
 	const char *run = NULL;
+	const char *shell = NULL;  // --shell PROGRAM: started, and restarted if it dies
+	bool session = false;      // --session: the login session (the shell's too)
 	int headless_w = 0, headless_h = 0;
 	bool debug = getenv("WAYLAND95_DEBUG") != NULL;
 
@@ -83,14 +88,18 @@ int main(int argc, char *argv[])
 		{"socket", required_argument, NULL, 's'},
 		{"headless", required_argument, NULL, 'H'},
 		{"run", required_argument, NULL, 'r'},
+		{"shell", required_argument, NULL, 'S'},
+		{"session", no_argument, NULL, 'E'},
 		{"help", no_argument, NULL, 'h'},
 		{0, 0, 0, 0},
 	};
 	int c;
-	while ((c = getopt_long(argc, argv, "s:H:r:h", options, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "s:H:r:S:Eh", options, NULL)) != -1) {
 		switch (c) {
 		case 's': socket_name = optarg; break;
 		case 'r': run = optarg; break;
+		case 'S': shell = optarg; break;
+		case 'E': session = true; break;
 		case 'H':
 			if (sscanf(optarg, "%dx%d", &headless_w, &headless_h) != 2 || headless_w <= 0 || headless_h <= 0) {
 				usage(argv[0]);
@@ -207,12 +216,17 @@ int main(int argc, char *argv[])
 	char pid[16];
 	snprintf(pid, sizeof pid, "%d", (int)getpid());
 	setenv("WAYLAND95_COMPOSITOR_PID", pid, true);
-	wl_event_loop_add_signal(server.event_loop, SIGTERM, stop, server.display);
-	wl_event_loop_add_signal(server.event_loop, SIGINT, stop, server.display);
+	wl_event_loop_add_signal(server.event_loop, SIGTERM, stop, &server);
+	wl_event_loop_add_signal(server.event_loop, SIGINT, stop, &server);
 	// DISPLAY is Xwayland's (xwayland.c), started when an X11 program connects
 	fprintf(stderr, "wayland95-compositor: WAYLAND_DISPLAY=%s DISPLAY=%s\n", socket,
 			getenv("DISPLAY") ? getenv("DISPLAY") : "");
 	fflush(stderr);
+
+	// the shell (taskbar, desktop...), started and kept going by us
+	server.shell_program = shell;
+	server.shell_session = session;
+	shell_launch(&server);
 
 	if (run) {
 		// double fork: the program belongs to init, so it leaves no zombie
@@ -232,6 +246,7 @@ int main(int argc, char *argv[])
 
 	// shutting down: programs first (their windows go), then everything
 	// that listens to wlroots' objects stops (wlroots checks), then those
+	server.stopping = true;
 	wl_display_destroy_clients(server.display);
 	if (server.xwayland) {
 		wl_list_remove(&server.xwayland_ready.link);

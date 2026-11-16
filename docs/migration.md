@@ -13,7 +13,7 @@ and the results are recorded here.
 | 1 | Test harness with a first, minimal `wayland95-compositor` (headless backend, xdg-shell, plain windows): `grim` screenshots, virtual pointer/keyboard, `tests/run.sh`, test pages and test programs | the harness opens Chromium in it, clicks and scrolls, and checks both the page's event log and a screenshot; a deliberately broken build is caught | **done** (2026-11-16) |
 | 2 | `wayland95-compositor` core: outputs, input, xdg-shell, popups, Xwayland, all standard protocols; plain frames | input, popups, windows, X11, clipboard suites pass with Chromium, Firefox, VS Code, GTK, Qt, xterm | **done** (2026-11-16, see below) |
 | 3 | Win95 window frames (cairo/pango), move/resize/maximize/minimize, Alt+Tab keys, settings.ini | frames, alttab and settings suites (frame screenshots checked pixel by pixel); everything before still passes | **done** (2026-11-16, see below) |
-| 4 | `win95shell`: layer-shell integration for Qt, the existing QML moved over, foreign-toplevel taskbar, `wayland95-shell-v1`, services | shell suite; screen suite vs. reference images of today's desktop | in progress (steps below) |
+| 4 | `win95shell`: layer-shell integration for Qt, the existing QML moved over, foreign-toplevel taskbar, `wayland95-shell-v1`, services | shell suite; screen suite vs. reference images of today's desktop | done 2026-11-16 (frame look to decide) |
 | 5 | Session, package, ISO: session script, libseat, `.deb`, live image; "Wayland 95 (classic)" kept as a second session | VM boot test; full `tests/run.sh`; nested check by hand | not started |
 | 6 | Switch: the wlroots desktop becomes "Wayland 95"; publish; then remove the Qt compositor | a release with both sessions has been used on the Optiplex and this machine without regressions | not started |
 
@@ -189,7 +189,7 @@ compositor's desktop did besides windows and keys is now in win95shell.
   Only one shell can bind it; a second is refused.
 - The password prompts (polkit, and NetworkManager's network passwords) in
   dialog panels.
-- `win95shell --session`: the login session's desktop (as the Qt compositor
+- `win95shell --desktop-session`: the login session's desktop (as the Qt compositor
   is on eglfs with `WAYLAND95_SESSION`): autostart, telling systemd and
   D-Bus where the display is, NetworkManager's agent and the update check
   run only then. Until 4e nothing starts it so.
@@ -219,6 +219,85 @@ compositor's desktop did besides windows and keys is now in win95shell.
 - Not yet: the power policy (lid, power button, critical battery, sleeping
   when idle) goes with the screen saver in 4d; until then logind's defaults
   apply under the new compositor.
+
+**Phase 4, step 4d** (2026-11-16): the screen saver and lock, the power
+policy, Print Screen and the capture tool, and Accessibility Options, in
+win95shell and the compositor.
+- The screen saver (ext-idle-notify; programs and D-Bus inhibitors hold it
+  off) covers the screen in an overlay panel; password protected it locks
+  the session with ext-session-lock and asks with the existing password box.
+  Qt has no lock surfaces, so the shell has a second small shell
+  integration for them.
+- The power policy, as the session's desktop: display off and sleep when
+  idle, the lid, the power and sleep buttons, a critically low battery.
+- Print Screen and the capture tool: screencopy, and the window list from
+  the compositor for "a window". The tool's QML is shared, made
+  host-neutral (the Qt compositor uses it as before).
+- Accessibility Options in the compositor (`accessibility.c`), where every
+  key arrives: StickyKeys, FilterKeys, ToggleKeys, MouseKeys, their
+  shortcuts; the shell does the tones, captions, SoundSentry, ShowSounds
+  and the automatic reset. The tone generator moved into Wayland95Settings,
+  shared by both desktops.
+- Found and fixed by the new tests:
+  - the layer-shell integration echoed the compositor's answer to an
+    earlier size back as a new request, so a panel that grew and shrank
+    stayed big (the capture tool's thumbnail sat 40 pixels too high), and
+    a size request without a redraw never reached the compositor
+  - the password box, once cancelled, kept the keyboard: the next key and
+    the password went into the hidden box
+  - Qt finishes setting up a window with an empty commit, a protocol error
+    for a lock surface (the shell was disconnected; the compositor rightly
+    stayed locked)
+  - a keyboard that went away left "StickyKeys: Shift" on screen
+- Safety: the test desktops never ask logind for the power keys, never
+  check your real password (a stand-in for `unix_chkpwd`), and see no
+  battery unless a test pretends one (yours could have shown "battery low"
+  mid-test).
+- `tests/run.sh`: new `screensaver` (24 checks), `power` (12), `capture`
+  (14) and `accessibility` (30) suites. All suites: 372 of 372 pass; the self-test's
+  StickyKeys break is caught by 7 checks.
+
+**Phase 4, step 4c** (2026-11-16): the Alt+Tab box, the desktop's keys,
+the window menu and End Task (`wayland95-shell-v1`).
+- Alt+Tab stays the compositor's; with a shell it sends the windows and
+  the selection, and the shell draws Win95's box (the shared
+  TaskSwitcher.qml); the windows no longer come forward one by one.
+- Ctrl+Esc opens the Start menu and Ctrl+Shift+Esc the System Monitor,
+  whatever has the keyboard.
+- The window menu (new: the Qt compositor never had one): a right-click
+  on a title bar, Alt+Space, or a program's own request (GTK); Restore,
+  Move, Size (the window or its corner follows the pointer until a click),
+  Minimize, Maximize, Close.
+- End Task ends the program's process, through the compositor (a client
+  can't know another's process), from the taskbar's handle for it.
+- `tests/run.sh`: new `windowkeys` suite (21 checks); 372 of 372 pass.
+
+**Phase 4, step 4e** (2026-11-16): the compositor starts the shell and
+keeps it going; the new desktop compared with today's.
+- `wayland95-compositor --shell PROGRAM [--session]`: the shell on a
+  private connection, alone in seeing `wayland95-shell-v1`; started again
+  if it dies (`--restarted`: no second start-up), left after five deaths in
+  a minute.
+- Found by it: Qt takes `--session` and the argument after it for itself,
+  so a restarted shell (`--session --restarted`) lost both; the shell's
+  flag is `--desktop-session`. The shell's long-running helpers (`nmcli
+  monitor`, `pw-dump`) outlived a crashed shell, one more each restart;
+  they now end with it (`PR_SET_PDEATHSIG`).
+- The `screen` suite runs today's desktop and the new one side by side,
+  the same scenes compared pixel by pixel: the desktop, Start menu, Run,
+  Shut Down, a notification and the volume level match exactly (0.00%).
+  The window frame differs (2.7% of it): the new one is drawn as Win95's
+  (a bevel all round, the title bar inside it, Win95's button symbols),
+  today's has its title bar against the top and side edges with a gap
+  under it, and smaller symbols. Which one to keep is open.
+- The test harness: everything a test started (programs, and what they
+  and the shell started) now ends with it; before, hundreds of helpers
+  were left running from earlier test runs (now cleaned up). A test shell
+  started as the session's had also run this computer's own autostart
+  programs; test shells now see none.
+- `tests/run.sh`: new `shellstart` (14 checks) and `screen` (7) suites.
+  All suites: 372 of 372 pass, nothing left running afterwards; the
+  self-test catches all seven breaks (8 of 8 with the real build).
 
 ## What changes for users
 

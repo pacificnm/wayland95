@@ -8,13 +8,14 @@
 #   shellkeys: the volume and brightness keys never reach the shell
 #   layerorder: panels arranged in one pass, in the order they came
 #               (notifications drawn over the taskbar)
+#   sticky: StickyKeys never holds a key
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 BUILD=${BUILD:-$(cd "$HERE/.." && pwd)/build}
 cmake --build "$BUILD" --target wayland95-compositor wayland95-compositor-broken-frames \
     wayland95-compositor-broken-focus wayland95-compositor-broken-ssd \
     wayland95-compositor-broken-exclusive wayland95-compositor-broken-shellkeys \
-    wayland95-compositor-broken-layerorder >/dev/null || exit 2
+    wayland95-compositor-broken-layerorder wayland95-compositor-broken-sticky >/dev/null || exit 2
 ok=0; bad=0
 check() { # NAME COMPOSITOR MUST-FAIL-REGEX (empty: everything must pass)
     local out failed
@@ -40,5 +41,6 @@ check "broken: taskbar edge ignored" "$BUILD/tests/wayland95-compositor-broken-e
 check "broken: no window frames" "$BUILD/tests/wayland95-compositor-broken-ssd" "\[frames\] the frame's outer corner is white|\[frames\] an X11 window gets the Win95 frame"
 check "broken: keys not sent to the shell" "$BUILD/tests/wayland95-compositor-broken-shellkeys" "\[notifications\] Volume Up: the volume goes"
 check "broken: panels in one pass" "$BUILD/tests/wayland95-compositor-broken-layerorder" "\[notifications\] \(8 pixels clear of the screen's edge and the taskbar\)"
+check "broken: StickyKeys doesn't hold" "$BUILD/tests/wayland95-compositor-broken-sticky" "\[accessibility\] the next key gets it"
 echo "== $ok passed, $bad failed"
 [ "$bad" -eq 0 ]

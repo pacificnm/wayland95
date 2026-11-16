@@ -1,4 +1,6 @@
 #include "networkstatus.h"
+#include <csignal>
+#include <sys/prctl.h>
 
 #include <QStandardPaths>
 
@@ -65,6 +67,9 @@ void NetworkStatus::startMonitor()
     m_monitor = new QProcess(this);
     m_monitor->setProgram(QStringLiteral("nmcli"));
     m_monitor->setArguments({ QStringLiteral("monitor") });
+    // it ends with us, even if we crash (otherwise one more is left
+    // running each time the desktop is started again)
+    m_monitor->setChildProcessModifier([] { ::prctl(PR_SET_PDEATHSIG, SIGTERM); });
     m_monitor->setStandardInputFile(QProcess::nullDevice());
     connect(m_monitor, &QProcess::readyReadStandardOutput, this, [this] {
         m_monitor->readAllStandardOutput(); // any line means "something changed"

@@ -40,10 +40,13 @@ int main(int argc, char *argv[])
     // to some other desktop)
     Launcher::setSocketName(socket);
     Launcher::setX11Display(qEnvironmentVariable("DISPLAY"));
-    // --session: this is the login session's desktop (its session starts
-    // it so; by hand, or nested in another desktop, it isn't): autostart,
-    // NetworkManager's passwords and the update check (see Launcher)
-    const bool session = app.arguments().contains(QStringLiteral("--session"));
+    // --desktop-session: this is the login session's desktop (the compositor
+    // starts it so when it's the session; by hand, or nested in another
+    // desktop, it isn't): autostart, NetworkManager's passwords and the
+    // update check (see Launcher). Not --session: Qt takes that, and the
+    // argument after it, for X11 session management.
+    // --restarted (below): the compositor started us again
+    const bool session = app.arguments().contains(QStringLiteral("--desktop-session"));
     Launcher::setSession(session);
     // (the power manager, a library singleton, reads it from here: the
     // power policy, lid and power keys are the session desktop's)
@@ -59,10 +62,14 @@ int main(int argc, char *argv[])
     engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Win95Shell/Shell.qml")));
     if (engine.rootObjects().isEmpty())
         return 1;
-    std::fprintf(stderr, "win95shell: ready%s\n", session ? " (the session's desktop)" : "");
+    // --restarted: the compositor started us again after we went away;
+    // the session's programs are running already
+    const bool restarted = app.arguments().contains(QStringLiteral("--restarted"));
+    std::fprintf(stderr, "win95shell: ready%s%s\n", session ? " (the session's desktop)" : "",
+                 restarted ? " (started again)" : "");
     // as the session: tell D-Bus and systemd where the display is, then
     // start the autostart programs, once the desktop is up
-    if (session)
+    if (session && !restarted)
         QTimer::singleShot(2000, &app, &Launcher::startSession);
     return app.exec();
 }

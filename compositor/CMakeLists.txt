@@ -35,14 +35,20 @@ server_protocol(${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-layer-shell-unstable-v1.xm
 server_protocol(${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-output-power-management-unstable-v1.xml wlr-output-power-management-unstable-v1)
 # Wayland 95's own: the link to the shell (shell.c), header and code
 server_protocol(${CMAKE_SOURCE_DIR}/protocols/wayland95/wayland95-shell-v1.xml wayland95-shell-v1)
+# (End Task takes a foreign-toplevel handle: its interface, which wlroots
+# keeps to itself; libwayland matches interfaces by name)
+add_custom_command(
+    OUTPUT ${GEN}/wlr-foreign-toplevel-management-unstable-v1-protocol.c
+    COMMAND ${WAYLAND_SCANNER} private-code ${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-foreign-toplevel-management-unstable-v1.xml ${GEN}/wlr-foreign-toplevel-management-unstable-v1-protocol.c
+    DEPENDS ${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-foreign-toplevel-management-unstable-v1.xml)
 add_custom_command(
     OUTPUT ${GEN}/wayland95-shell-v1-protocol.c
     COMMAND ${WAYLAND_SCANNER} private-code ${CMAKE_SOURCE_DIR}/protocols/wayland95/wayland95-shell-v1.xml ${GEN}/wayland95-shell-v1-protocol.c
     DEPENDS ${CMAKE_SOURCE_DIR}/protocols/wayland95/wayland95-shell-v1.xml)
 
 set(SOURCES main.c output.c input.c view.c xdg.c xwayland.c layers.c protocols.c
-    decoration.c settings.c shell.c server.h ${PROTOCOL_HEADERS}
-    ${GEN}/wayland95-shell-v1-protocol.c)
+    decoration.c settings.c shell.c accessibility.c server.h ${PROTOCOL_HEADERS}
+    ${GEN}/wayland95-shell-v1-protocol.c ${GEN}/wlr-foreign-toplevel-management-unstable-v1-protocol.c)
 set(LIBS PkgConfig::WLROOTS PkgConfig::WL_SERVER PkgConfig::XKB PkgConfig::PIXMAN PkgConfig::XCB
     PkgConfig::CAIRO PkgConfig::PANGOCAIRO PkgConfig::DRM PkgConfig::LIBINPUT m)
 
@@ -64,7 +70,8 @@ install(TARGETS wayland95-compositor RUNTIME DESTINATION bin)
 #   EXCLUSIVE: panels' exclusive zones ignored (windows under the taskbar)
 #   SHELLKEYS: the volume and brightness keys never reach the shell
 #   LAYERORDER: panels arranged in one pass (notifications over the taskbar)
-foreach(BREAK FRAMES FOCUS SSD EXCLUSIVE SHELLKEYS LAYERORDER)
+#   STICKY: StickyKeys never holds a key
+foreach(BREAK FRAMES FOCUS SSD EXCLUSIVE SHELLKEYS LAYERORDER STICKY)
     string(TOLOWER ${BREAK} break_name)
     add_executable(wayland95-compositor-broken-${break_name} EXCLUDE_FROM_ALL ${SOURCES})
     set_target_properties(wayland95-compositor-broken-${break_name} PROPERTIES

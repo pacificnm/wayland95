@@ -171,6 +171,10 @@ public:
     Q_INVOKABLE bool previewScreenSaver() const;
     // play a file directly (the Sounds applet's Preview button)
     Q_INVOKABLE bool playFile(const QString &path);
+    // Accessibility Options' tones: "on", "off" (rising, falling),
+    // "high", "low", "click"; tiny WAV files, made once
+    static QString toneFile(const QString &tone);
+    Q_INVOKABLE bool playTone(const QString &tone) { return playFile(toneFile(tone)); }
 
     Q_INVOKABLE QString filePath() const;
 

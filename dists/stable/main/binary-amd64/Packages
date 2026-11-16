@@ -40,3 +40,24 @@ Description: Windows 95-style Wayland desktop
  File Manager, Notepad, Terminal, Control Panel, System Monitor and file
  dialogs for other programs. Log in to it as "Wayland 95".
 
+Package: wayland95
+Architecture: amd64
+Version: 0.1.3
+Priority: optional
+Section: x11
+Maintainer: Wayland 95 <wayland95@localhost>
+Installed-Size: 20794
+Depends: libc6 (>= 2.38), libfontconfig1 (>= 2.12.6), libgcc-s1 (>= 3.0), libinput10 (>= 1.19.1), libqt6core6t64 (>= 6.8.2), libqt6dbus6 (>= 6.8.2), libqt6gui6 (>= 6.4.0), libqt6network6 (>= 6.1.2), libqt6qml6 (>= 6.7.2), libqt6quick6 (>= 6.6.0), libqt6waylandcompositor6 (>= 6.6.0), libstdc++6 (>= 14), libvterm0 (>= 0.3), libwayland-server0 (>= 1.11.91), libxcb1, qt6-base-private-abi (= 6.8.2), qt6-declarative-private-abi (= 6.8.2), qt6-waylandcompositor-private-abi (= 6.8.2), zlib1g (>= 1:1.1.4), libqt6opengl6, qt6-qpa-plugins, qt6-wayland, qml6-module-qtwayland-compositor, qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-controls, qml6-module-qtquick-templates, qml6-module-qtquick-layouts, qml6-module-qtqml, qml6-module-qtqml-workerscript, qml6-module-qt-labs-folderlistmodel, xwayland, dbus-user-session, polkitd, pkexec, libpam-modules-bin, passwd, fontconfig, fonts-liberation, xdg-utils, xdg-desktop-portal
+Recommends: network-manager, pipewire-bin, pipewire-pulse, wireplumber, sound-theme-freedesktop, bluez, upower, cups, cups-client, flatpak, packagekit, xdg-desktop-portal-gtk | xdg-desktop-portal-kde, xdg-user-dirs, udisks2
+Filename: pool/main/w/wayland95/wayland95_0.1.3_amd64.deb
+Size: 2988612
+MD5sum: 368de0140766b44aef6a5fa6fa2857aa
+SHA1: 5e3ab07c138181d5ff05c5bb8e844e86bcba24f3
+SHA256: 02d377f3792f92280360e9bc23d5efd095c01a07e2a91949b5adb992004d9248
+SHA512: 4beb1b9e497c1091788b2b0988977ff0413337ff6d293e3e0bd8d4a2ee421486c2986d57b79858ddc707f6a58fed1ea0e320130a70c70c0fba9b26c6d5b54858
+Description: Windows 95-style Wayland desktop
+ A complete desktop session in the style of Windows 95: a Wayland
+ compositor with the taskbar, Start menu and window frames, plus its own
+ File Manager, Notepad, Terminal, Control Panel, System Monitor and file
+ dialogs for other programs. Log in to it as "Wayland 95".
+

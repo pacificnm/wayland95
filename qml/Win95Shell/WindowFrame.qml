@@ -12,6 +12,8 @@ Item {
 
     required property var toplevel     // XdgToplevel
     required property var xdgSurface   // XdgSurface (the ShellSurface)
+    property var inputFixes: null      // InputFixes (Main.qml)
+    readonly property string program: toplevel && toplevel.appId ? toplevel.appId : "a program"
 
     property bool minimized: false
     property bool isActive: false
@@ -202,6 +204,14 @@ Item {
         function onUnsetMaximized() {
             Qt.callLater(function () { if (frame.maximized) frame.toggleMaximize(); });
         }
+        // Qt's own handlers run first and start following the mouse; if the
+        // button is already up, that would hijack the next drag
+        function onStartMove(seat) {
+            if (frame.inputFixes) frame.inputFixes.endGrabIfReleased(surfaceItem, "move", frame.program);
+        }
+        function onStartResize(seat, edges) {
+            if (frame.inputFixes) frame.inputFixes.endGrabIfReleased(surfaceItem, "resize", frame.program);
+        }
     }
 
     Bevel {
@@ -252,6 +262,8 @@ Item {
         x: frame.border - frame.geometry.x
         y: frame.titleHeight + frame.border - frame.geometry.y
         onSurfaceDestroyed: frame.destroy()
+        // sub-surfaces and popups where the program put them
+        Component.onCompleted: if (frame.inputFixes) frame.inputFixes.watch(surfaceItem)
     }
 
     // Simple edge resize handle, bottom-right corner only - enough to make

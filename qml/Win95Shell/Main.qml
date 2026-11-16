@@ -788,6 +788,12 @@ WaylandCompositor {
         }
     }
 
+    // where Qt and other programs' windows get out of step (inputfixes.h)
+    InputFixes {
+        id: inputFixes
+        compositor: compositor
+    }
+
     XdgShell {
         id: xdgShell
 
@@ -800,6 +806,7 @@ WaylandCompositor {
             component.createObject(windowLayer, {
                 toplevel: toplevel,
                 xdgSurface: xdgSurface,
+                inputFixes: inputFixes,
             });
         }
     }

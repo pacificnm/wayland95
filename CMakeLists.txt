@@ -61,6 +61,8 @@ qt_add_executable(win95compositor
     src/screengrab.cpp
     src/updatecheck.h
     src/updatecheck.cpp
+    src/inputfixes.h
+    src/inputfixes.cpp
     src/trashwatcher.h
     src/trashwatcher.cpp
     src/seatsettings.h

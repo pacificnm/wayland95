@@ -601,6 +601,24 @@ To add a program to the Start menu, add an entry to `programs` in
   repeated over and over is written once, followed by "(the message above
   was repeated N more times)" at most once a minute.
 
+## Other programs' windows
+
+Qt's Wayland compositor gets out of step with some programs (Chromium,
+Electron, GTK) in a few places, and [src/inputfixes.cpp](src/inputfixes.cpp)
+works around them:
+
+- A window move or resize asked for just after the button went up (Qt
+  would then move the window on your next drag inside it) is ignored.
+- A drag and drop that starts just after the button went up (Qt would then
+  keep the next click's release from the program, so links stop opening)
+  is cancelled.
+- Parts of a window drawn separately (sub-surfaces) that existed before
+  the window appeared are put where the program placed them, instead of
+  at its top left corner, so clicks land on what you see.
+
+Each of these, and every move, resize and drag a program starts, is
+logged as an `input:` line in `~/.wayland95-session.log`.
+
 ## X11 programs
 
 Programs that only speak X11 (xterm, older toolkits, a lot of games and

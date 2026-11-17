@@ -13,6 +13,8 @@
 #include "launcher.h"
 #include "notifications.h"
 #include "statusnotifier.h"
+#include <QElapsedTimer>
+#include "desktopkeys.h"
 
 Q_IMPORT_QML_PLUGIN(Win95UiPlugin)
 
@@ -51,6 +53,20 @@ int main(int argc, char *argv[])
     // (the power manager, a library singleton, reads it from here: the
     // power policy, lid and power keys are the session desktop's)
     app.setProperty("wayland95Session", session);
+
+    // which display is the main one, before the panels are made (they'd
+    // be made on the first and moved): the compositor says right after the
+    // shell's protocol is bound; without it (another compositor), the first
+    {
+        ShellExtension *extension = ShellExtension::instance();
+        QElapsedTimer waited;
+        waited.start();
+        while (extension->primaryOutput().isEmpty() && waited.elapsed() < 400) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+            if (waited.elapsed() > 150 && !extension->isActive())
+                break; // (no such protocol here)
+        }
+    }
 
     QQmlApplicationEngine engine;
     engine.addImportPath(QStringLiteral("qrc:/qt/qml"));

@@ -19,45 +19,55 @@ static struct wlr_scene_tree *tree_for(struct server *server, enum zwlr_layer_sh
 	}
 }
 
-// Lay out every panel, top layers first (their exclusive zones go first),
-// and work out the usable area for windows. One output for now: the first.
+// Lay out every display's panels, top layers first (their exclusive zones
+// go first), and work out the area left for windows on each.
 void layers_arrange(struct server *server)
 {
-	struct wlr_box full;
-	wlr_output_layout_get_box(server->output_layout, NULL, &full);
-	struct wlr_box usable = full;
 	static const enum zwlr_layer_shell_v1_layer order[] = {
 		ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, ZWLR_LAYER_SHELL_V1_LAYER_TOP,
 		ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM, ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND,
 	};
-	// two passes: first the panels that keep an edge for themselves (the
-	// taskbar), then the rest, in what's left (notifications and the level
-	// display sit above the taskbar, whatever order they came in)
-	for (int pass = 0; pass < 2; ++pass) {
-		for (size_t i = 0; i < sizeof(order) / sizeof(order[0]); ++i) {
-			struct layer_surface *ls;
-			wl_list_for_each(ls, &server->layer_surfaces, link) {
-				struct wlr_layer_surface_v1 *l = ls->layer_surface;
-				if (l->current.layer != order[i] || !l->initialized)
-					continue;
+	bool changed = false;
+	struct output *output;
+	wl_list_for_each(output, &server->outputs, link) {
+		if (!output_active(output)) {
+			output->usable = (struct wlr_box){0};
+			continue;
+		}
+		struct wlr_box full;
+		wlr_output_layout_get_box(server->output_layout, output->wlr_output, &full);
+		struct wlr_box usable = full;
+		// two passes: first the panels that keep an edge for themselves (the
+		// taskbar), then the rest, in what's left (notifications and the level
+		// display sit above the taskbar, whatever order they came in)
+		for (int pass = 0; pass < 2; ++pass) {
+			for (size_t i = 0; i < sizeof(order) / sizeof(order[0]); ++i) {
+				struct layer_surface *ls;
+				wl_list_for_each(ls, &server->layer_surfaces, link) {
+					struct wlr_layer_surface_v1 *l = ls->layer_surface;
+					if (ls->output != output || l->current.layer != order[i] || !l->initialized)
+						continue;
 #ifdef WAYLAND95_TEST_BREAK_LAYERORDER // tests/selftest.sh: one pass, in list order
-				if (pass == 1)
-					continue;
+					if (pass == 1)
+						continue;
 #else
-				if ((l->current.exclusive_zone > 0) != (pass == 0))
-					continue;
+					if ((l->current.exclusive_zone > 0) != (pass == 0))
+						continue;
 #endif
-				wlr_scene_layer_surface_v1_configure(ls->scene, &full, &usable);
+					wlr_scene_layer_surface_v1_configure(ls->scene, &full, &usable);
+				}
 			}
 		}
-	}
-	bool changed = usable.x != server->usable_area.x || usable.y != server->usable_area.y
-			|| usable.width != server->usable_area.width || usable.height != server->usable_area.height;
 #ifdef WAYLAND95_TEST_BREAK_EXCLUSIVE // tests/selftest.sh: windows ignore the taskbar's edge
-	usable = full;
+		usable = full;
 #endif
-	server->usable_area = usable;
-	wlr_log(WLR_DEBUG, "usable area %d,%d %dx%d", usable.x, usable.y, usable.width, usable.height);
+		if (usable.x != output->usable.x || usable.y != output->usable.y
+				|| usable.width != output->usable.width || usable.height != output->usable.height)
+			changed = true;
+		output->usable = usable;
+		wlr_log(WLR_DEBUG, "%s: usable area %d,%d %dx%d", output->wlr_output->name,
+				usable.x, usable.y, usable.width, usable.height);
+	}
 	if (changed)
 		view_arrange_all(server);
 }
@@ -164,19 +174,20 @@ static void new_layer_surface(struct wl_listener *listener, void *data)
 {
 	struct server *server = wl_container_of(listener, server, new_layer_surface);
 	struct wlr_layer_surface_v1 *l = data;
-	if (!l->output) {
-		// the program left it to us: the first output
-		struct output *first = wl_list_empty(&server->outputs) ? NULL
-				: wl_container_of(server->outputs.next, first, link);
-		if (!first) {
-			wlr_layer_surface_v1_destroy(l);
-			return;
-		}
-		l->output = first->wlr_output;
+	// on the display it asked for, or (left to us) the main one
+	struct output *output = l->output ? l->output->data : NULL;
+	if (!output_active(output))
+		output = server->primary;
+	if (!output) {
+		wlr_layer_surface_v1_destroy(l);
+		return;
 	}
+	if (!l->output)
+		l->output = output->wlr_output;
 	struct layer_surface *ls = calloc(1, sizeof(*ls));
 	ls->tag.kind = NODE_LAYER;
 	ls->server = server;
+	ls->output = output;
 	ls->layer_surface = l;
 	ls->scene = wlr_scene_layer_surface_v1_create(tree_for(server, l->pending.layer), l);
 	ls->scene->tree->node.data = &ls->tag;

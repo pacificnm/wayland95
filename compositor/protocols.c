@@ -3,7 +3,9 @@
 // main.c), output configuration, display power and gamma (night light), the
 // lock screen, and those wlroots handles entirely (foreign, security
 // context, tearing, content type, alpha modifier, shortcut inhibiting).
+#define _POSIX_C_SOURCE 200809L
 #include <stdlib.h>
+#include <time.h>
 #include <wlr/types/wlr_alpha_modifier_v1.h>
 #include <wlr/types/wlr_content_type_v1.h>
 #include <wlr/types/wlr_gamma_control_v1.h>
@@ -68,18 +70,40 @@ static void new_idle_inhibitor(struct wl_listener *listener, void *data)
 
 // ------------------------------------------------------------- activation
 
-// a program raising one of its windows (opening a link in a running
-// browser, a notification's button)
+// A program asks for one of its windows to come forward (opening a link
+// in a running browser, a notification's button). Granted when the request
+// comes with a token made, from an input event, by the program that has
+// the keyboard now (it hands its turn on), or just after the desktop itself
+// was clicked or typed at (the Start menu or a notification starting a
+// program that's already running). Otherwise not: a program in the
+// background doesn't get to take the keyboard.
+static struct server *activation_server;
+
 static void request_activate(struct wl_listener *listener, void *data)
 {
+	struct server *server = activation_server;
 	struct wlr_xdg_activation_v1_request_activate_event *event = data;
 	struct wlr_xdg_toplevel *toplevel = wlr_xdg_toplevel_try_from_wlr_surface(event->surface);
 	if (!toplevel || !toplevel->base->data)
 		return;
 	struct wlr_scene_tree *tree = toplevel->base->data;
 	struct view *view = (struct view *)tree->node.data;
-	if (view && view->mapped)
+	if (!view || !view->mapped)
+		return;
+	struct wlr_surface *focused = server->seat->keyboard_state.focused_surface;
+	const struct wlr_xdg_activation_token_v1 *token = event->token;
+	bool from_focused = token->seat && token->surface && focused
+			&& wl_resource_get_client(token->surface->resource) == wl_resource_get_client(focused->resource);
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	uint32_t now = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+	bool from_desktop = server->shell_input_seen && now - server->shell_input_ms <= 3000;
+	if (from_focused || from_desktop) {
 		view_focus(view);
+	} else {
+		wlr_log(WLR_INFO, "\"%s\" asked to come forward without the user's doing: left where it is",
+				view_title(view));
+	}
 }
 static struct wl_listener activate_listener = { .notify = request_activate };
 
@@ -106,7 +130,7 @@ static void layout_change(struct wl_listener *listener, void *data)
 {
 	struct server *server = wl_container_of(listener, server, layout_change);
 	publish_outputs(server);
-	layers_arrange(server);
+	outputs_changed(server);
 }
 
 static bool apply_config(struct server *server, struct wlr_output_configuration_v1 *config, bool test_only)
@@ -121,10 +145,8 @@ static bool apply_config(struct server *server, struct wlr_output_configuration_
 			ok = ok && wlr_output_test_state(head->state.output, &state);
 		} else {
 			ok = ok && wlr_output_commit_state(head->state.output, &state);
-			if (head->state.enabled)
-				wlr_output_layout_add(server->output_layout, head->state.output, head->state.x, head->state.y);
-			else
-				wlr_output_layout_remove(server->output_layout, head->state.output);
+			if (head->state.output->data)
+				output_place(head->state.output->data, head->state.enabled, true, head->state.x, head->state.y);
 		}
 		wlr_output_state_finish(&state);
 	}
@@ -141,6 +163,7 @@ static void output_manager_apply(struct wl_listener *listener, void *data)
 		wlr_output_configuration_v1_send_failed(config);
 	wlr_output_configuration_v1_destroy(config);
 	publish_outputs(server);
+	outputs_changed(server);
 }
 
 static void output_manager_test(struct wl_listener *listener, void *data)
@@ -231,6 +254,17 @@ static void lock_new_surface(struct wl_listener *listener, void *data)
 	wl_signal_add(&surface->events.destroy, &ls->destroy);
 }
 
+// the black cover behind the lock screen: every display, as they are now
+void lock_cover_update(struct server *server)
+{
+	if (!server->lock_cover)
+		return;
+	struct wlr_box all;
+	wlr_output_layout_get_box(server->output_layout, NULL, &all);
+	wlr_scene_node_set_position(&server->lock_cover->node, all.x, all.y);
+	wlr_scene_rect_set_size(server->lock_cover, all.width, all.height);
+}
+
 static void lock_finish(struct server *server)
 {
 	wl_list_remove(&server->lock_new_surface.link);
@@ -271,10 +305,7 @@ static void new_lock(struct wl_listener *listener, void *data)
 	server->lock = lock;
 	input_lock(server); // (before it's locked: nothing else may focus after)
 	server->locked = true;
-	struct wlr_box all;
-	wlr_output_layout_get_box(server->output_layout, NULL, &all);
-	wlr_scene_node_set_position(&server->lock_cover->node, all.x, all.y);
-	wlr_scene_rect_set_size(server->lock_cover, all.width, all.height);
+	lock_cover_update(server);
 	wlr_scene_node_set_enabled(&server->lock_cover->node, true);
 	wlr_scene_node_raise_to_top(&server->lock_cover->node);
 	server->lock_new_surface.notify = lock_new_surface;
@@ -297,6 +328,7 @@ void protocols_init(struct server *server)
 	server->new_idle_inhibitor.notify = new_idle_inhibitor;
 	wl_signal_add(&server->idle_inhibit->events.new_inhibitor, &server->new_idle_inhibitor);
 
+	activation_server = server;
 	struct wlr_xdg_activation_v1 *activation = wlr_xdg_activation_v1_create(server->display);
 	wl_signal_add(&activation->events.request_activate, &activate_listener);
 

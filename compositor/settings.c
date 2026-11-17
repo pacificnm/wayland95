@@ -283,13 +283,15 @@ static int settings_changed(int fd, uint32_t mask, void *data)
 {
 	struct server *server = data;
 	char buf[4096];
-	bool ours = false;
+	bool ours = false, displays = false;
 	ssize_t n;
 	while ((n = read(fd, buf, sizeof buf)) > 0) {
 		for (char *p = buf; p < buf + n;) {
 			struct inotify_event *e = (struct inotify_event *)p;
 			if (e->len && strcmp(e->name, "settings.ini") == 0)
 				ours = true;
+			if (e->len && strcmp(e->name, "displays.ini") == 0)
+				displays = true;
 			p += sizeof(*e) + e->len;
 		}
 	}
@@ -297,6 +299,10 @@ static int settings_changed(int fd, uint32_t mask, void *data)
 		load(server);
 		apply_all(server);
 		wlr_log(WLR_INFO, "settings.ini changed: applied");
+	}
+	if (displays) {
+		displays_apply(server);
+		wlr_log(WLR_INFO, "displays.ini changed: applied");
 	}
 	return 0;
 }

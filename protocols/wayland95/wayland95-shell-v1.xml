@@ -125,6 +125,15 @@
       <arg name="state" type="uint" enum="window_state"/>
     </event>
 
+    <event name="primary_output">
+      <description summary="which display is the main one">
+        The name (wl_output.name: "eDP-1") of the main display, where the
+        taskbar goes: sent when the shell binds, and when it changes
+        (Control Panel > Display, or that display going away).
+      </description>
+      <arg name="name" type="string"/>
+    </event>
+
     <request name="window_action">
       <arg name="window" type="uint"/>
       <arg name="action" type="uint" enum="window_action"/>

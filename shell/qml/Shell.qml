@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Window
+import QtQml
 import Win95Ui as Ui
 import Win95Shell
 
@@ -22,6 +23,7 @@ QtObject {
     id: shell
 
     property Window desktop: Window {
+        screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput) // (first: before it is made)
         LayerShell.layer: LayerShell.Background
         LayerShell.anchors: LayerShell.AnchorTop | LayerShell.AnchorBottom | LayerShell.AnchorLeft | LayerShell.AnchorRight
         LayerShell.exclusiveZone: 0 // the area above the taskbar
@@ -43,7 +45,28 @@ QtObject {
         }
     }
 
+    // the other displays: the backdrop (the icons and taskbar are the main
+    // display's)
+    property Instantiator otherDesktops: Instantiator {
+        model: Qt.application.screens
+        delegate: Window {
+            required property var modelData
+            screen: modelData
+            LayerShell.layer: LayerShell.Background
+            LayerShell.anchors: LayerShell.AnchorTop | LayerShell.AnchorBottom | LayerShell.AnchorLeft | LayerShell.AnchorRight
+            LayerShell.exclusiveZone: 0
+            LayerShell.keyboard: LayerShell.KeyboardNone
+            LayerShell.scope: "desktop-other"
+            title: "Desktop (" + modelData.name + ")"
+            color: Ui.Wayland95Settings.backgroundColor
+            width: 640; height: 480
+            visible: !ShellSession.isMainScreen(modelData, Qt.application.screens, ShellSession.primaryOutput)
+            DesktopBackground { anchors.fill: parent }
+        }
+    }
+
     property Window taskbarWindow: Window {
+        screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput) // (first: before it is made)
         LayerShell.layer: LayerShell.Top
         LayerShell.anchors: LayerShell.AnchorBottom | LayerShell.AnchorLeft | LayerShell.AnchorRight
         LayerShell.exclusiveZone: height
@@ -71,6 +94,7 @@ QtObject {
     }
 
     property Window popupLayer: Window {
+        screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput) // (first: before it is made)
         LayerShell.layer: LayerShell.Overlay
         LayerShell.anchors: LayerShell.AnchorTop | LayerShell.AnchorBottom | LayerShell.AnchorLeft | LayerShell.AnchorRight
         LayerShell.exclusiveZone: -1 // over the taskbar too
@@ -105,6 +129,7 @@ QtObject {
     readonly property Item popupArea: popupArea
 
     property Window tipLayer: Window {
+        screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput) // (first: before it is made)
         LayerShell.layer: LayerShell.Overlay
         LayerShell.anchors: LayerShell.AnchorTop | LayerShell.AnchorBottom | LayerShell.AnchorLeft | LayerShell.AnchorRight
         LayerShell.exclusiveZone: -1
@@ -176,6 +201,7 @@ QtObject {
     // with no exclusive zone of its own clear of the taskbar's), newest
     // nearest it, at most four at once
     property Window notificationLayer: Window {
+        screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput) // (first: before it is made)
         LayerShell.layer: LayerShell.Top
         LayerShell.anchors: LayerShell.AnchorBottom | LayerShell.AnchorRight
         LayerShell.exclusiveZone: 0
@@ -207,6 +233,7 @@ QtObject {
     // the compositor sends them here (wayland95-shell-v1); a held key
     // repeats at the keyboard's rate (Control Panel > Keyboard)
     property Window osdLayer: Window {
+        screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput) // (first: before it is made)
         LayerShell.layer: LayerShell.Overlay
         LayerShell.anchors: LayerShell.AnchorBottom
         LayerShell.exclusiveZone: 0
@@ -273,6 +300,7 @@ QtObject {
 
     // --- Alt+Tab's box: the compositor runs Alt+Tab, we draw it ----------
     property Window switcherLayer: Window {
+        screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput) // (first: before it is made)
         LayerShell.layer: LayerShell.Overlay
         LayerShell.anchors: LayerShell.AnchorTop | LayerShell.AnchorBottom | LayerShell.AnchorLeft | LayerShell.AnchorRight
         LayerShell.exclusiveZone: -1
@@ -311,6 +339,7 @@ QtObject {
     // little panel of its own at the bottom right, so the desktop stays
     // usable while it shows.
     property Window captureLayer: Window {
+        screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput) // (first: before it is made)
         LayerShell.layer: LayerShell.Overlay
         LayerShell.anchors: LayerShell.AnchorTop | LayerShell.AnchorBottom | LayerShell.AnchorLeft | LayerShell.AnchorRight
         LayerShell.exclusiveZone: -1
@@ -335,6 +364,7 @@ QtObject {
         }
     }
     property Window captureThumbLayer: Window {
+        screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput) // (first: before it is made)
         LayerShell.layer: LayerShell.Overlay
         LayerShell.anchors: LayerShell.AnchorBottom | LayerShell.AnchorRight
         LayerShell.exclusiveZone: 0

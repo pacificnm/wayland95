@@ -301,6 +301,37 @@ keeps it going; the new desktop compared with today's.
   All suites: 372 of 372 pass, nothing left running afterwards; the
   self-test catches all seven breaks (8 of 8 with the real build).
 
+**Review, and displays** (2026-11-16): after phase 5's first pass the
+wlroots work was read through for faults and speed, and display settings
+added.
+- Found by reading, each shown by a test before it was fixed: from the
+  locked screen, Ctrl+Esc, R, a command and Enter ran the command (the
+  desktop's keys reached the shell, whose hidden Start menu took the lock
+  screen's keyboard); a full screen window was drawn under the taskbar;
+  Ctrl+Alt+F1..F12 did nothing. Now only the lock screen can have the
+  keyboard while locked and only the level and power keys reach the shell;
+  a full screen window is in a layer above the panels; consoles switch (the
+  VM test goes to one and back).
+- Speed: a window's frame was one picture the size of the window (8 MB for
+  a maximized one at 1080p), made anew at every step of a resize: now four
+  strips. Resizing with the mouse asked the program for a new size at every
+  mouse movement: now when it has drawn the last. The taskbar clock woke
+  every second: now when the minute turns. Print Screen's PNG is made off
+  the desktop's thread.
+- A program asking to come forward (xdg-activation) is granted only with a
+  token from the program that has the keyboard, or just after the desktop
+  itself was used.
+- Two or more displays: each arranged on its own, a main display (the
+  taskbar's), windows maximized on their own display, the backdrop and
+  screen saver on all, displays that go away or sleep handled (see
+  architecture.md, "Several displays").
+- Control Panel > Display > Settings: on/off, main display, resolution,
+  refresh rate, scale, orientation, adaptive sync, arrangement by dragging;
+  "Keep these settings?" reverts in 15 seconds unless answered.
+- `tests/run.sh`: new `monitors` suite (21 checks); new checks in
+  `screensaver` (the lock can't be got round), `shell` (full screen, a
+  background program can't raise itself), `shellstart`. All suites: 399 of 399 pass; `tests/vm/run.sh --deb`: 14 of 14.
+
 ## What changes for users
 
 - Nothing until it's published (phase 6): the update channel keeps

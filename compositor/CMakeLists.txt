@@ -49,7 +49,8 @@ add_custom_command(
     DEPENDS ${CMAKE_SOURCE_DIR}/protocols/wayland95/wayland95-shell-v1.xml)
 
 set(SOURCES main.c output.c input.c view.c xdg.c xwayland.c layers.c protocols.c
-    decoration.c settings.c shell.c accessibility.c server.h ${PROTOCOL_HEADERS}
+    decoration.c settings.c shell.c accessibility.c
+    displays.c server.h ${PROTOCOL_HEADERS}
     ${GEN}/wayland95-shell-v1-protocol.c ${GEN}/wlr-foreign-toplevel-management-unstable-v1-protocol.c)
 set(LIBS PkgConfig::WLROOTS PkgConfig::WL_SERVER PkgConfig::XKB PkgConfig::PIXMAN PkgConfig::XCB
     PkgConfig::CAIRO PkgConfig::PANGOCAIRO PkgConfig::DRM PkgConfig::LIBINPUT PkgConfig::EGL m)

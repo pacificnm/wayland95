@@ -9,6 +9,7 @@ import Win95Shell
 //
 //   DialogLayer { showing: run.visible; RunDialog { id: run } }
 Window {
+    screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput)
     id: layer
     default property alias content: area.data
     property bool showing: false

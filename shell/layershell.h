@@ -26,6 +26,8 @@
 
 #include <QMargins>
 #include <QObject>
+#include <QPointer>
+#include <QScreen>
 #include <QWindow>
 #include <QtQml/qqmlregistration.h>
 
@@ -69,6 +71,8 @@ class LayerShellAttached : public QObject
     Q_PROPERTY(bool supported READ supported CONSTANT)
 
 public:
+    bool eventFilter(QObject *object, QEvent *event) override; // (the window made anew: a panel again)
+    void remake(); // on another screen: its Wayland side anew, there
     explicit LayerShellAttached(QWindow *window);
 
     LayerShell::Layer layer() const { return m_layer; }
@@ -102,6 +106,7 @@ Q_SIGNALS:
     void changed();
 
 private:
+    QPointer<QScreen> m_madeOn; // the screen its Wayland side was made for
     void update(); // tell the compositor
 
     QWindow *m_window;

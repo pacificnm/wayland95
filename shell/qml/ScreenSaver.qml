@@ -1,4 +1,5 @@
 import QtQuick
+import QtQml
 import QtQuick.Window
 import Win95Ui as Ui
 import Win95Shell
@@ -94,6 +95,7 @@ QtObject {
 
     // not protected: an overlay panel with the keyboard, over everything
     property Window plainWindow: Window {
+        screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput)
         LayerShell.layer: LayerShell.Overlay
         LayerShell.anchors: LayerShell.AnchorTop | LayerShell.AnchorBottom | LayerShell.AnchorLeft | LayerShell.AnchorRight
         LayerShell.exclusiveZone: -1
@@ -117,9 +119,44 @@ QtObject {
         }
     }
 
+    // the other displays, not protected: covered too, and input on them
+    // ends it as well (locked, the compositor covers them in black)
+    property Instantiator otherCovers: Instantiator {
+        model: Qt.application.screens
+        delegate: Window {
+            id: cover
+            required property var modelData
+            readonly property var owner: saver // (the view below has a "saver" of its own)
+            screen: modelData
+            LayerShell.layer: LayerShell.Overlay
+            LayerShell.anchors: LayerShell.AnchorTop | LayerShell.AnchorBottom | LayerShell.AnchorLeft | LayerShell.AnchorRight
+            LayerShell.exclusiveZone: -1
+            LayerShell.keyboard: LayerShell.KeyboardNone
+            LayerShell.scope: "screensaver-other"
+            title: "Screen Saver (" + modelData.name + ")"
+            color: "black"
+            width: 640; height: 480
+            visible: saver.active && !saver.protectedRun
+                     && !ShellSession.isMainScreen(modelData, Qt.application.screens, ShellSession.primaryOutput)
+            onVisibleChanged: if (visible) coverInput.reset()
+            Ui.ScreenSaverView {
+                anchors.fill: parent
+                running: cover.visible
+                saver: cover.owner.kind
+                options: Ui.Wayland95Settings.screenSaverOptions
+            }
+            SaverInput {
+                id: coverInput
+                grace: saver.grace
+                onWoken: saver.wake()
+            }
+        }
+    }
+
     // protected: the session lock's window (the compositor gives it the
     // whole screen and all input until it unlocks)
     property Window lockWindow: Window {
+        screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput)
         title: "Screen Saver (locked)"
         color: "black"
         width: 640; height: 480

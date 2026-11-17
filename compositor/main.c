@@ -1,6 +1,6 @@
 // wayland95-compositor: Wayland 95's compositor, on wlroots.
 //
-//   wayland95-compositor [--socket NAME] [--headless WIDTHxHEIGHT] [--run COMMAND]
+//   wayland95-compositor [--socket NAME] [--headless WIDTHxHEIGHT]... [--run COMMAND]
 //
 // Without --headless it picks its backend the wlroots way: DRM/KMS on a
 // console or in the login session, a window when started inside another
@@ -64,7 +64,7 @@ static const char *software_gl(struct wlr_renderer *renderer)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s [--socket NAME] [--headless WIDTHxHEIGHT] [--shell PROGRAM] [--session] [--run COMMAND]\n", argv0);
+	fprintf(stderr, "usage: %s [--socket NAME] [--headless WIDTHxHEIGHT]... [--shell PROGRAM] [--session] [--run COMMAND]\n", argv0);
 }
 
 static void stop_listening(struct server *s)
@@ -91,6 +91,7 @@ static void stop_listening(struct server *s)
 	protocols_finish(s);
 	shell_finish(s);
 	a11y_finish(s);
+	displays_finish(s);
 	if (s->settings_source)
 		wl_event_source_remove(s->settings_source);
 }
@@ -110,7 +111,9 @@ int main(int argc, char *argv[])
 	const char *run = NULL;
 	const char *shell = NULL;  // --shell PROGRAM: started, and restarted if it dies
 	bool session = false;      // --session: the login session (the shell's too)
+	// --headless may be given more than once: that many displays
 	int headless_w = 0, headless_h = 0;
+	int headless_n = 0, headless_sizes[8][2];
 	bool debug = getenv("WAYLAND95_DEBUG") != NULL;
 
 	static const struct option options[] = {
@@ -130,10 +133,14 @@ int main(int argc, char *argv[])
 		case 'S': shell = optarg; break;
 		case 'E': session = true; break;
 		case 'H':
-			if (sscanf(optarg, "%dx%d", &headless_w, &headless_h) != 2 || headless_w <= 0 || headless_h <= 0) {
+			if (sscanf(optarg, "%dx%d", &headless_w, &headless_h) != 2 || headless_w <= 0 || headless_h <= 0
+					|| headless_n >= 8) {
 				usage(argv[0]);
 				return 1;
 			}
+			headless_sizes[headless_n][0] = headless_w;
+			headless_sizes[headless_n][1] = headless_h;
+			headless_n++;
 			break;
 		default:
 			usage(argv[0]);
@@ -231,8 +238,6 @@ int main(int argc, char *argv[])
 	shell_init(&server);
 	xwayland_init(&server);
 
-	if (headless_w > 0)
-		wlr_headless_add_output(server.backend, headless_w, headless_h);
 
 	const char *socket = NULL;
 	if (socket_name) {
@@ -247,12 +252,17 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	snprintf(server.socket_name, sizeof server.socket_name, "%s", socket);
 	if (!wlr_backend_start(server.backend)) {
 		wlr_log(WLR_ERROR, "can't start the backend");
 		wlr_backend_destroy(server.backend);
 		wl_display_destroy(server.display);
 		return 1;
 	}
+
+	// (once it's started: each is announced as it's added, in this order)
+	for (int i = 0; i < headless_n; ++i)
+		wlr_headless_add_output(server.backend, headless_sizes[i][0], headless_sizes[i][1]);
 
 	setenv("WAYLAND_DISPLAY", socket, true);
 	// the shell ends the desktop (Start > Shut Down > exit) by asking this

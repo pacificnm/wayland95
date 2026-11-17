@@ -1,5 +1,6 @@
 #include "session.h"
 #include "launcher.h"
+#include "desktopkeys.h"
 
 #include <QCoreApplication>
 #include <csignal>
@@ -27,4 +28,30 @@ bool ShellSession::session() const
 bool ShellSession::restarted() const
 {
     return QCoreApplication::arguments().contains(QStringLiteral("--restarted"));
+}
+
+ShellSession::ShellSession(QObject *parent) : QObject(parent)
+{
+    connect(ShellExtension::instance(), &ShellExtension::primaryOutputChanged, this, &ShellSession::primaryOutputChanged);
+}
+
+QString ShellSession::primaryOutput() const
+{
+    return ShellExtension::instance()->primaryOutput();
+}
+
+QObject *ShellSession::mainScreen(const QJSValue &screens, const QString &name) const
+{
+    QObject *first = nullptr;
+    const int n = screens.property(QStringLiteral("length")).toInt();
+    for (int i = 0; i < n; ++i) {
+        QObject *screen = screens.property(quint32(i)).toQObject();
+        if (!screen)
+            continue;
+        if (!first)
+            first = screen;
+        if (!name.isEmpty() && screen->property("name").toString() == name)
+            return screen;
+    }
+    return first;
 }

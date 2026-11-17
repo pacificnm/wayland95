@@ -383,6 +383,15 @@ up next to the shell first, then on `$PATH`.
     colors for the desktop, title bars (two-color gradients), 3D objects,
     windows, menus and selected items, with a live preview. Colors apply to
     the compositor's chrome and every bundled app.
+    **Settings:** the displays (monitors). A picture shows how they stand;
+    drag one to where it is on your desk. For each: on or off, the main
+    display (the taskbar's), resolution, refresh rate, size of text and
+    windows (100% to 300%), orientation, and adaptive sync where the
+    display has it. After Apply, "Keep these settings?" puts the old ones
+    back in 15 seconds unless you answer Yes (a mode the display can't show
+    leaves nothing to click). They're kept in
+    `~/.config/wayland95/displays.ini` and applied at login and when a
+    display is plugged in.
     **Screen Saver:** pick one, with a live preview in the little monitor,
     a Settings... dialog for its options, Preview, and Wait: N minutes.
     - **The savers:** Blank Screen, Curves (a sweeping ribbon of colored
@@ -823,6 +832,7 @@ VS Code) may ask you to unlock it, or keep them their own way.
 
 ## What's not here yet
 
+- Touchscreens and drawing tablets (mice, touchpads and keyboards only)
 - Input methods (ibus and the like, on-screen keyboards: text-input v3)
 - Explicit GPU sync (linux-drm-syncobj, mostly for NVIDIA)
 - Screen sharing (the portal's ScreenCast): the compositor has what

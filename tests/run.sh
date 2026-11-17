@@ -58,7 +58,8 @@ stop_all() {
         d=$(tr '\0' '\n' 2>/dev/null <"/proc/$p/environ" | sed -n 's/^WAYLAND_DISPLAY=//p')
         case "$d" in "w95test-$$-"*|"w95inner-$$") kill -9 "$p" 2>/dev/null ;; esac
     done
-    rm -f "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/w95test-$$-* "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/w95inner-$$*
+    rm -f "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/w95test-$$-* "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/w95inner-$$* \
+        "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/wayland95-displays-w95test-$$-*
 }
 cleanup() {
     stop_all
@@ -425,7 +426,7 @@ suite_x11() {
     local XX=$PX XY=$PY n
     n=$(pmark X); pointer click:$((XX + 100)),$((XY + 50))
     pexpect "clicks land where they're drawn" X "$n" "press 1 100 50.*release 1 100 50"
-    shot x11
+    away; shot x11   # (the pointer out of the picture: its tip is over that very pixel)
     expect_pixel "it's drawn where it gets clicks" x11 $((XX + 100)) $((XY + 50)) 00aa00
     n=$(pmark X); pointer move:$((XX + 100)),$((XY + 50)) wheel:2
     pexpect "the wheel" X "$n" "scroll (down|0\.0 1\.0)"
@@ -867,6 +868,12 @@ suite_shell() {
     expect_true $? "and clicking again brings it back, active" "$(query list | tr '\n' ' ')"
     n=$(pmark A); pointer type:k
     pexpect "the keyboard goes to it" A "$n" "key k"
+
+    # a program asking to come forward (xdg-activation) from the background,
+    # on its own: no (B has had a key, so it has a serial to ask with)
+    query activate B; sleep 0.4; pointer type:q wait:0.2; query activate A; sleep 0.4
+    probe_cmd B raise; sleep 0.6
+    expect_active "a program in the background can't bring its own window forward" A
 
     # the taskbar's window menu
     pointer click:$(task_button 1),$TASKBAR_Y,right wait:0.5; away; shot window-menu
@@ -1752,6 +1759,140 @@ suite_shellstart() {
     [ "$st" -eq 0 ] && ! grep -q "Assertion" "$CLOG"; expect_true $? "(and stops cleanly)" "status $st: $(tail -2 "$CLOG")"
 }
 
+# --- two displays, and Control Panel > Display's settings ------------------------
+# HEADLESS-1 (1280x800) and, to its right, HEADLESS-2 (1024x768); a
+# screenshot is of both, side by side.
+displays_write() { # INI-TEXT: displays.ini, written as QSettings does
+    printf '%s\n' "$1" >"$CONFIG/wayland95/displays.ini.tmp"
+    mv "$CONFIG/wayland95/displays.ini.tmp" "$CONFIG/wayland95/displays.ini"
+    sleep 1.5
+}
+dstate() { # DISPLAY KEY: from what the compositor says the displays are
+    awk -v g="[$1]" -v k="$2" -F= '$0 == g { on = 1; next } /^\[/ { on = 0 } on && $1 == k { gsub(/"/, "", $2); print $2 }' \
+        "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wayland95-displays-$SOCKET.ini" 2>/dev/null
+}
+suite_monitors() {
+    say "monitors: two displays, the main display, and their settings (displays.ini)"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    stop_all
+    COMP_EXTRA=(--headless 1024x768)
+    start_compositor
+    COMP_EXTRA=()
+    printf '[ScreenSaver]\nName=none\n' >"$CONFIG/wayland95/settings.ini"
+    MINUTE_MS=6000 start_shell || return
+    export W95INPUT_EXTENT=2304x800 # (the pointer's positions are in both displays' area)
+    [ "$(dstate HEADLESS-1 Width)" = 1280 ] && [ "$(dstate HEADLESS-2 Width)" = 1024 ] && [ "$(dstate HEADLESS-2 X)" = 1280 ] \
+        && [ "$(dstate HEADLESS-1 Primary)" = true ]
+    expect_true $? "two displays: the second to the right of the first, the first the main one" \
+        "1: $(dstate HEADLESS-1 Width) wide, main $(dstate HEADLESS-1 Primary); 2: $(dstate HEADLESS-2 Width) wide at $(dstate HEADLESS-2 X)"
+    pointer move:600,400; shot two
+    [ "$(pixel two 640 790)" = c0c0c0 ] && [ "$(pixel two 1780 400)" = 008080 ] && [ "$(pixel two 1780 760)" = 008080 ]
+    expect_true $? "the taskbar is on the main display; the other has the backdrop, to its bottom edge" \
+        "main's bottom $(pixel two 640 790), other $(pixel two 1780 400), its bottom $(pixel two 1780 760)"
+
+    # Control Panel > Display > Settings: the second made the main display,
+    # Apply; not answering "Keep these settings?" puts the old ones back
+    pointer move:600,400 wait:0.2
+    XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland "$BUILD/win95control" --applet display --tab 3 \
+        >"$WORK/$SUITE-control.log" 2>&1 &
+    local control=$!; PIDS+=($control)
+    for _ in $(seq 40); do [ "$(windows_of win95control)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    # (the second display in the picture, "Main display", Apply)
+    pointer click:312,147 wait:0.4 click:243,267 wait:0.4 click:403,466 wait:1.2; shot keep
+    [ "$(dstate HEADLESS-2 Primary)" = true ] && grep -q "Primary=true" "$CONFIG/wayland95/displays.ini"
+    expect_true $? "Control Panel > Display: the second made the main display, Apply: it is" \
+        "state $(dstate HEADLESS-2 Primary); $(tr '\n' ' ' <"$CONFIG/wayland95/displays.ini" 2>&1 | cut -c1-120)"
+    sleep 17
+    [ "$(dstate HEADLESS-1 Primary)" = true ] && grep -q "not kept" "$WORK/$SUITE-control.log"
+    expect_true $? "\"Keep these settings?\" not answered in 15 seconds: the settings before are back" \
+        "the first is main: $(dstate HEADLESS-1 Primary); $(grep -i "display settings" "$WORK/$SUITE-control.log" | tail -1)"
+    pointer click:243,267 wait:0.4 click:403,466 wait:1.2 click:205,310 wait:0.5
+    sleep 17
+    [ "$(dstate HEADLESS-2 Primary)" = true ] && grep -q "Display settings: kept" "$WORK/$SUITE-control.log"
+    expect_true $? "applied again and answered Yes: they stay" \
+        "state $(dstate HEADLESS-2 Primary); $(grep -i "display settings" "$WORK/$SUITE-control.log" | tail -1)"
+    kill "$control" 2>/dev/null
+    displays_write ''
+    [ "$(dstate HEADLESS-1 Primary)" = true ]; expect_true $? "(the settings cleared: the first is the main one again)" "$(dstate HEADLESS-1 Primary)"
+
+    # windows: where the pointer is; maximized, on their own display
+    pointer move:1800,300 wait:0.3
+    start_probe M qt cc0000 || return
+    locate_probe M 1500 200; expect_true $? "a new window opens on the display the pointer is on" "not at 1500,200"
+    query maximize M; sleep 0.8; pointer move:1800,300; shot max2
+    [ "$(pixel max2 1300 760)" = cc0000 ] && [ "$(pixel max2 2290 400)" = cc0000 ] && [ "$(pixel max2 1270 400)" != cc0000 ]
+    expect_true $? "maximized there, it fills that display (all of it: no taskbar) and no more" \
+        "bottom left $(pixel max2 1300 760), right $(pixel max2 2290 400), on the other $(pixel max2 1270 400)"
+    query unmaximize M; sleep 0.6
+    pointer move:600,300 wait:0.3
+    start_probe N qt 0000cc || return
+    query maximize N; sleep 0.8; pointer move:600,300; shot max1
+    [ "$(pixel max1 640 750)" = 0000cc ] && [ "$(pixel max1 640 790)" = c0c0c0 ] && [ "$(pixel max1 1290 400)" != 0000cc ]
+    expect_true $? "one maximized on the main display stops above the taskbar, and at the display's edge" \
+        "$(pixel max1 640 750), taskbar $(pixel max1 640 790), on the other $(pixel max1 1290 400)"
+    query unmaximize N; sleep 0.6
+
+    # the screen saver covers both (its wait: a "minute" of 6 seconds)
+    settings_write $'[ScreenSaver]\nName=blank\nWait=1\nPassword=false'
+    pointer move:600,300; sleep 7.5; shot saver
+    [ "$(pixel saver 640 400)" = 000000 ] && [ "$(pixel saver 640 790)" = 000000 ] && [ "$(pixel saver 1780 400)" = 000000 ]
+    expect_true $? "the screen saver covers both displays" "$(pixel saver 640 400), $(pixel saver 1780 400)"
+    pointer move:1700,500 wait:0.2 move:1800,600 wait:0.5; shot saver-end
+    [ "$(pixel saver-end 1780 700)" != 000000 ] && [ "$(pixel saver-end 640 790)" = c0c0c0 ]
+    expect_true $? "moving the mouse on the other display ends it" "$(pixel saver-end 1780 700), $(pixel saver-end 640 790)"
+    printf '[ScreenSaver]\nName=none\n' >"$CONFIG/wayland95/settings.ini.tmp"; mv "$CONFIG/wayland95/settings.ini.tmp" "$CONFIG/wayland95/settings.ini"; sleep 0.5
+
+    # Control Panel > Display: the main display
+    displays_write $'[HEADLESS-2]\nPrimary=true'
+    sleep 1; pointer move:600,300; shot main2
+    [ "$(dstate HEADLESS-2 Primary)" = true ] && [ "$(pixel main2 1780 760)" = c0c0c0 ] && [ "$(pixel main2 640 790)" != c0c0c0 ]
+    expect_true $? "the other display made the main one: the taskbar moves there" \
+        "state $(dstate HEADLESS-2 Primary); its bottom $(pixel main2 1780 760), the first's $(pixel main2 640 790)"
+    query maximize M; sleep 0.8; pointer move:600,300; shot main2-max
+    [ "$(pixel main2-max 1780 700)" = cc0000 ] && [ "$(pixel main2-max 1780 760)" = c0c0c0 ]
+    expect_true $? "(and a window maximized there now stops above it)" "$(pixel main2-max 1780 700), $(pixel main2-max 1780 760)"
+    query unmaximize M; sleep 0.6
+
+    # scale, resolution, place
+    displays_write $'[HEADLESS-1]\nScale=2\nPrimary=true'
+    [ "$(dstate HEADLESS-1 Scale)" = 2.00 ] && [ "$(dstate HEADLESS-1 LogicalWidth)" = 640 ] && [ "$(dstate HEADLESS-2 X)" = 640 ]
+    expect_true $? "scale 200%: the display is half as many points wide, the next one follows it" \
+        "scale $(dstate HEADLESS-1 Scale), $(dstate HEADLESS-1 LogicalWidth) wide, the other at $(dstate HEADLESS-2 X)"
+    displays_write $'[HEADLESS-1]\nPrimary=true\n[HEADLESS-2]\nMode=800x600@60000\nX=0\nY=800'
+    [ "$(dstate HEADLESS-2 Width)" = 800 ] && [ "$(dstate HEADLESS-2 Height)" = 600 ] && [ "$(dstate HEADLESS-2 Y)" = 800 ] && [ "$(dstate HEADLESS-1 Scale)" = 1.00 ]
+    expect_true $? "a resolution and a place (under the first)" \
+        "$(dstate HEADLESS-2 Width)x$(dstate HEADLESS-2 Height) at $(dstate HEADLESS-2 X),$(dstate HEADLESS-2 Y); the first's scale $(dstate HEADLESS-1 Scale)"
+    displays_write $'[HEADLESS-2]\nTransform=90'
+    [ "$(dstate HEADLESS-2 Transform)" = 90 ] && [ "$(dstate HEADLESS-2 LogicalWidth)" = 600 ] && [ "$(dstate HEADLESS-2 LogicalHeight)" = 800 ]
+    expect_true $? "turned on its side: tall" "$(dstate HEADLESS-2 Transform) degrees, $(dstate HEADLESS-2 LogicalWidth)x$(dstate HEADLESS-2 LogicalHeight)"
+
+    # a display turned off: its windows come to the one that's left
+    displays_write $'[HEADLESS-2]\nMode=1024x768@60000'
+    pointer move:1800,300 wait:0.3
+    start_probe P qt cc6600 || return   # (opens on the second: the pointer is there)
+    displays_write $'[HEADLESS-2]\nEnabled=false'
+    export W95INPUT_EXTENT=1280x800
+    sleep 1; pointer move:600,700; shot off
+    [ "$(dstate HEADLESS-2 Enabled)" = false ] && [ "$(magick "$WORK/$SUITE-off.png" -format %w info:)" = 1280 ] \
+        && [ "$(pixel off 640 790)" = c0c0c0 ]
+    expect_true $? "a display turned off: the desktop is the other one alone" \
+        "state $(dstate HEADLESS-2 Enabled), the picture $(magick "$WORK/$SUITE-off.png" -format %wx%h info:)"
+    local where; where=$(magick "$WORK/$SUITE-off.png" -fuzz 2% -fill black +opaque "#cc6600" -fill white -opaque "#cc6600" -trim -format "%w %X" info: 2>/dev/null)
+    [ "${where%% *}" -gt 50 ] 2>/dev/null
+    expect_true $? "(the window that was on it is on the one that's left)" "its colour: ${where:-not found}"
+    displays_write $'[HEADLESS-1]\nEnabled=false\n[HEADLESS-2]\nEnabled=false'
+    grep -q "every display is turned off in the settings" "$CLOG" && [ "$(dstate HEADLESS-1 Enabled)" = true ]
+    expect_true $? "both turned off in the settings: one stays on" "$(grep -c "every display" "$CLOG") times; $(dstate HEADLESS-1 Enabled)"
+    displays_write ''
+    export W95INPUT_EXTENT=2304x800
+    sleep 1; pointer move:600,700; shot back
+    [ "$(dstate HEADLESS-2 Enabled)" = true ] && [ "$(pixel back 1780 400)" = 008080 ] && [ "$(pixel back 640 790)" = c0c0c0 ]
+    expect_true $? "the settings cleared: both on again, the backdrop on the second" "$(dstate HEADLESS-2 Enabled), $(pixel back 1780 400)"
+    kill -0 "$COMP_PID" 2>/dev/null && kill -0 "$SHELL_PID" 2>/dev/null; expect_true $? "(the desktop and the taskbar carried on through it all)" "one of them stopped"
+    unset W95INPUT_EXTENT
+}
+
 # --- the new desktop next to today's (the Qt compositor's) --------------------
 # The same scenes on both, compared pixel by pixel: the Qt compositor runs
 # as a window here (its 1280x800 at 43,55), the new desktop on its own. The
@@ -1884,7 +2025,7 @@ suite_classic() {
 }
 
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

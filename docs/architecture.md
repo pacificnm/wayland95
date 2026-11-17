@@ -77,6 +77,7 @@ one file per concern):
 | `shell.c` | `wayland95-shell-v1`, the shell's private protocol (below) |
 | `accessibility.c` | Accessibility Options where keys arrive: StickyKeys, FilterKeys (bounce and slow keys), ToggleKeys, MouseKeys and their shortcut keys; while StickyKeys or FilterKeys is on, programs see the modifiers of the keys that got through, not the keyboard's own |
 | `settings.c` | reads `~/.config/wayland95/settings.ini` (the colour scheme for frames, keyboard layout and repeat, double-click time, touchpad, Accessibility Options) and watches it with inotify: changes apply at once, as the Qt compositor does today |
+| `displays.c` | the displays as Control Panel > Display sets them (`~/.config/wayland95/displays.ini`: on or off, resolution and refresh rate, scale, rotation, place, adaptive sync, which is the main one), applied when the file changes and when a display is plugged in; one the display can't do falls back to its own best mode, and they're never all off. What there is (and each display's modes) is written to `$XDG_RUNTIME_DIR/wayland95-displays-SOCKET.ini` for the Control Panel |
 
 Window frames are server-side (`xdg-decoration`): programs that leave
 decorations to the desktop (no preference, or server side: Qt, Electron)
@@ -127,6 +128,26 @@ Not yet, and why:
 Popups that grab (menus) get the keyboard while open, as xdg-shell says
 and GNOME's and KDE's compositors do; GTK, Chromium and Firefox menus work
 either way (tested).
+
+### Several displays
+
+Each display is arranged on its own (`layers.c`): its panels in its part
+of the layout, and what's left is where windows go there (`output.usable`).
+A maximized or full screen window fills the display it's mostly on; new
+windows open on the display the pointer is on. One display is the **main
+display** (chosen in the Control Panel, else the first): the compositor
+tells the shell which (`primary_output` in wayland95-shell-v1), and the
+shell puts the taskbar, desktop icons, menus, dialogs and notifications
+there, with the backdrop and the screen saver on the others too. When a
+display goes away (unplugged, turned off in the settings) its panels move
+to the main one and its windows onto a display that's left; a display the
+screen saver has put to sleep still counts as there. A full screen window
+is in a layer above the panels while it's the window in front. Window
+frames and the pointer are drawn as fine as the most scaled display.
+
+In the shell a panel belongs to one `wl_output`, and Qt doesn't make a
+window anew when its screen changes (to Qt, Wayland's screens are one
+desktop), so `layershell.cpp` does (`LayerShellAttached::remake`).
 
 ### win95shell (`shell/`)
 

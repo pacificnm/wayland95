@@ -25,10 +25,10 @@ Item {
     }
 
     Timer {
-        // tick on the second so the minute flips on time
-        interval: 1000
+        // wakes when the minute turns
+        interval: 60000 - (Date.now() % 60000) + 10
         running: true
         repeat: true
-        onTriggered: clock.refresh()
+        onTriggered: { clock.refresh(); interval = 60000 - (Date.now() % 60000) + 10; }
     }
 }

@@ -156,6 +156,7 @@ static void shell_bind(struct wl_client *client, void *data, uint32_t version, u
 	}
 	wl_resource_set_implementation(resource, &shell_impl, server, shell_resource_destroyed);
 	server->shell_resource = resource;
+	shell_send_primary(server);
 	wlr_log(WLR_INFO, "a shell bound wayland95_shell_v1");
 }
 
@@ -304,6 +305,13 @@ void shell_finish(struct server *server)
 	if (server->shell_global)
 		wl_global_destroy(server->shell_global);
 	server->shell_global = NULL;
+}
+
+// which display is the main one (the shell puts the taskbar there)
+void shell_send_primary(struct server *server)
+{
+	if (server->shell_resource && server->primary)
+		wayland95_shell_v1_send_primary_output(server->shell_resource, server->primary->wlr_output->name);
 }
 
 uint32_t shell_key_for(xkb_keysym_t sym, uint32_t modifiers)

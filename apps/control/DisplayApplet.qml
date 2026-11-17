@@ -131,6 +131,7 @@ PropertySheet {
         Wayland95Settings.wallpaperMode = mode;
         Wayland95Settings.setScreenSaver(saverId, saverWait, saverOptions);
         Wayland95Settings.screenSaverPassword = saverPassword;
+        displayPage.applyDisplays();
     }
 
 
@@ -585,47 +586,456 @@ PropertySheet {
     }
 
     // --------------------------------------------------------- Settings tab
+    // The displays (monitors): where each is, which is the main one (the
+    // taskbar's), and each one's resolution, refresh rate, scale and
+    // orientation. Applied by the compositor when written (Displays); then
+    // "Keep these settings?" puts the old ones back unless it's answered.
     Item {
-        AppletIcon {
-            kind: "display"
-            size: 64
-            anchors.horizontalCenter: parent.horizontalCenter
-            y: 10
-        }
-        Column {
-            y: 96
-            width: parent.width
-            spacing: 12
+        id: displayPage
 
-            GroupBox95 {
-                width: parent.width
-                height: 64
-                title: "Desktop area"
-                Text {
-                    text: Screen.width + " by " + Screen.height + " pixels"
-                          + (Screen.devicePixelRatio !== 1 ? "  (scale " + Screen.devicePixelRatio + ")" : "")
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize
+        // a working copy of Displays.outputs, edited here
+        property var items: []
+        property int current: 0
+        property bool edited: false
+        readonly property var cur: items.length > current ? items[current] : null
+        readonly property var scales: [1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+        readonly property var turns: [0, 90, 180, 270]
+        // sizes offered where a display takes any (a window, a virtual one)
+        readonly property var anySizes: [[800, 600], [1024, 768], [1280, 720], [1280, 800], [1280, 1024], [1366, 768],
+                                         [1440, 900], [1600, 900], [1680, 1050], [1920, 1080], [1920, 1200], [2560, 1440]]
+
+        function reset() {
+            items = Displays.outputs.map(function (o) { return Object.assign({}, o); });
+            if (current >= items.length)
+                current = 0;
+            edited = false;
+            sync();
+        }
+        Component.onCompleted: reset()
+        Connections {
+            target: Displays
+            function onChanged() { if (!displayPage.edited) displayPage.reset(); }
+        }
+
+        function change(key, value) {
+            var copy = items.map(function (o) { return Object.assign({}, o); });
+            copy[current][key] = value;
+            items = copy;
+            touched();
+        }
+        function touched() {
+            edited = true;
+            sheet.dirty = true;
+            sync();
+        }
+        // a display's size on the desktop, in its points
+        function logicalSize(o) {
+            var w = o.width / o.scale, h = o.height / o.scale;
+            return (o.transform === 90 || o.transform === 270) ? Qt.size(Math.round(h), Math.round(w))
+                                                               : Qt.size(Math.round(w), Math.round(h));
+        }
+        function sizes(o) { // [[w, h]...], largest first
+            var out = [], seen = {};
+            var from = o.modes.length ? o.modes.map(function (m) { return [m.width, m.height]; }) : anySizes.concat([[o.width, o.height]]);
+            for (var i = 0; i < from.length; ++i) {
+                var k = from[i][0] + "x" + from[i][1];
+                if (!seen[k]) { seen[k] = true; out.push(from[i]); }
+            }
+            out.sort(function (a, b) { return b[0] * b[1] - a[0] * a[1] || b[0] - a[0]; });
+            return out;
+        }
+        function rates(o) { // refresh rates (mHz) for its chosen size, highest first
+            var out = [];
+            for (var i = 0; i < o.modes.length; ++i)
+                if (o.modes[i].width === o.width && o.modes[i].height === o.height && out.indexOf(o.modes[i].refresh) < 0)
+                    out.push(o.modes[i].refresh);
+            out.sort(function (a, b) { return b - a; });
+            return out;
+        }
+        function rateText(mhz) {
+            var hz = mhz / 1000;
+            return (Math.abs(hz - Math.round(hz)) < 0.05 ? Math.round(hz) : hz.toFixed(2)) + " Hz";
+        }
+        function setSize(w, h) {
+            var copy = items.map(function (o) { return Object.assign({}, o); });
+            var o = copy[current];
+            o.width = w;
+            o.height = h;
+            var r = rates(o);
+            if (r.length && r.indexOf(o.refresh) < 0)
+                o.refresh = r[0];
+            items = copy;
+            pack();
+            touched();
+        }
+        function setPrimary() {
+            var copy = items.map(function (o) { return Object.assign({}, o); });
+            for (var i = 0; i < copy.length; ++i)
+                copy[i].primary = i === current;
+            items = copy;
+            touched();
+        }
+        function enabledCount() {
+            var n = 0;
+            for (var i = 0; i < items.length; ++i)
+                if (items[i].enabled) n++;
+            return n;
+        }
+        // Displays side by side with no gaps or overlaps, in the order
+        // they're in from left to right (after a size, scale or turn
+        // changed, or one was switched on or off)
+        function pack() {
+            var copy = items.map(function (o) { return Object.assign({}, o); });
+            var on = copy.filter(function (o) { return o.enabled; });
+            var row = on.every(function (o) { return o.y === on[0].y; });
+            if (row) {
+                on.sort(function (a, b) { return a.x - b.x; });
+                var x = 0;
+                for (var i = 0; i < on.length; ++i) { on[i].x = x; on[i].y = 0; x += logicalSize(on[i]).width; }
+            } else {
+                // stacked or mixed: against the first, as they were
+                var minX = Math.min.apply(null, on.map(function (o) { return o.x; }));
+                var minY = Math.min.apply(null, on.map(function (o) { return o.y; }));
+                for (var k = 0; k < on.length; ++k) { on[k].x -= minX; on[k].y -= minY; }
+            }
+            items = copy;
+        }
+        // one dropped at x, y (desktop points): against the nearest side of
+        // another, then everything from 0,0
+        function drop(index, x, y) {
+            var copy = items.map(function (o) { return Object.assign({}, o); });
+            var me = copy[index], size = logicalSize(me), best = null;
+            for (var i = 0; i < copy.length; ++i) {
+                if (i === index || !copy[i].enabled)
+                    continue;
+                var o = copy[i], os = logicalSize(o);
+                var spots = [
+                    { x: o.x + os.width, y: o.y }, { x: o.x - size.width, y: o.y },
+                    { x: o.x, y: o.y + os.height }, { x: o.x, y: o.y - size.height },
+                ];
+                for (var k = 0; k < spots.length; ++k) {
+                    var d = Math.abs(spots[k].x - x) + Math.abs(spots[k].y - y);
+                    if (!best || d < best.d)
+                        best = { d: d, x: spots[k].x, y: spots[k].y };
                 }
             }
-            GroupBox95 {
+            if (!best)
+                return;
+            me.x = best.x;
+            me.y = best.y;
+            var on = copy.filter(function (o) { return o.enabled; });
+            var minX = Math.min.apply(null, on.map(function (o) { return o.x; }));
+            var minY = Math.min.apply(null, on.map(function (o) { return o.y; }));
+            for (var j = 0; j < on.length; ++j) { on[j].x -= minX; on[j].y -= minY; }
+            items = copy;
+            touched();
+        }
+        function settings() {
+            return items.map(function (o) {
+                return { name: o.name, enabled: o.enabled, primary: o.primary, width: o.width, height: o.height,
+                         refresh: o.refresh, scale: o.scale, transform: o.transform, x: o.x, y: o.y,
+                         adaptiveSync: o.adaptiveSync };
+            });
+        }
+        // the boxes show the chosen display's settings
+        function sync() {
+            if (!cur)
+                return;
+            displayBox.currentIndex = current;
+            var s = sizes(cur);
+            sizeBox.model = s.map(function (wh) { return wh[0] + " by " + wh[1] + " pixels"; });
+            for (var i = 0; i < s.length; ++i)
+                if (s[i][0] === cur.width && s[i][1] === cur.height)
+                    sizeBox.currentIndex = i;
+            var r = rates(cur);
+            rateBox.model = r.length ? r.map(rateText) : [rateText(cur.refresh || 60000)];
+            rateBox.currentIndex = Math.max(0, r.indexOf(cur.refresh));
+            var best = 0;
+            for (var k = 0; k < scales.length; ++k)
+                if (Math.abs(scales[k] - cur.scale) < Math.abs(scales[best] - cur.scale))
+                    best = k;
+            scaleBox.currentIndex = best;
+            turnBox.currentIndex = Math.max(0, turns.indexOf(cur.transform));
+            // (set, not bound: a click leaves a check box's own idea in it)
+            useBox.checked = cur.enabled;
+            mainBox.checked = cur.primary;
+            syncBox.checked = cur.adaptiveSync;
+        }
+        onCurrentChanged: sync()
+
+        Text {
+            visible: !Displays.available
+            width: parent.width
+            y: 20
+            wrapMode: Text.Wrap
+            text: "Display settings are available when Wayland 95 is your desktop (they're its compositor's). "
+                  + "This desktop area is " + Screen.width + " by " + Screen.height + " pixels."
+            color: Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize
+        }
+
+        Item {
+            anchors.fill: parent
+            visible: Displays.available && displayPage.cur !== null
+
+            // --- the picture: drag a display to where it stands ---------
+            Rectangle {
+                id: picture
                 width: parent.width
-                height: 64
-                title: "Color palette"
-                Text {
-                    text: "True Color (32 bit)"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize
+                height: 112
+                color: Theme.window
+                Bevel { anchors.fill: parent; style: "sunken"; filled: false }
+
+                // the desktop's extent, and the picture's scale
+                readonly property var on: displayPage.items.filter(function (o) { return o.enabled; })
+                readonly property real fullW: Math.max(1, Math.max.apply(null, on.map(function (o) { return o.x + displayPage.logicalSize(o).width; }).concat([1])))
+                readonly property real fullH: Math.max(1, Math.max.apply(null, on.map(function (o) { return o.y + displayPage.logicalSize(o).height; }).concat([1])))
+                readonly property real factor: Math.min((width - 60) / fullW, (height - 28) / fullH)
+                readonly property real originX: (width - fullW * factor) / 2
+                readonly property real originY: (height - fullH * factor) / 2
+
+                Repeater {
+                    model: displayPage.items
+                    Rectangle {
+                        id: monitor
+                        required property var modelData
+                        required property int index
+                        readonly property size logical: displayPage.logicalSize(modelData)
+                        visible: modelData.enabled
+                        x: picture.originX + modelData.x * picture.factor
+                        y: picture.originY + modelData.y * picture.factor
+                        width: Math.max(16, logical.width * picture.factor)
+                        height: Math.max(12, logical.height * picture.factor)
+                        color: index === displayPage.current ? Theme.selection : Theme.face
+                        border.color: Theme.text
+                        border.width: 1
+                        z: dragArea.drag.active ? 2 : 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: modelData.number
+                            color: index === displayPage.current ? Theme.selectionText : Theme.text
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Math.max(11, Math.min(28, parent.height * 0.5))
+                            font.bold: true
+                        }
+                        // the main display has the taskbar
+                        Rectangle {
+                            visible: modelData.primary
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                            anchors.margins: 1
+                            height: Math.max(2, parent.height * 0.1)
+                            color: Theme.shadow
+                        }
+                        MouseArea {
+                            id: dragArea
+                            anchors.fill: parent
+                            drag.target: displayPage.enabledCount() > 1 ? monitor : null
+                            drag.threshold: 3
+                            onPressed: displayPage.current = monitor.index
+                            onReleased: {
+                                if (!drag.active)
+                                    return;
+                                displayPage.drop(monitor.index, (monitor.x - picture.originX) / picture.factor,
+                                                 (monitor.y - picture.originY) / picture.factor);
+                            }
+                        }
+                    }
                 }
             }
             Text {
+                y: picture.height + 4
                 width: parent.width
-                wrapMode: Text.Wrap
-                text: "Screen resolution comes from the display Wayland 95 runs on. When it runs in a window, resize that window to change the desktop area."
+                visible: displayPage.enabledCount() > 1
+                text: "Drag a display to where it stands on your desk."
                 color: Theme.text
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSize
             }
+
+            Text {
+                x: 0; y: 142
+                text: "<u>D</u>isplay:"
+                textFormat: Text.StyledText
+                color: Theme.text
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize
+            }
+            ComboBox95 {
+                id: displayBox
+                x: 60; y: 138
+                width: parent.width - 60
+                popupMenu: sheet.popupMenu
+                model: displayPage.items.map(function (o) { return o.label; })
+                onActivated: (index) => displayPage.current = index
+            }
+            CheckBox95 {
+                id: useBox
+                x: 0; y: 166
+                text: "<u>U</u>se this display"
+                // (not the last one off)
+                enabled: displayPage.cur && (!displayPage.cur.enabled || displayPage.enabledCount() > 1)
+                onToggled: (on) => {
+                    var wasMain = displayPage.cur.primary;
+                    displayPage.change("enabled", on);
+                    if (!on && wasMain) {
+                        // the taskbar needs a display that's on
+                        var copy = displayPage.items.map(function (o) { return Object.assign({}, o); });
+                        var given = false;
+                        for (var i = 0; i < copy.length; ++i) {
+                            copy[i].primary = !given && copy[i].enabled;
+                            given = given || copy[i].primary;
+                        }
+                        displayPage.items = copy;
+                    }
+                    if (on) {
+                        // to the right of the others
+                        var c2 = displayPage.items.map(function (o) { return Object.assign({}, o); });
+                        var right = 0;
+                        for (var k = 0; k < c2.length; ++k)
+                            if (k !== displayPage.current && c2[k].enabled)
+                                right = Math.max(right, c2[k].x + displayPage.logicalSize(c2[k]).width);
+                        c2[displayPage.current].x = right;
+                        c2[displayPage.current].y = 0;
+                        displayPage.items = c2;
+                    }
+                    displayPage.pack();
+                    displayPage.touched();
+                }
+            }
+            CheckBox95 {
+                id: mainBox
+                x: 180; y: 166
+                text: "<u>M</u>ain display (taskbar)"
+                enabled: displayPage.cur && displayPage.cur.enabled && !displayPage.cur.primary
+                onToggled: displayPage.setPrimary()
+            }
+
+            GroupBox95 {
+                x: 0; y: 192
+                width: parent.width * 0.58 - 4
+                height: 54
+                title: "Desktop area"
+                ComboBox95 {
+                    id: sizeBox
+                    width: parent.width
+                    popupMenu: sheet.popupMenu
+                    enabled: displayPage.cur && displayPage.cur.enabled
+                    onActivated: (index) => {
+                        var s = displayPage.sizes(displayPage.cur)[index];
+                        displayPage.setSize(s[0], s[1]);
+                    }
+                }
+            }
+            GroupBox95 {
+                x: parent.width * 0.58 + 4; y: 192
+                width: parent.width * 0.42 - 4
+                height: 54
+                title: "Refresh rate"
+                ComboBox95 {
+                    id: rateBox
+                    width: parent.width
+                    popupMenu: sheet.popupMenu
+                    enabled: displayPage.cur && displayPage.cur.enabled && displayPage.rates(displayPage.cur).length > 1
+                    onActivated: (index) => displayPage.change("refresh", displayPage.rates(displayPage.cur)[index])
+                }
+            }
+            GroupBox95 {
+                x: 0; y: 250
+                width: parent.width * 0.42 - 4
+                height: 54
+                title: "Size of text and windows"
+                ComboBox95 {
+                    id: scaleBox
+                    width: parent.width
+                    popupMenu: sheet.popupMenu
+                    enabled: displayPage.cur && displayPage.cur.enabled
+                    model: displayPage.scales.map(function (s) { return Math.round(s * 100) + "%"; })
+                    onActivated: (index) => { displayPage.change("scale", displayPage.scales[index]); displayPage.pack(); }
+                }
+            }
+            GroupBox95 {
+                x: parent.width * 0.42 + 4; y: 250
+                width: parent.width * 0.58 - 4
+                height: 54
+                title: "Orientation"
+                ComboBox95 {
+                    id: turnBox
+                    width: parent.width
+                    popupMenu: sheet.popupMenu
+                    enabled: displayPage.cur && displayPage.cur.enabled
+                    model: ["Landscape", "Portrait (turned right)", "Landscape (upside down)", "Portrait (turned left)"]
+                    onActivated: (index) => { displayPage.change("transform", displayPage.turns[index]); displayPage.pack(); }
+                }
+            }
+            CheckBox95 {
+                id: syncBox
+                x: 0; y: 310
+                visible: displayPage.cur ? displayPage.cur.adaptiveSyncSupported : false
+                text: "<u>A</u>daptive sync (variable refresh rate)"
+                enabled: displayPage.cur && displayPage.cur.enabled
+                onToggled: (on) => displayPage.change("adaptiveSync", on)
+            }
+        }
+
+        // --- "Keep these settings?": the old ones come back unless it's
+        // answered (a mode the display can't show leaves nothing to click)
+        property int keepSeconds: 0
+        property bool confirming: false
+        property bool closeAfter: false
+        function applyDisplays() {
+            if (!edited || !Displays.available)
+                return;
+            Displays.apply(settings());
+            edited = false;
+            confirming = true;
+            keepSeconds = 15;
+            keepTimer.restart();
+            askKeep();
+        }
+        function askKeep() {
+            sheet.messageBox.show("Display Properties",
+                "Do you want to keep these display settings?\n\nThe settings before come back in "
+                + keepSeconds + (keepSeconds === 1 ? " second." : " seconds."), "question", ["Yes", "No"],
+                function (index) { displayPage.answered(index === 0); });
+        }
+        function answered(keep) {
+            if (!confirming)
+                return;
+            confirming = false;
+            keepTimer.stop();
+            if (!keep) {
+                Displays.revert();
+                console.info("Display settings: not kept; the settings before are back");
+            } else {
+                console.info("Display settings: kept");
+            }
+            edited = false;
+            if (closeAfter)
+                sheet.close();
+        }
+        Timer {
+            id: keepTimer
+            interval: 1000
+            repeat: true
+            onTriggered: {
+                displayPage.keepSeconds -= 1;
+                if (displayPage.keepSeconds <= 0) {
+                    sheet.messageBox.visible = false;
+                    sheet.messageBox.callback = null;
+                    displayPage.answered(false);
+                } else {
+                    sheet.messageBox.message = "Do you want to keep these display settings?\n\nThe settings before come back in "
+                        + displayPage.keepSeconds + (displayPage.keepSeconds === 1 ? " second." : " seconds.");
+                }
+            }
+        }
+    }
+    // (OK applies and closes: not before the displays' question is answered)
+    onClosing: (close) => {
+        if (displayPage.confirming) {
+            close.accepted = false;
+            displayPage.closeAfter = true;
         }
     }
 

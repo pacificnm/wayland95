@@ -203,9 +203,8 @@ void view_set_minimized(struct view *view, bool minimized)
 
 static void output_box_for(struct view *view, struct wlr_box *box)
 {
-	struct wlr_output *output = wlr_output_layout_output_at(view->server->output_layout,
-			view->x + 10, view->y + 10);
-	wlr_output_layout_get_box(view->server->output_layout, output, box);
+	struct output *output = output_for_view(view);
+	wlr_output_layout_get_box(view->server->output_layout, output ? output->wlr_output : NULL, box);
 }
 
 static void apply_state(struct view *view)
@@ -227,7 +226,9 @@ static void apply_state(struct view *view)
 // bar; the frame's borders hang just outside the area (Win95 does the same)
 static void maximized_box(struct view *view, struct wlr_box *box)
 {
-	*box = view->server->usable_area;
+	// (on the display it's on)
+	struct output *output = output_for_view(view);
+	*box = output ? output->usable : (struct wlr_box){0, 0, 640, 480};
 	if (view->ssd) {
 		box->y += FRAME_TOP - FRAME_BORDER;
 		box->height -= FRAME_TOP - FRAME_BORDER;
@@ -295,17 +296,25 @@ void view_set_fullscreen(struct view *view, bool fullscreen)
 	input_refresh_pointer(view->server);
 }
 
-// panels came or went: maximized windows follow the usable area
+// panels or displays came, went or changed: maximized and full screen
+// windows follow their display
 void view_arrange_all(struct server *server)
 {
 	struct view *view;
 	wl_list_for_each(view, &server->views, link) {
-		if (view->mapped && view->maximized && !view->fullscreen) {
-			struct wlr_box area;
+		if (!view->mapped)
+			continue;
+		struct wlr_box area;
+		if (view->fullscreen)
+			output_box_for(view, &area);
+		else if (view->maximized)
 			maximized_box(view, &area);
-			view_move(view, area.x, area.y);
-			view_resize(view, area.width, area.height);
-		}
+		else
+			continue;
+		if (area.width <= 0 || area.height <= 0)
+			continue;
+		view_move(view, area.x, area.y);
+		view_resize(view, area.width, area.height);
 	}
 }
 
@@ -402,7 +411,10 @@ void view_mapped(struct view *view)
 	frame_update(view);
 	int left, top, right, bottom;
 	view_frame_insets(view, &left, &top, &right, &bottom);
-	struct wlr_box area = server->usable_area;
+	// new windows open on the display the pointer is on
+	struct output *output = view->placed ? output_for_view(view)
+			: output_at(server, server->cursor->x, server->cursor->y);
+	struct wlr_box area = output ? output->usable : (struct wlr_box){0, 0, 640, 480};
 	if (!view->placed) {
 		// cascade new windows (their frames) from the top left of the
 		// usable area

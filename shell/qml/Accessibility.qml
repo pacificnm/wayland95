@@ -102,6 +102,7 @@ QtObject {
 
     // over everything, taking no input; shown only while there's something
     property Window layer: Window {
+        screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput)
         LayerShell.layer: LayerShell.Overlay
         LayerShell.anchors: LayerShell.AnchorTop | LayerShell.AnchorBottom | LayerShell.AnchorLeft | LayerShell.AnchorRight
         LayerShell.exclusiveZone: -1

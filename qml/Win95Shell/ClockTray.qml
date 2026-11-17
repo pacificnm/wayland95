@@ -46,14 +46,19 @@ TrayIcon {
         }
     }
 
-    // tick on the second so the minute flips on time (and the pop-up's
-    // seconds run)
+    // wakes when the minute turns; every second only while the pop-up (with
+    // its seconds) is open
+    function untilNextTick() {
+        return popupOpen ? 1000 - (Date.now() % 1000) : 60000 - (Date.now() % 60000) + 10;
+    }
     Timer {
-        interval: 1000
+        id: tick
+        interval: clockTray.untilNextTick()
         running: true
         repeat: true
-        onTriggered: clockTray.now = new Date()
+        onTriggered: { clockTray.now = new Date(); interval = clockTray.untilNextTick(); }
     }
+    onPopupOpenChanged: { now = new Date(); tick.interval = untilNextTick(); tick.restart(); }
 
     onPopupOpened: goToday()
     onDoubleClicked: Launcher.launch("win95control", ["--applet", "datetime"])

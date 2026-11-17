@@ -293,7 +293,8 @@ void frame_update(struct view *view)
 	if (geo.width <= 0 || geo.height <= 0)
 		return;
 	const char *title = view_title(view);
-	bool same = geo.width == view->frame_w && geo.height == view->frame_h
+	int scale = displays_frame_scale(view->server);
+	bool same = geo.width == view->frame_w && geo.height == view->frame_h && scale == view->frame_scale
 			&& view->frame_drawn_active == view->frame_active
 			&& view->frame_drawn_pressed == view->frame_pressed
 			&& view->frame_maximized == view->maximized
@@ -301,7 +302,8 @@ void frame_update(struct view *view)
 	if (same)
 		return;
 	// (the edges only change with the size)
-	bool resized = geo.width != view->frame_w || geo.height != view->frame_h;
+	bool resized = geo.width != view->frame_w || geo.height != view->frame_h || scale != view->frame_scale;
+	view->frame_scale = scale;
 	view->frame_w = geo.width;
 	view->frame_h = geo.height;
 	view->frame_drawn_active = view->frame_active;
@@ -326,21 +328,24 @@ void frame_update(struct view *view)
 	for (int i = 0; i < (resized ? 4 : 1); ++i) {
 		const struct wlr_box *b = &strips[i];
 		struct frame_buffer *fb = calloc(1, sizeof(*fb));
-		fb->surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, b->width, b->height);
+		// (drawn finer on a scaled display: sharp title text and edges)
+		fb->surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, b->width * scale, b->height * scale);
 		if (cairo_surface_status(fb->surface) != CAIRO_STATUS_SUCCESS) {
 			wlr_log(WLR_ERROR, "can't draw a %dx%d frame", fw, fh);
 			cairo_surface_destroy(fb->surface);
 			free(fb);
 			return;
 		}
-		wlr_buffer_init(&fb->base, &fb_impl, b->width, b->height);
+		wlr_buffer_init(&fb->base, &fb_impl, b->width * scale, b->height * scale);
 		cairo_t *cr = cairo_create(fb->surface);
+		cairo_scale(cr, scale, scale);
 		cairo_translate(cr, -b->x, -b->y);
 		draw(view, cr, fw, fh, title, i == 0);
 		cairo_destroy(cr);
 		cairo_surface_flush(fb->surface);
 		wlr_scene_node_set_position(&view->frame[i]->node, b->x, b->y);
 		wlr_scene_buffer_set_buffer(view->frame[i], &fb->base);
+		wlr_scene_buffer_set_dest_size(view->frame[i], b->width, b->height);
 		// every pixel of a strip is drawn: nothing behind it shows
 		pixman_region32_t opaque;
 		pixman_region32_init_rect(&opaque, 0, 0, b->width, b->height);

@@ -29,6 +29,8 @@ static void activity(struct server *server)
 	wlr_idle_notifier_v1_notify_activity(server->idle_notifier, server->seat);
 }
 
+static void note_shell_input(struct server *server, struct wlr_surface *surface);
+
 // ------------------------------------------------------------ keyboards
 
 // ---------------------------------------------------- desktop shortcuts
@@ -302,6 +304,8 @@ void input_key(struct server *server, struct keyboard *keyboard, uint32_t time, 
 	if (owned && keyboard->delivered)
 		xkb_state_update_key(keyboard->delivered, keycode + 8, pressed ? XKB_KEY_DOWN : XKB_KEY_UP);
 	if (!handled) {
+		if (pressed)
+			note_shell_input(server, server->seat->keyboard_state.focused_surface);
 		wlr_seat_set_keyboard(server->seat, keyboard->wlr_keyboard);
 		wlr_seat_keyboard_notify_key(server->seat, time, keycode,
 				pressed ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED);
@@ -517,6 +521,18 @@ void input_lock(struct server *server)
 	wlr_seat_pointer_clear_focus(server->seat);
 	wlr_seat_keyboard_notify_clear_focus(server->seat);
 	constraint_deactivate(server);
+}
+
+static uint32_t now_ms(void);
+
+// a click or key for the desktop itself (the shell's surfaces)
+static void note_shell_input(struct server *server, struct wlr_surface *surface)
+{
+	if (surface && server->shell_resource
+			&& wl_resource_get_client(surface->resource) == wl_resource_get_client(server->shell_resource)) {
+		server->shell_input_ms = now_ms();
+		server->shell_input_seen = true;
+	}
 }
 
 // ------------------------------------------------------- cursor, pointer
@@ -803,6 +819,7 @@ void input_pointer_button(struct server *server, uint32_t time, uint32_t button,
 	struct node_tag *owner = NULL;
 	struct view *view = view_from_surface_at(server, server->cursor->x, server->cursor->y,
 			&surface, &sx, &sy, &owner);
+	note_shell_input(server, surface);
 	if (surface && server->seat->pointer_state.button_count == 1) {
 		// the first button down starts the implicit grab
 		server->press_surface = surface;

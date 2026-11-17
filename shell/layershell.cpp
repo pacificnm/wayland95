@@ -2,6 +2,7 @@
 
 #include <QGuiApplication>
 #include <QScreen>
+#include <QPlatformSurfaceEvent>
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
 #include <QtWaylandClient/private/qwaylandintegration_p.h>
 #include <QtWaylandClient/private/qwaylandscreen_p.h>
@@ -211,10 +212,52 @@ LayerShellAttached::LayerShellAttached(QWindow *window) : QObject(window), m_win
     if (!shell)
         return;
     window->create();
+    m_madeOn = window->screen();
     if (auto *wl = dynamic_cast<QWaylandWindow *>(window->handle())) {
         wl->setShellIntegration(shell);
         m_supported = true;
     }
+    // moved to another screen (the main display changed), Qt makes the
+    // window's Wayland side anew: it's a panel again
+    window->installEventFilter(this);
+    // Qt doesn't make it anew by itself for another screen (to Qt, Wayland's
+    // screens are one desktop), and a panel belongs to one display: so we do
+    connect(window, &QWindow::screenChanged, this, [this] {
+        QMetaObject::invokeMethod(this, &LayerShellAttached::remake, Qt::QueuedConnection);
+    });
+}
+
+void LayerShellAttached::remake()
+{
+    QScreen *target = m_window->screen();
+    if (!m_supported || !m_window->handle() || !target)
+        return;
+    if (!m_surface || m_madeOn == target) {
+        // not shown yet (it's made for the screen it has when it's shown),
+        // or there already
+        m_madeOn = target;
+        return;
+    }
+    const bool shown = m_window->isVisible();
+    m_window->destroy();
+    // (Qt takes a new window's screen from where it is)
+    m_window->setGeometry(QRect(target->geometry().topLeft(), m_window->size()));
+    m_window->setScreen(target);
+    m_window->create(); // (the event filter makes it a panel)
+    m_madeOn = target;
+    if (shown)
+        m_window->setVisible(true);
+}
+
+bool LayerShellAttached::eventFilter(QObject *object, QEvent *event)
+{
+    if (object == m_window && event->type() == QEvent::PlatformSurface
+            && static_cast<QPlatformSurfaceEvent *>(event)->surfaceEventType() == QPlatformSurfaceEvent::SurfaceCreated) {
+        if (auto *shell = LayerShellIntegration::instance())
+            if (auto *wl = dynamic_cast<QWaylandWindow *>(m_window->handle()))
+                wl->setShellIntegration(shell);
+    }
+    return QObject::eventFilter(object, event);
 }
 
 LayerShellAttached *LayerShellAttached::get(QWindow *window)

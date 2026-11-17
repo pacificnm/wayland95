@@ -120,6 +120,11 @@ int main(int argc, char *argv[])
 			} else if (line == QLatin1String("paste")) {
 				QString t = cb->text(QClipboard::Clipboard);
 				out(QStringLiteral("clipboard %1").arg(t.isEmpty() ? QStringLiteral("(empty)") : t));
+			} else if (line == QLatin1String("raise")) {
+				// asks the desktop to bring this window forward (xdg-activation)
+				for (QWindow *w : QGuiApplication::topLevelWindows())
+					w->requestActivate();
+				out(QStringLiteral("raise asked"));
 			} else if (line == QLatin1String("paste-primary")) {
 				QString t = cb->text(QClipboard::Selection);
 				out(QStringLiteral("primary %1").arg(t.isEmpty() ? QStringLiteral("(empty)") : t));

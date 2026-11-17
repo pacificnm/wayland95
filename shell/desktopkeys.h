@@ -30,8 +30,11 @@ class ShellExtension : public QWaylandClientExtensionTemplate<ShellExtension>,
 public:
     ShellExtension() : QWaylandClientExtensionTemplate<ShellExtension>(1) { initialize(); }
     static ShellExtension *instance();
+    // the main display's name ("eDP-1"); empty until the compositor says
+    QString primaryOutput() const { return m_primaryOutput; }
 
 Q_SIGNALS:
+    void primaryOutputChanged();
     void key(uint key, bool pressed);
     void tone(uint tone);
     void shortcut(uint feature);
@@ -67,8 +70,17 @@ protected:
         Q_EMIT windowMenu(window, x, y, state);
     }
 
+    void wayland95_shell_v1_primary_output(const QString &name) override
+    {
+        if (name != m_primaryOutput) {
+            m_primaryOutput = name;
+            Q_EMIT primaryOutputChanged();
+        }
+    }
+
 private:
     QVariantList m_entries;
+    QString m_primaryOutput;
 };
 
 class DesktopKeys : public QObject

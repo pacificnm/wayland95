@@ -7,6 +7,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QJSValue>
 #include <QtQml/qqmlregistration.h>
 
 class ShellSession : public QObject
@@ -24,9 +25,21 @@ class ShellSession : public QObject
     Q_PROPERTY(bool session READ session CONSTANT)
     // started again by the compositor after the shell went away (--restarted)
     Q_PROPERTY(bool restarted READ restarted CONSTANT)
+    // the main display's name (the compositor says: Control Panel > Display)
+    Q_PROPERTY(QString primaryOutput READ primaryOutput NOTIFY primaryOutputChanged)
 
 public:
-    explicit ShellSession(QObject *parent = nullptr) : QObject(parent) {}
+    explicit ShellSession(QObject *parent = nullptr);
+    QString primaryOutput() const;
+    // The main display among Qt.application.screens (the first, if the
+    // compositor hasn't said or it isn't there), for a panel's `screen`:
+    //   screen: ShellSession.mainScreen(Qt.application.screens, ShellSession.primaryOutput)
+    Q_INVOKABLE QObject *mainScreen(const QJSValue &screens, const QString &name) const;
+    // whether a screen (one of Qt.application.screens) is the main one
+    Q_INVOKABLE bool isMainScreen(QObject *screen, const QJSValue &screens, const QString &name) const
+    {
+        return screen && screen == mainScreen(screens, name);
+    }
 
     QString socketName() const { return qEnvironmentVariable("WAYLAND_DISPLAY"); }
     QString x11Display() const { return qEnvironmentVariable("DISPLAY"); }
@@ -42,4 +55,7 @@ public:
     // ends the desktop: asks wayland95-compositor (which started the shell
     // and told it its process id) to stop; the session ends with it
     Q_INVOKABLE void exitDesktop();
+
+Q_SIGNALS:
+    void primaryOutputChanged();
 };

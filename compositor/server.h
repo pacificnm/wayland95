@@ -104,8 +104,11 @@ struct server {
 	struct wlr_scene_tree *drag_icons;       // what's being dragged
 	struct wlr_scene_tree *layer_lock;       // the lock screen, above everything
 
-	// where windows may go: the output minus panels' exclusive zones
-	struct wlr_box usable_area;
+	// the main display: the taskbar's, and where things go by default
+	// (Control Panel > Display; else the first)
+	struct output *primary;
+	char socket_name[64]; // WAYLAND_DISPLAY (names the displays' state file)
+	bool displays_applying;
 
 	struct settings settings;
 	int settings_watch; // inotify
@@ -186,6 +189,11 @@ struct server {
 	struct wlr_keyboard_shortcuts_inhibit_manager_v1 *shortcuts_inhibit;
 	struct wl_listener new_shortcuts_inhibitor;
 
+	// when the desktop itself (the shell: taskbar, Start menu, a
+	// notification) last got a click or key: a program may come forward
+	// just after (protocols.c)
+	uint32_t shell_input_ms;
+	bool shell_input_seen;
 	// the shell (wayland95-shell-v1, shell.c): the one bound, if any
 	struct wl_global *shell_global;
 	struct wl_resource *shell_resource;
@@ -234,6 +242,9 @@ struct output {
 	struct wl_listener frame;
 	struct wl_listener request_state;
 	struct wl_listener destroy;
+	// where windows may go on it: its place in the layout, less its
+	// panels' exclusive zones (the taskbar's, on the main display)
+	struct wlr_box usable;
 };
 
 enum view_type { VIEW_XDG, VIEW_XWAYLAND };
@@ -256,6 +267,7 @@ struct view {
 	struct wlr_scene_buffer *frame[4]; // top (title bar), bottom, left, right
 	struct wlr_scene_rect *resize_zone;
 	int frame_w, frame_h; // the window size it was drawn for
+	int frame_scale;      // and how many times finer than the desktop's pixels
 	bool frame_active;  // the window is the active one
 	enum frame_part frame_pressed; // a title button held down
 	// what the current picture was drawn for
@@ -300,6 +312,7 @@ struct layer_surface {
 	struct server *server;
 	struct wlr_layer_surface_v1 *layer_surface;
 	struct wlr_scene_layer_surface_v1 *scene;
+	struct output *output; // the display it's on (moved if that one goes)
 	struct wl_listener map, unmap, commit, destroy, new_popup;
 	uint32_t map_seq; // when it was last shown (the newest is on top)
 };
@@ -339,6 +352,20 @@ struct pointer_device {
 
 // output.c
 void output_init(struct server *server);
+bool output_active(struct output *output);                     // on, and part of the desktop
+struct output *output_at(struct server *server, double lx, double ly); // (the main one if none is there)
+struct output *output_for_view(struct view *view);             // the display most of it is on
+void outputs_changed(struct server *server); // displays came, went, moved or changed size
+void output_place(struct output *output, bool in_layout, bool has_position, int x, int y);
+void lock_cover_update(struct server *server); // (protocols.c) the lock's cover, over every display
+
+// displays.c: Control Panel > Display's settings (displays.ini), and what
+// the displays are for it to show
+void displays_init(struct server *server);
+void displays_apply(struct server *server);       // the saved settings, to every display
+void displays_write_state(struct server *server); // what there is, for the Control Panel
+void displays_finish(struct server *server);
+int displays_frame_scale(struct server *server);  // window frames are drawn this many times finer
 
 // settings.c
 void settings_init(struct server *server);
@@ -407,6 +434,7 @@ bool shell_send_key(struct server *server, uint32_t key, bool pressed); // false
 void shell_send_tone(struct server *server, uint32_t tone);
 void shell_send_shortcut(struct server *server, uint32_t feature);
 void shell_send_sticky(struct server *server, const char *held);
+void shell_send_primary(struct server *server); // which display is the main one
 // Alt+Tab's box and the window menu are the shell's to draw: false if
 // there's no shell (the compositor then does without)
 bool shell_switcher_show(struct server *server, struct view **views, int n, int selected);

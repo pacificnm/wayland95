@@ -9,6 +9,8 @@
 #include <QMimeData>
 #include <QScreen>
 #include <QStandardPaths>
+#include <QFile>
+#include <QThreadPool>
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
 #include <QtWaylandClient/private/qwaylandintegration_p.h>
 #include <QtWaylandClient/private/qwaylandshm_p.h>
@@ -151,7 +153,12 @@ ScreenCopy::ScreenCopy(QObject *parent)
 int ScreenCopy::take(const QRect &rect, const QString &folder)
 {
     const int id = m_nextId++;
+    // the main display (where the capture tool shows)
     QScreen *screen = QGuiApplication::primaryScreen();
+    const QString mainName = ShellExtension::instance()->primaryOutput();
+    for (QScreen *s : QGuiApplication::screens())
+        if (!mainName.isEmpty() && s->name() == mainName)
+            screen = s;
     auto *native = screen ? screen->nativeInterface<QNativeInterface::QWaylandScreen>() : nullptr;
     if (!m_manager->isActive() || !native || !native->output()) {
         std::fprintf(stderr, "win95shell: no way to take a picture of the screen (screencopy)\n");
@@ -173,31 +180,42 @@ void ScreenCopy::finished(int id, const QImage &image, const QString &folder)
         emit taken(id, QString());
         return;
     }
-    if (folder == QLatin1String("Clipboard")) {
-        QByteArray png;
-        QBuffer buffer(&png);
-        buffer.open(QIODevice::WriteOnly);
-        image.save(&buffer, "PNG");
-        auto *data = new QMimeData;
-        data->setData(QStringLiteral("image/png"), png);
-        QGuiApplication::clipboard()->setMimeData(data);
-        // for the thumbnail
-        const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/wayland95");
-        QDir().mkpath(dir);
-        const QString path = dir + QStringLiteral("/clipboard-screenshot.png");
-        image.save(path, "PNG");
-        std::fprintf(stderr, "win95shell: screen picture %dx%d on the clipboard\n", image.width(), image.height());
-        emit taken(id, path);
-        return;
-    }
-    const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd 'at' hh.mm.ss"));
-    QString path = folder + QStringLiteral("/Screenshot ") + stamp + QStringLiteral(".png");
-    for (int n = 2; QFileInfo::exists(path); ++n)
-        path = folder + QStringLiteral("/Screenshot ") + stamp + QStringLiteral(" (%1).png").arg(n);
-    const bool ok = image.save(path, "PNG");
-    std::fprintf(stderr, "win95shell: screen picture %dx%d %s %s\n", image.width(), image.height(),
-                 ok ? "saved as" : "couldn't be saved as", qPrintable(path));
-    emit taken(id, ok ? path : QString());
+    // compressing a screenful to PNG takes a moment: not on the desktop's
+    // own thread (the taskbar and menus would stand still meanwhile)
+    QThreadPool::globalInstance()->start([this, id, image, folder] {
+        if (folder == QLatin1String("Clipboard")) {
+            QByteArray png;
+            QBuffer buffer(&png);
+            buffer.open(QIODevice::WriteOnly);
+            image.save(&buffer, "PNG");
+            // for the thumbnail
+            const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/wayland95");
+            QDir().mkpath(dir);
+            const QString path = dir + QStringLiteral("/clipboard-screenshot.png");
+            QFile file(path);
+            if (file.open(QIODevice::WriteOnly))
+                file.write(png);
+            file.close();
+            // (the clipboard is the main thread's)
+            QMetaObject::invokeMethod(this, [this, id, png, path, size = image.size()] {
+                auto *data = new QMimeData;
+                data->setData(QStringLiteral("image/png"), png);
+                QGuiApplication::clipboard()->setMimeData(data);
+                std::fprintf(stderr, "win95shell: screen picture %dx%d on the clipboard\n", size.width(), size.height());
+                emit taken(id, path);
+            }, Qt::QueuedConnection);
+            return;
+        }
+        const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd 'at' hh.mm.ss"));
+        QString path = folder + QStringLiteral("/Screenshot ") + stamp + QStringLiteral(".png");
+        for (int n = 2; QFileInfo::exists(path); ++n)
+            path = folder + QStringLiteral("/Screenshot ") + stamp + QStringLiteral(" (%1).png").arg(n);
+        const bool ok = image.save(path, "PNG");
+        std::fprintf(stderr, "win95shell: screen picture %dx%d %s %s\n", image.width(), image.height(),
+                     ok ? "saved as" : "couldn't be saved as", qPrintable(path));
+        QMetaObject::invokeMethod(this, [this, id, ok, path] { emit taken(id, ok ? path : QString()); },
+                                  Qt::QueuedConnection);
+    });
 }
 
 QString ScreenCopy::folder(const QString &name) const

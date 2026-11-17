@@ -179,6 +179,11 @@ int main(int argc, char *argv[])
 	wl_registry_add_listener(registry, &registry_listener, NULL);
 	wl_display_roundtrip(display);
 	wl_display_roundtrip(display);
+	// several displays: positions are in the whole desktop (W95INPUT_EXTENT=WxH),
+	// not the first display alone
+	const char *extent = getenv("W95INPUT_EXTENT");
+	if (extent)
+		sscanf(extent, "%dx%d", &out_w, &out_h);
 	if (!manager || !output || out_w <= 0) {
 		fprintf(stderr, "w95input: the compositor has no virtual pointer or output\n");
 		return 1;

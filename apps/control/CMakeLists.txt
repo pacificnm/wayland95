@@ -28,6 +28,8 @@ qt_add_executable(win95control
     src/locales.cpp
     src/services.h
     src/services.cpp
+    src/displays.h
+    src/displays.cpp
 )
 
 # Services runs session/wayland95-services as root through pkexec: the

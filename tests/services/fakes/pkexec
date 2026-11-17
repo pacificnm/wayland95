@@ -1,0 +1,6 @@
+#!/bin/sh
+# Stand-in pkexec for trying the Services windows by hand or in a test: runs
+# the test's copy of wayland95-services (tests/services/run.sh makes it)
+# instead of the real helper, with no password and no root.
+shift # (the real helper's path)
+exec "${W95_FAKE_ROOT:?}/helper" "$@"

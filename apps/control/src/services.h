@@ -88,6 +88,9 @@ public:
     // SSH's settings as sshd will read them: Port, PasswordAuthentication,
     // PermitRootLogin, X11Forwarding, PubkeyAuthentication, AllowUsers
     Q_INVOKABLE QVariantMap sshConfig() const;
+    // WireGuard's tunnels that are up or start with the computer:
+    // [{ name, enabled, active }] (the rest: wayland95-services wg-list)
+    Q_INVOKABLE QVariantList wireguardTunnels() const;
     // PostgreSQL: version, port, listen ("localhost"/"all"), max_connections,
     // remote (bool); empty if it isn't installed
     Q_INVOKABLE QVariantMap postgresConfig() const;

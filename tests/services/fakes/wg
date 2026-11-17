@@ -1,0 +1,9 @@
+#!/bin/sh
+# Stand-in wg: keys from the real one (they need no root); "show NAME dump"
+# from $W95_FAKE_ROOT/dump/NAME, if the test put one there.
+root=${W95_FAKE_ROOT:?}
+if [ "$1" = show ]; then
+    [ -f "$root/dump/$2" ] && cat "$root/dump/$2"
+    exit 0
+fi
+exec /usr/bin/wg "$@"

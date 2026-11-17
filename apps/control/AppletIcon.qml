@@ -280,6 +280,17 @@ Canvas {
             rect(15, 26, 2, 4, "#000000");
             rect(8, 29, 16, 2, "#000000");
             break;
+        case "wireguard":
+            // two computers joined by a tunnel, with a padlock on it
+            frame(1, 6, 10, 9, "#c0c0c0"); frame(3, 8, 6, 5, "#008080");
+            frame(21, 6, 10, 9, "#c0c0c0"); frame(23, 8, 6, 5, "#008080");
+            frame(10, 9, 12, 4, "#000080");
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(16, 19, 4, Math.PI, 0); ctx.stroke();
+            frame(10, 19, 12, 10, "#ffd800");
+            rect(15, 22, 2, 4, "#000000");
+            break;
         case "ssh":
             // a terminal with a key in front of it
             frame(1, 3, 26, 20, "#c0c0c0");

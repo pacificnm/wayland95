@@ -1205,6 +1205,7 @@ PropertySheet {
         FileDialog95 {
             id: browseDialog
             title: "Browse"
+            dialogWidth: 390 // (inside the property sheet)
             messageBox: sheet.messageBox
             popupMenu: sheet.popupMenu
             defaultSuffix: ""

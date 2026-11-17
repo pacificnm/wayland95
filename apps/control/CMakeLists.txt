@@ -87,6 +87,7 @@ qt_add_qml_module(win95control
         ColorButton.qml
         ServicesApplet.qml
         SshSettings.qml
+        WireGuardSettings.qml
         PostgresSettings.qml
         PythonSettings.qml
         NodeSettings.qml

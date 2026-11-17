@@ -112,6 +112,14 @@ ignored (windows under the taskbar), the volume and brightness keys never
 sent to the shell, panels arranged in one pass (notifications over the
 taskbar), StickyKeys never holding a key.
 
+`tests/services/run.sh` tests the Services control panel's root helper
+(`wayland95-services`) without root: a copy of it works on a scratch folder
+in place of `/etc` and `/sys`, with stand-ins for `systemctl` and
+`wg-quick` (46 checks on WireGuard: making, saving, importing and removing
+tunnels, keys that never come out, what it refuses, a failed start put
+back). `tests/services/run.sh --setup` prints what to set to try the
+windows themselves against that copy, with a stand-in `pkexec`.
+
 ## 2. Nested, on your screen (VS Code)
 
 `tests/nested/run.sh desktop` (VS Code: Terminal > Run Task > "Nested:

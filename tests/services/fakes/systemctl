@@ -1,0 +1,42 @@
+#!/bin/sh
+# Stand-in systemctl for tests/services/run.sh: units are files under
+# $W95_FAKE_ROOT (enabled/, active/); a wg-quick@NAME that starts makes
+# NAME's network interface appear (sys/class/net/NAME), as the real one does.
+root=${W95_FAKE_ROOT:?}
+echo "systemctl $*" >>"$root/log"
+mkdir -p "$root/enabled" "$root/active"
+cmd=$1; shift
+now="" quiet=""
+while :; do
+    case "${1:-}" in --now) now=1; shift ;; -q) quiet=1; shift ;; *) break ;; esac
+done
+start() {
+    name=${1#wg-quick@}; name=${name%.service}
+    case "$1" in wg-quick@*)
+        [ -f "$root/etc/wireguard/$name.conf" ] || { echo "no such tunnel" >&2; return 1; }
+        if grep -q "MTU = 9999" "$root/etc/wireguard/$name.conf"; then echo "wg-quick: RTNETLINK answers: Invalid argument" >&2; return 1; fi
+        mkdir -p "$root/sys/class/net/$name" ;;
+    esac
+    : >"$root/active/$1"
+}
+stop() {
+    name=${1#wg-quick@}; name=${name%.service}
+    rm -f "$root/active/$1"
+    case "$1" in wg-quick@*) rm -rf "$root/sys/class/net/$name" ;; esac
+}
+status=0
+for unit in "$@"; do
+    case "$cmd" in
+        is-enabled) [ -e "$root/enabled/$unit" ] || status=1 ;;
+        is-active) [ -e "$root/active/$unit" ] || status=3 ;;
+        enable) : >"$root/enabled/$unit"; [ -z "$now" ] || start "$unit" || status=1 ;;
+        disable) rm -f "$root/enabled/$unit"; [ -z "$now" ] || stop "$unit" ;;
+        start) start "$unit" || status=1 ;;
+        stop) stop "$unit" ;;
+        restart) stop "$unit"; start "$unit" || status=1 ;;
+        status) echo "$unit: (stand-in)" ;;
+        cat) [ -e "$root/units/$unit" ] || status=1 ;;
+        *) ;;
+    esac
+done
+exit $status

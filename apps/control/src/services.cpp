@@ -1,4 +1,5 @@
 #include "services.h"
+#include <QMap>
 #include "software.h" // PkTransaction
 
 #include <QCoreApplication>
@@ -171,6 +172,11 @@ ServiceManager::ServiceManager(QObject *parent)
                          "their data in its databases."),
           QStringLiteral("postgresql"), QStringLiteral("PostgresSettings.qml"),
           { QStringLiteral("postgresql") }, {}, {} },
+        { QStringLiteral("wireguard"), QStringLiteral("WireGuard VPN"), QStringLiteral("server"),
+          QStringLiteral("Private, encrypted tunnels to other computers and networks (a VPN). Each tunnel has "
+                         "its own keys and peers; Settings shows the ones this computer has."),
+          QStringLiteral("wireguard"), QStringLiteral("WireGuardSettings.qml"),
+          { QStringLiteral("wireguard-tools") }, {}, {} },
         { QStringLiteral("python"), QStringLiteral("Python"), QStringLiteral("language"),
           QStringLiteral("The Python programming language, with pip (its package installer) and virtual "
                          "environments for each project's packages."),
@@ -229,6 +235,8 @@ void ServiceManager::refresh()
         packages << d.packages << d.removable;
         if (d.id == QLatin1String("ssh"))
             units << QStringLiteral("ssh.service") << QStringLiteral("ssh.socket");
+        else if (d.id == QLatin1String("wireguard"))
+            continue; // (a unit for each tunnel: wireguardTunnels())
         else if (!d.unit.isEmpty())
             units << d.unit + QStringLiteral(".service");
     }
@@ -301,7 +309,25 @@ void ServiceManager::publish()
 
         bool enabled = installed, active = false;
         QString status;
-        if (d.kind == QLatin1String("server")) {
+        if (d.id == QLatin1String("wireguard")) {
+            // its tunnels: on if any starts with the computer, running if
+            // any is up (their names are no secret; their files are root's)
+            QStringList up, starting;
+            const QVariantList tunnels = wireguardTunnels();
+            for (const QVariant &v : tunnels) {
+                const QVariantMap t = v.toMap();
+                if (t.value(QStringLiteral("active")).toBool())
+                    up << t.value(QStringLiteral("name")).toString();
+                if (t.value(QStringLiteral("enabled")).toBool())
+                    starting << t.value(QStringLiteral("name")).toString();
+            }
+            enabled = installed && !starting.isEmpty();
+            active = installed && !up.isEmpty();
+            status = !installed ? QStringLiteral("Not installed")
+                   : active ? QStringLiteral("Connected (") + up.join(QStringLiteral(", ")) + QLatin1Char(')')
+                   : enabled ? QStringLiteral("Stopped")
+                   : QStringLiteral("Off");
+        } else if (d.kind == QLatin1String("server")) {
             const QStringList units = d.id == QLatin1String("ssh")
                     ? QStringList{ QStringLiteral("ssh.service"), QStringLiteral("ssh.socket") }
                     : QStringList{ d.unit + QStringLiteral(".service") };
@@ -390,7 +416,10 @@ void ServiceManager::turnOn(const QString &id)
     QString done;
     if (d->kind == QLatin1String("server")) {
         steps << adminStep({ QStringLiteral("unit"), QStringLiteral("enable"), d->unit }, QStringLiteral("Starting ") + d->name + QStringLiteral("..."));
-        done = d->name + QStringLiteral(" is on. It starts whenever the computer starts.");
+        done = id == QLatin1String("wireguard")
+                ? QStringLiteral("WireGuard is on: its tunnels connect now and whenever the computer starts. "
+                                 "(If it has none yet, add one in Settings.)")
+                : d->name + QStringLiteral(" is on. It starts whenever the computer starts.");
     } else {
         done = d->name + QStringLiteral(" is installed.");
     }
@@ -750,6 +779,35 @@ QStringList ServiceManager::addresses() const
 }
 
 QString ServiceManager::hostName() const { return QHostInfo::localHostName(); }
+
+// WireGuard's tunnels as anyone may see them: those set to start with the
+// computer (systemd's links) and those that are up (their interfaces).
+// One that's neither only shows once wayland95-services lists the files.
+QVariantList ServiceManager::wireguardTunnels() const
+{
+    QMap<QString, QVariantMap> found;
+    const QDir wants(QStringLiteral("/etc/systemd/system/multi-user.target.wants"));
+    const QStringList links = wants.entryList({ QStringLiteral("wg-quick@*.service") }, QDir::Files | QDir::System);
+    for (const QString &link : links) {
+        const QString name = link.mid(9, link.size() - 9 - 8); // wg-quick@NAME.service
+        found[name][QStringLiteral("enabled")] = true;
+    }
+    const QStringList interfaces = QDir(QStringLiteral("/sys/class/net")).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QString &name : interfaces) {
+        QFile uevent(QStringLiteral("/sys/class/net/") + name + QStringLiteral("/uevent"));
+        if (uevent.open(QIODevice::ReadOnly) && uevent.readAll().contains("DEVTYPE=wireguard"))
+            found[name][QStringLiteral("active")] = true;
+    }
+    QVariantList list;
+    for (auto it = found.cbegin(); it != found.cend(); ++it) {
+        QVariantMap t = it.value();
+        t[QStringLiteral("name")] = it.key();
+        t[QStringLiteral("enabled")] = t.value(QStringLiteral("enabled")).toBool();
+        t[QStringLiteral("active")] = t.value(QStringLiteral("active")).toBool();
+        list << t;
+    }
+    return list;
+}
 
 QVariantMap ServiceManager::sshConfig() const
 {

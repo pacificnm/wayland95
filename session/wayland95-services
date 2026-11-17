@@ -9,6 +9,19 @@
 #   pg-config             < listen= port= max_connections= remote=
 #   pg-role NAME [superuser]
 #   update-source         Wayland 95's update repository, for apt
+#   unit ... wireguard | wireguard:NAME   every tunnel, or one (wg-quick@NAME)
+#   wg-list               the tunnels (/etc/wireguard/NAME.conf): NAME enabled active
+#   wg-show NAME          one tunnel's settings and state, without its secrets
+#   wg-save NAME          < [interface] / [peer] sections of KEY=VALUE lines
+#   wg-import NAME        < a WireGuard .conf file
+#   wg-delete NAME
+#
+# A tunnel's private and preshared keys never leave here: wg-show gives the
+# public key and whether a preshared key is set; wg-save takes "keep",
+# "generate" (the private key), "none" (a preshared key) or a new key.
+# Commands a .conf may run as root (PreUp, PostUp, PreDown, PostDown) are
+# kept if they're in the file already, and never taken from wg-save or
+# wg-import.
 set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
@@ -47,6 +60,205 @@ pg_cluster() { # newest cluster: "VERSION NAME PORT ..."
     echo "$c"
 }
 
+# ------------------------------------------------------------ WireGuard
+wg_name() {
+    case "$1" in ''|*[!A-Za-z0-9_=+.-]*) die "Not a usable tunnel name: $1 (letters, digits, - and _)";; esac
+    [ ${#1} -le 15 ] || die "A tunnel's name can have 15 characters at most."
+}
+wg_names() { # every tunnel there is
+    for f in /etc/wireguard/*.conf; do
+        [ -f "$f" ] || continue
+        n=${f##*/}
+        echo "${n%.conf}"
+    done
+}
+wg_key() { # name value
+    case "$2" in
+        ???????????????????????????????????????????=) ;;
+        *) die "$1 isn't a WireGuard key (44 characters ending in =)." ;;
+    esac
+    case "$2" in *[!A-Za-z0-9+/=]*) die "$1 isn't a WireGuard key.";; esac
+}
+# A .conf as sections of KEY=VALUE lines ("[interface]", then a "[peer]"
+# for each), secrets included; values given more than once are joined with
+# ", ". Other lines of [Interface] (Table, FwMark, PreUp...) come out as
+# "other=LINE".
+wg_parse() { # FILE (or - for stdin)
+    awk '
+        function flush(   i) {
+            if (section == "") return
+            print "[" section "]"
+            for (i = 1; i <= n; ++i) print order[i] "=" val[order[i]]
+            for (i = 1; i <= others; ++i) print "other=" other[i]
+            delete val; n = 0; others = 0
+        }
+        { sub(/\r$/, "") }
+        /^[ \t]*(#|$)/ { next }
+        /^[ \t]*\[[A-Za-z]+\][ \t]*$/ {
+            flush()
+            s = tolower($0); gsub(/[^a-z]/, "", s); section = s
+            next
+        }
+        section != "" {
+            line = $0
+            eq = index(line, "=")
+            if (!eq) next
+            key = substr(line, 1, eq - 1); value = substr(line, eq + 1)
+            gsub(/^[ \t]+|[ \t]+$/, "", key); gsub(/^[ \t]+|[ \t]+$/, "", value)
+            sub(/[ \t]+#.*$/, "", value)
+            lk = tolower(key)
+            name = ""
+            if (lk == "privatekey") name = "PrivateKey"
+            else if (lk == "address") name = "Address"
+            else if (lk == "listenport") name = "ListenPort"
+            else if (lk == "dns") name = "DNS"
+            else if (lk == "mtu") name = "MTU"
+            else if (lk == "publickey") name = "PublicKey"
+            else if (lk == "presharedkey") name = "PresharedKey"
+            else if (lk == "allowedips") name = "AllowedIPs"
+            else if (lk == "endpoint") name = "Endpoint"
+            else if (lk == "persistentkeepalive") name = "PersistentKeepalive"
+            if (name == "") { if (section == "interface") other[++others] = key " = " value; next }
+            if (name in val) val[name] = val[name] ", " value
+            else { val[name] = value; order[++n] = name }
+        }
+        END { flush() }
+    ' "$1"
+}
+# Writes /etc/wireguard/NAME.conf from sections on stdin (as wg_parse gives
+# them, but "other" lines are not taken: those of the file there now are
+# kept). $2 = import: a new tunnel from a .conf (no "keep").
+wg_write() {
+    name=$1 mode=${2:-save}
+    conf=/etc/wireguard/$name.conf
+    old=""
+    [ -f "$conf" ] && old=$(wg_parse "$conf")
+    old_private=$(printf '%s\n' "$old" | sed -n '/^\[interface\]$/,/^\[peer\]$/s/^PrivateKey=//p' | head -n 1)
+    section="" out_if="" out_peers="" peer="" peer_key="" have_private="" peers=0
+    end_peer() {
+        [ -n "$peer" ] || return 0
+        [ -n "$peer_key" ] || die "A peer needs its public key."
+        out_peers="$out_peers
+[Peer]
+$peer"
+        peer="" peer_key=""
+        peers=$((peers + 1))
+    }
+    while IFS= read -r line; do
+        case "$line" in
+            '') continue ;;
+            '[interface]') [ -z "$section" ] || die "The interface comes first, once."; section=interface; continue ;;
+            '[peer]') [ -n "$section" ] || die "The interface comes first."; end_peer; section=peer; continue ;;
+        esac
+        key=${line%%=*} value=${line#*=}
+        [ "$key" != "$line" ] || die "Not a setting: $line"
+        [ -n "$section" ] || die "The interface comes first."
+        case "$section:$key" in
+            interface:PrivateKey)
+                case "$value" in
+                    keep) [ "$mode" = save ] && [ -n "$old_private" ] || die "There's no private key to keep."
+                          value=$old_private ;;
+                    generate) value=$(wg genkey) ;;
+                    *) wg_key "the private key" "$value" ;;
+                esac
+                out_if="${out_if}PrivateKey = $value
+"
+                have_private=1 ;;
+            interface:Address)
+                [ -n "$value" ] || continue
+                case "$value" in *[!0-9A-Fa-f:./,\ ]*) die "Address: IP addresses with their prefix (10.0.0.2/32), separated by commas";; esac
+                out_if="${out_if}Address = $value
+" ;;
+            interface:ListenPort)
+                [ -n "$value" ] || continue
+                number "The listen port" "$value" 1 65535
+                out_if="${out_if}ListenPort = $value
+" ;;
+            interface:DNS)
+                [ -n "$value" ] || continue
+                case "$value" in *[!0-9A-Za-z:.,\ -]*) die "DNS: addresses or domain names, separated by commas";; esac
+                out_if="${out_if}DNS = $value
+" ;;
+            interface:MTU)
+                [ -n "$value" ] || continue
+                number "The MTU" "$value" 576 65535
+                out_if="${out_if}MTU = $value
+" ;;
+            interface:other)
+                # (from a file being imported: left out; never from wg-save)
+                [ "$mode" = import ] || die "Unknown WireGuard setting: other" ;;
+            peer:PublicKey)
+                wg_key "A peer's public key" "$value"
+                peer_key=$value
+                peer="${peer}PublicKey = $value
+" ;;
+            peer:PresharedKey)
+                case "$value" in
+                    ''|none) continue ;;
+                    keep)
+                        [ "$mode" = save ] && [ -n "$peer_key" ] || die "A peer's public key comes before its preshared key."
+                        value=$(printf '%s\n' "$old" | awk -v want="PublicKey=$peer_key" '
+                            /^\[peer\]$/ { on = 0 } $0 == want { on = 1 } on && /^PresharedKey=/ { sub(/^PresharedKey=/, ""); print; exit }')
+                        [ -n "$value" ] || continue ;;
+                    *) wg_key "A preshared key" "$value" ;;
+                esac
+                peer="${peer}PresharedKey = $value
+" ;;
+            peer:AllowedIPs)
+                [ -n "$value" ] || continue
+                case "$value" in *[!0-9A-Fa-f:./,\ ]*) die "Allowed IPs: networks (10.0.0.0/24, 0.0.0.0/0), separated by commas";; esac
+                peer="${peer}AllowedIPs = $value
+" ;;
+            peer:Endpoint)
+                [ -n "$value" ] || continue
+                case "$value" in *[!0-9A-Za-z:.\[\]_-]*|*:*) ;; *) die "Endpoint: a host and port (vpn.example.com:51820)";; esac
+                case "$value" in *[!0-9A-Za-z:.\[\]_-]*) die "Endpoint: a host and port (vpn.example.com:51820)";; esac
+                peer="${peer}Endpoint = $value
+" ;;
+            peer:PersistentKeepalive)
+                case "$value" in ''|0|off) continue ;; esac
+                number "Persistent keepalive" "$value" 1 65535
+                peer="${peer}PersistentKeepalive = $value
+" ;;
+            *) die "Unknown WireGuard setting: $key" ;;
+        esac
+    done
+    end_peer
+    [ -n "$have_private" ] || die "The tunnel needs a private key."
+    # what the file there now has besides (Table, FwMark, its own commands)
+    kept=$(printf '%s\n' "$old" | sed -n '/^\[interface\]$/,/^\[peer\]$/s/^other=//p')
+    mkdir -p /etc/wireguard
+    chmod 700 /etc/wireguard
+    backup=""
+    if [ -f "$conf" ]; then
+        backup=$(mktemp "$conf.old.XXXXXX")
+        cp -p "$conf" "$backup"
+    fi
+    tmp=$(mktemp "$conf.XXXXXX")
+    chmod 600 "$tmp"
+    {
+        printf '[Interface]\n%s' "$out_if"
+        [ -z "$kept" ] || printf '%s\n' "$kept"
+        printf '%s\n' "$out_peers"
+    } >"$tmp"
+    mv -f "$tmp" "$conf"
+    restore() {
+        if [ -n "$backup" ]; then mv -f "$backup" "$conf"; else rm -f "$conf"; fi
+    }
+    if ! check=$(wg-quick strip "$name" 2>&1 >/dev/null); then
+        restore
+        die "WireGuard didn't accept these settings: $check"
+    fi
+    if systemctl is-active -q "wg-quick@$name.service" 2>/dev/null; then
+        if ! systemctl restart "wg-quick@$name.service"; then
+            restore
+            [ -z "$backup" ] || systemctl restart "wg-quick@$name.service" || true
+            die "The tunnel didn't start with these settings (they were put back)."
+        fi
+    fi
+    [ -z "$backup" ] || rm -f "$backup"
+}
+
 cmd=${1:-}
 [ $# -gt 0 ] && shift
 
@@ -57,6 +269,19 @@ unit)
     case "$2" in
         ssh) units=$(ssh_units) ;;
         postgresql) units=postgresql.service ;;
+        wireguard|wireguard:*)
+            command -v wg-quick >/dev/null || die "WireGuard isn't installed."
+            if [ "$2" = wireguard ]; then names=$(wg_names); else names=${2#wireguard:}; wg_name "$names"; fi
+            for n in $names; do
+                [ -f "/etc/wireguard/$n.conf" ] || die "There's no tunnel called $n."
+                case "$action" in
+                    enable) systemctl enable --now "wg-quick@$n.service" ;;
+                    disable) systemctl disable --now "wg-quick@$n.service" ;;
+                    start|stop|restart) systemctl "$action" "wg-quick@$n.service" ;;
+                    *) die "Unknown action: $action" ;;
+                esac || die "Tunnel $n: that didn't work. $(systemctl status "wg-quick@$n.service" 2>&1 | tail -n 3 | tr '\n' ' ')"
+            done
+            exit 0 ;;
         *) die "Unknown service: $2" ;;
     esac
     [ -n "$units" ] || die "$2 isn't installed."
@@ -177,6 +402,66 @@ SELECT format('CREATE DATABASE %I OWNER %I', :'role', :'role')
 SQL
     ;;
 
+wg-list)
+    for n in $(wg_names); do
+        e=no a=no
+        systemctl is-enabled -q "wg-quick@$n.service" 2>/dev/null && e=yes
+        [ -d "/sys/class/net/$n" ] && a=yes
+        echo "$n $e $a"
+    done
+    ;;
+
+wg-show)
+    [ $# -eq 1 ] || die "usage: wg-show NAME"
+    wg_name "$1"
+    conf=/etc/wireguard/$1.conf
+    [ -f "$conf" ] || die "There's no tunnel called $1."
+    e=no a=no
+    systemctl is-enabled -q "wg-quick@$1.service" 2>/dev/null && e=yes
+    [ -d "/sys/class/net/$1" ] && a=yes
+    # what each peer is doing now: its key, endpoint, last handshake, bytes
+    live=""
+    [ "$a" = yes ] && live=$(wg show "$1" dump 2>/dev/null | tail -n +2 | awk '{ print $1, $3, $5, $6, $7 }')
+    wg_parse "$conf" | while IFS= read -r line; do
+        case "$line" in
+            '[interface]') printf '[interface]\nname=%s\nenabled=%s\nactive=%s\n' "$1" "$e" "$a" ;;
+            PrivateKey=*) printf 'PublicKey=%s\n' "$(printf '%s' "${line#PrivateKey=}" | wg pubkey 2>/dev/null)" ;;
+            PresharedKey=*) echo "PresharedKey=yes" ;;
+            other=*) echo "$line" ;;
+            PublicKey=*)
+                echo "$line"
+                printf '%s\n' "$live" | awk -v k="${line#PublicKey=}" '$1 == k { print "endpointNow=" $2; print "handshake=" $3; print "rx=" $4; print "tx=" $5 }' ;;
+            *) echo "$line" ;;
+        esac
+    done
+    ;;
+
+wg-save)
+    [ $# -eq 1 ] || die "usage: wg-save NAME"
+    wg_name "$1"
+    command -v wg-quick >/dev/null || die "WireGuard isn't installed."
+    wg_write "$1" save
+    ;;
+
+wg-import)
+    [ $# -eq 1 ] || die "usage: wg-import NAME"
+    wg_name "$1"
+    command -v wg-quick >/dev/null || die "WireGuard isn't installed."
+    [ ! -e "/etc/wireguard/$1.conf" ] || die "There's already a tunnel called $1."
+    text=$(cat)
+    left=$(printf '%s\n' "$text" | wg_parse - | sed -n 's/^other=\([A-Za-z]*\).*/\1/p' | sort -u | tr '\n' ' ')
+    printf '%s\n' "$text" | wg_parse - | wg_write "$1" import
+    [ -z "$left" ] || echo "Left out of the file (add them by hand if you need them): $left"
+    ;;
+
+wg-delete)
+    [ $# -eq 1 ] || die "usage: wg-delete NAME"
+    wg_name "$1"
+    [ -f "/etc/wireguard/$1.conf" ] || die "There's no tunnel called $1."
+    systemctl disable --now "wg-quick@$1.service" 2>/dev/null || true
+    rm -f "/etc/wireguard/$1.conf"
+    ;;
+
 update-source)
     # installs made before the repository existed lack it (the wayland95
     # package adds this same file once it's there)
@@ -192,6 +477,6 @@ update-source)
     ;;
 
 *)
-    die "usage: wayland95-services unit|ssh-config|pg-config|pg-role|update-source ..."
+    die "usage: wayland95-services unit|ssh-config|pg-config|pg-role|wg-list|wg-show|wg-save|wg-import|wg-delete|update-source ..."
     ;;
 esac

@@ -1,0 +1,11 @@
+#!/bin/sh
+# Stand-in wg-quick for tests/services/run.sh: "strip NAME" checks the file
+# as far as the tests need (the real one needs root).
+root=${W95_FAKE_ROOT:?}
+echo "wg-quick $*" >>"$root/log"
+[ "$1" = strip ] || exit 0
+conf="$root/etc/wireguard/$2.conf"
+[ -f "$conf" ] || { echo "wg-quick: \`$2' does not exist" >&2; exit 1; }
+grep -q '^\[Interface\]$' "$conf" || { echo "wg-quick: no [Interface]" >&2; exit 1; }
+grep -q '^PrivateKey = ' "$conf" || { echo "wg-quick: no private key" >&2; exit 1; }
+cat "$conf"

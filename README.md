@@ -543,8 +543,8 @@ up next to the shell first, then on `$PATH`.
       27 common ones. **Use for the whole computer...** makes a region the
       system's default through systemd-localed (it asks for a password).
   - **Services:** servers and programming languages, each turned on and
-    off with a check box: **SSH Server**, **PostgreSQL**, **Python** and
-    **Node.js**. Checking one that isn't installed installs it first
+    off with a check box: **SSH Server**, **PostgreSQL**, **WireGuard VPN**,
+    **Python** and **Node.js**. Checking one that isn't installed installs it first
     (PackageKit), then starts it and has it start with the computer.
     Unchecking a server stops it but keeps it, with its settings and data;
     unchecking a language removes it. **Settings...** opens each one's own
@@ -558,6 +558,17 @@ up next to the shell first, then on `$PATH`.
       **Databases** makes you a PostgreSQL account (optionally a
       superuser), then lists, creates and deletes your databases, opens one
       in `psql`, and sets the password used over the network.
+    - **WireGuard VPN:** this computer's tunnels (the standard
+      `/etc/wireguard/NAME.conf`, run by `wg-quick@NAME`, so ones set up
+      before or by hand are there too). **Tunnels:** connect, disconnect,
+      connect when the computer starts, Add (with a new key pair), Import a
+      `.conf` you were given, Remove. **Interface:** the public key to give
+      the other end, a new private key, addresses, DNS, listen port, MTU.
+      **Peers:** each one's public key, endpoint, allowed IPs, keepalive
+      and preshared key, with when it was last heard from and its traffic.
+      Private and preshared keys never leave the root helper; commands a
+      file runs as root (`PostUp` and the like) are kept if they're there,
+      and never taken from the window or an imported file.
     - **Python:** which parts are installed (pip, venv, headers, Tkinter,
       IDLE), and virtual environments in `~/.virtualenvs`: make or delete
       one, install and remove its packages, or open a Terminal with it
@@ -572,7 +583,11 @@ up next to the shell first, then on `$PATH`.
       `postgresql`, writes `/etc/ssh/sshd_config.d/50-wayland95.conf`
       (checked with `sshd -t` first, put back if it fails), PostgreSQL's
       `conf.d/50-wayland95.conf` and a marked block in `pg_hba.conf`, and
-      creates your PostgreSQL account. It checks every value it's given.
+      creates your PostgreSQL account, and reads, writes and removes
+      WireGuard's tunnel files and starts and stops `wg-quick@NAME`
+      (`wg-quick strip` checks a file first; one a connected tunnel can't
+      start with is put back). It checks every value it's given
+      (`tests/services/run.sh` tests it on a scratch folder, without root).
       The polkit action `org.wayland95.services` remembers the password
       for a few minutes. Everything else runs as you
       ([apps/control/src/services.cpp](apps/control/src/services.cpp)).

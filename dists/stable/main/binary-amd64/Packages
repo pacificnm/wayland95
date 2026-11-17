@@ -1,26 +1,5 @@
 Package: wayland95
 Architecture: amd64
-Version: 0.1.2
-Priority: optional
-Section: x11
-Maintainer: Wayland 95 <wayland95@localhost>
-Installed-Size: 20777
-Depends: libc6 (>= 2.38), libfontconfig1 (>= 2.12.6), libgcc-s1 (>= 3.0), libinput10 (>= 1.19.1), libqt6core6t64 (>= 6.8.2), libqt6dbus6 (>= 6.8.2), libqt6gui6 (>= 6.4.0), libqt6network6 (>= 6.1.2), libqt6qml6 (>= 6.7.2), libqt6quick6 (>= 6.6.0), libqt6waylandcompositor6 (>= 6.6.0), libstdc++6 (>= 14), libvterm0 (>= 0.3), libwayland-server0 (>= 1.11.91), libxcb1, qt6-base-private-abi (= 6.8.2), qt6-declarative-private-abi (= 6.8.2), qt6-waylandcompositor-private-abi (= 6.8.2), zlib1g (>= 1:1.1.4), libqt6opengl6, qt6-qpa-plugins, qt6-wayland, qml6-module-qtwayland-compositor, qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-controls, qml6-module-qtquick-templates, qml6-module-qtquick-layouts, qml6-module-qtqml, qml6-module-qtqml-workerscript, qml6-module-qt-labs-folderlistmodel, xwayland, dbus-user-session, polkitd, pkexec, libpam-modules-bin, passwd, fontconfig, fonts-liberation, xdg-utils, xdg-desktop-portal
-Recommends: network-manager, pipewire-bin, pipewire-pulse, wireplumber, sound-theme-freedesktop, bluez, upower, cups, cups-client, flatpak, packagekit, xdg-desktop-portal-gtk | xdg-desktop-portal-kde, xdg-user-dirs, udisks2
-Filename: pool/main/w/wayland95/wayland95_0.1.2_amd64.deb
-Size: 2983420
-MD5sum: 4084ab348a4407f52aeec6333f6d08b4
-SHA1: 7a1fa0c16d264116496a999d7e6c60cad4c0e8ed
-SHA256: 36e46293c2c3576c968c91d6a625a31fa16a086b7fa50ab6b08a7bc020d4ba69
-SHA512: 6855c5f3389931f3884f4bb5d6648cc417be460f7e5c876f7dae55f98ac28d70532e0780fc8fa0f979ba0aeee8626105190ad64333712e8cfb952e69ea8c8a42
-Description: Windows 95-style Wayland desktop
- A complete desktop session in the style of Windows 95: a Wayland
- compositor with the taskbar, Start menu and window frames, plus its own
- File Manager, Notepad, Terminal, Control Panel, System Monitor and file
- dialogs for other programs. Log in to it as "Wayland 95".
-
-Package: wayland95
-Architecture: amd64
 Version: 0.1.3
 Priority: optional
 Section: x11
@@ -60,4 +39,26 @@ Description: Windows 95-style Wayland desktop
  compositor with the taskbar, Start menu and window frames, plus its own
  File Manager, Notepad, Terminal, Control Panel, System Monitor and file
  dialogs for other programs. Log in to it as "Wayland 95".
+
+Package: wayland95
+Architecture: amd64
+Version: 0.2.0
+Priority: optional
+Section: x11
+Maintainer: Wayland 95 <wayland95@localhost>
+Installed-Size: 18914
+Depends: libc6 (>= 2.38), libcairo2 (>= 1.2.4), libegl1, libfontconfig1 (>= 2.12.6), libgcc-s1 (>= 3.0), libgles2, libglib2.0-0t64 (>= 2.12.0), libinput10 (>= 0.21.0), libpango-1.0-0 (>= 1.14.0), libpangocairo-1.0-0 (>= 1.14.0), libpixman-1-0 (>= 0.11.2), libqt6core6t64 (>= 6.8.2), libqt6dbus6 (>= 6.8.2), libqt6gui6 (>= 6.4.0), libqt6network6 (>= 6.1.2), libqt6qml6 (>= 6.7.2), libqt6quick6 (>= 6.6.0), libqt6waylandclient6 (>= 6.6.0), libstdc++6 (>= 14), libvterm0 (>= 0.3), libwayland-client0 (>= 1.20.0), libwayland-server0 (>= 1.14.91), libwlroots-0.18 (>= 0.18.0), libxkbcommon0 (>= 0.5.0), qt6-base-private-abi (= 6.8.2), qt6-declarative-private-abi (= 6.8.2), qt6-waylandclient-private-abi (= 6.8.2), zlib1g (>= 1:1.1.4), libqt6opengl6, qt6-qpa-plugins, qt6-wayland, qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-controls, qml6-module-qtquick-templates, qml6-module-qtquick-layouts, qml6-module-qtqml, qml6-module-qtqml-workerscript, qml6-module-qt-labs-folderlistmodel, xwayland, dbus-user-session, polkitd, pkexec, libpam-modules-bin, passwd, fontconfig, fonts-liberation, xdg-utils, xdg-desktop-portal
+Recommends: network-manager, pipewire-bin, pipewire-pulse, wireplumber, sound-theme-freedesktop, bluez, upower, cups, cups-client, flatpak, packagekit, xdg-desktop-portal-gtk | xdg-desktop-portal-kde, xdg-user-dirs, udisks2
+Filename: pool/main/w/wayland95/wayland95_0.2.0_amd64.deb
+Size: 2830972
+MD5sum: 55d49edeca8d9ab8f87f35cdc8cfe7cb
+SHA1: 8de562cf25354a2ace501580bfa9690a79ddc66c
+SHA256: 5066c5f9bd1e4222fb63fe6254a70e60b474ed691c1f56d8252d2e8065edb501
+SHA512: 931dac1929ef04749f4bc50958c2dc8ceae0861d0c2006f6711c54c0d5cf147c87d4586f3639ff735f371331545b1fbfc5212d90d25b7d2b65bcbd42613175c9
+Description: Windows 95-style Wayland desktop
+ A complete desktop session in the style of Windows 95: a Wayland
+ compositor (wlroots) with Win95 window frames, a taskbar, Start menu and
+ desktop, plus its own File Manager, Notepad, Terminal, Control Panel,
+ System Monitor and file dialogs for other programs. Log in to it as
+ "Wayland 95".
 

@@ -460,6 +460,11 @@ up next to the shell first, then on `$PATH`.
       device trying to pair on its own still goes to whatever agent the
       system has.
   - **Date/Time:** a calendar and an analog clock, plus the time zone.
+    **Time Zone** lists the zones by region, each with its offset from
+    UTC, and shows the time in the one you pick; Apply sets it through
+    systemd-timedated (an administrator's password, through the desktop's
+    prompt). The taskbar clock and the programs that are open follow it
+    at once ([apps/common/timezones.cpp](apps/common/timezones.cpp)).
     Read-only: the system clock belongs to the administrator.
   - **Keyboard:** key repeat delay and rate, cursor blink rate, and the
     keyboard layout (from xkb).

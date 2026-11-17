@@ -786,6 +786,11 @@ shell_prepare() {
         PIDS+=($!)
         for _ in $(seq 50); do grep -q "logind: ready" "$FAKE_LOG" && break; sleep 0.1; done
     fi
+    if [ -n "${WITH_TIMEDATE:-}" ]; then
+        DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS python3 -I "$HERE/fakes/timedate.py" "$FAKE_LOG" America/New_York &
+        PIDS+=($!)
+        for _ in $(seq 50); do grep -q "timedate: ready" "$FAKE_LOG" && break; sleep 0.1; done
+    fi
     if [ -n "${WITH_PACKAGEKIT:-}" ]; then
         DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS python3 -I "$HERE/fakes/packagekit.py" "$FAKE_LOG" &
         PIDS+=($!)
@@ -1798,6 +1803,36 @@ suite_shellstart() {
     [ "$st" -eq 0 ] && ! grep -q "Assertion" "$CLOG"; expect_true $? "(and stops cleanly)" "status $st: $(tail -2 "$CLOG")"
 }
 
+# --- Control Panel > Date/Time: the time zone ---------------------------------------
+# timedated is tests/fakes/timedate.py (America/New_York to start), on the
+# test's bus: this computer's time zone is never touched.
+suite_timezone() {
+    say "timezone: Control Panel > Date/Time changes the time zone; the taskbar clock follows"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    WITH_TIMEDATE=1 start_shell || return
+    away; shot tz-before
+    magick "$WORK/$SUITE-tz-before.png" -crop 70x20+1205+773 +repage "$WORK/$SUITE-clock-before.png"
+    XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        WAYLAND95_NO_SYSTEM_AGENTS=1 WAYLAND95_TEST_AGENTS_ON_SESSION_BUS=1 \
+        "$BUILD/win95control" --applet datetime --tab 1 >"$WORK/$SUITE-control.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95control)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5; away; shot tz-tab
+    # the current zone is the one chosen in the list (selected: navy)
+    expect_pixel "the Time Zone tab: the current zone selected in the list" tz-tab 380 338 000080
+    # Region: UTC (its one zone is chosen), Apply
+    pointer click:190,122 wait:0.6 click:150,320 wait:0.6 click:404,464 wait:1.5
+    grep -q "timedate: SetTimezone ('UTC', True)" "$FAKE_LOG"
+    expect_true $? "choosing UTC and Apply asks timedated to set it (interactively: a password if needed)" "$(grep timedate "$FAKE_LOG" | tail -2)"
+    shell_said "Time zone: UTC"; expect_true $? "the desktop hears of it at once" "$(grep -i 'time zone' "$WORK/$SUITE-shell.log" | tail -1)"
+    away; shot tz-after
+    magick "$WORK/$SUITE-tz-after.png" -crop 70x20+1205+773 +repage "$WORK/$SUITE-clock-after.png"
+    [ "$(magick compare -metric AE "$WORK/$SUITE-clock-before.png" "$WORK/$SUITE-clock-after.png" null: 2>&1 | cut -d' ' -f1)" -gt 20 ]
+    expect_true $? "the taskbar clock shows the new time at once (UTC, five hours on from New York)" "the clock looks the same"
+    grep -q "Time zone: UTC" "$WORK/$SUITE-control.log"; expect_true $? "(the Control Panel's own time follows too)" "$(tail -2 "$WORK/$SUITE-control.log")"
+}
+
 # --- the taskbar's network icon: the connection, its addresses, WireGuard ----------
 # A made-up connection (tests/fakes/nmcli with FAKE_NETWORK), not this
 # computer's: Wi-Fi "TestNet", its addresses, and a WireGuard tunnel.
@@ -2122,7 +2157,7 @@ suite_classic() {
 }
 
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart network monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

@@ -59,6 +59,8 @@ qt_add_qml_module(win95ui
         batteryinfo.cpp
         powermanager.h
         powermanager.cpp
+        timezones.h
+        timezones.cpp
         desktopentry.h
         desktopentry.cpp
         accountpassword.h

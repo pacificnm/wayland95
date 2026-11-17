@@ -3,14 +3,43 @@ import Win95Ui
 import Win95Control
 
 // Date/Time Properties: a month calendar you can browse, a live analog
-// clock and the time zone. Read-only: the system clock and time zone belong
-// to the administrator (timedatectl), not to a desktop applet.
+// clock, and the time zone, which can be changed (TimeZones: systemd's
+// timedated, with an administrator's password).
 PropertySheet {
     id: sheet
 
     title: "Date/Time Properties"
     titles: ["Date & Time", "Time Zone"]
-    canApply: false
+
+    // the zone chosen on the Time Zone tab (Apply sets it)
+    property string chosenZone: TimeZones.current
+    property string region: TimeZones.regionOf(TimeZones.current)
+    readonly property var regionZones: TimeZones.zones(region)
+    property bool applying: false
+    property bool closeWhenDone: false
+    onClosing: (close) => {
+        if (applying) {
+            close.accepted = false;
+            closeWhenDone = true;
+        }
+    }
+    onApplyRequested: {
+        if (chosenZone === TimeZones.current)
+            return;
+        applying = true;
+        TimeZones.setZone(chosenZone, function (ok, message) {
+            sheet.applying = false;
+            if (!ok) {
+                sheet.closeWhenDone = false;
+                sheet.dirty = true;
+                sheet.messageBox.show("Date/Time Properties", message || "The time zone couldn't be changed.", "error", ["OK"]);
+                return;
+            }
+            sheet.now = new Date();
+            if (sheet.closeWhenDone)
+                sheet.close();
+        });
+    }
 
     property date now: new Date()
     property int viewMonth: now.getMonth()
@@ -225,7 +254,7 @@ PropertySheet {
             y: dateGroup.height + 10
             width: parent.width
             wrapMode: Text.Wrap
-            text: "Current time zone: " + SystemInfo.timeZoneName
+            text: "Current time zone: " + TimeZones.currentLabel
             color: Theme.text
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSize
@@ -234,7 +263,7 @@ PropertySheet {
             anchors.bottom: parent.bottom
             width: parent.width
             wrapMode: Text.Wrap
-            text: "The system date, time and time zone are managed by your system (for example with timedatectl), which needs administrator rights."
+            text: "Change the time zone on the Time Zone tab. The date and time themselves are set by your computer's clock and, when it's online, the network."
             color: Theme.shadow
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSize
@@ -243,36 +272,89 @@ PropertySheet {
 
     // ---------------------------------------------------------- Time Zone tab
     Item {
-        GroupBox95 {
+        Text {
             width: parent.width
-            height: 120
-            title: "Time zone"
-            Column {
-                spacing: 8
-                Text {
-                    text: SystemInfo.timeZoneName
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize
-                    font.bold: true
-                }
-                Text {
-                    text: "Zone: " + SystemInfo.timeZoneId
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize
-                }
-                Text {
-                    text: "Local time: " + Qt.formatDateTime(sheet.now, "dddd, MMMM d, yyyy  "
-                          + (Wayland95Settings.clock24Hour ? "HH:mm" : "h:mm AP"))
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize
-                }
-                Text {
-                    text: "Universal time: " + Qt.formatDateTime(new Date(sheet.now.getTime()
-                          + sheet.now.getTimezoneOffset() * 60000), "HH:mm")
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize
-                }
+            wrapMode: Text.Wrap
+            text: "Current time zone: <b>" + TimeZones.currentLabel + "</b>"
+            textFormat: Text.StyledText
+            color: Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize
+        }
+        Text {
+            y: 22
+            text: "<u>R</u>egion:"
+            textFormat: Text.StyledText
+            color: Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize
+        }
+        ComboBox95 {
+            id: regionBox
+            x: 60; y: 19
+            width: 150
+            popupMenu: sheet.popupMenu
+            model: TimeZones.regions
+            currentIndex: TimeZones.regions.indexOf(sheet.region)
+            onActivated: (i) => {
+                sheet.region = TimeZones.regions[i];
+                // the first of its zones, until one is picked
+                if (sheet.regionZones.length)
+                    sheet.choose(sheet.regionZones[0].id);
             }
+        }
+        ProgramList {
+            id: zoneList
+            y: 48
+            width: parent.width
+            height: 210
+            model: sheet.regionZones.map(function (z) { return { key: z.id, name: z.label, icon: "" }; })
+            iconComponent: Item {}
+            onSelectedKeyChanged: if (selectedKey && selectedKey !== sheet.chosenZone) sheet.choose(selectedKey)
+            // the chosen zone selected, and scrolled to
+            function showChosen() {
+                for (var i = 0; i < model.length; ++i)
+                    if (model[i].key === sheet.chosenZone)
+                        return select(i);
+                selectedKey = "";
+            }
+            onModelChanged: Qt.callLater(showChosen)
+            Component.onCompleted: Qt.callLater(showChosen)
+        }
+        Text {
+            y: zoneList.y + zoneList.height + 8
+            width: parent.width
+            wrapMode: Text.Wrap
+            text: sheet.chosenZone === TimeZones.current
+                  ? "Daylight saving time is followed automatically."
+                  : "The time there now: " + TimeZones.timeIn(sheet.chosenZone, Wayland95Settings.clock24Hour)
+                    + ". Apply to make it this computer's time zone (it asks for an administrator's password)."
+            color: Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize
+        }
+        Text {
+            anchors.bottom: parent.bottom
+            visible: sheet.applying
+            text: "Changing the time zone..."
+            color: Theme.shadow
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize
+        }
+    }
+    function choose(id) {
+        chosenZone = id;
+        dirty = id !== TimeZones.current;
+        zoneList.showChosen();
+    }
+    Connections {
+        target: TimeZones
+        function onCurrentChanged() {
+            if (!sheet.dirty) {
+                sheet.chosenZone = TimeZones.current;
+                sheet.region = TimeZones.regionOf(TimeZones.current);
+            }
+            sheet.now = new Date();
         }
     }
 }

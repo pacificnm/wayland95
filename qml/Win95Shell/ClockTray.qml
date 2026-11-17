@@ -59,6 +59,11 @@ TrayIcon {
         onTriggered: { clockTray.now = new Date(); interval = clockTray.untilNextTick(); }
     }
     onPopupOpenChanged: { now = new Date(); tick.interval = untilNextTick(); tick.restart(); }
+    // the time zone changed (Control Panel > Date/Time): the new time at once
+    Connections {
+        target: Ui.TimeZones
+        function onCurrentChanged() { clockTray.now = new Date(); tick.interval = clockTray.untilNextTick(); tick.restart(); }
+    }
 
     onPopupOpened: goToday()
     onDoubleClicked: Launcher.launch("win95control", ["--applet", "datetime"])

@@ -13,4 +13,5 @@ computer: its speakers, its volume, its password prompts, its updates.
 | `unix_chkpwd` | PAM's password checker (the screen saver's password) | `right-password` is right, anything else is wrong |
 | `polkit-agent-helper-1` | polkit's password checker | asks for the password; `right-password` is right, anything else is wrong |
 | `logind.py` | logind and hostname1, on the test's session bus | a laptop that can sleep; the test opens and closes its lid (SetLid); calls are logged |
+| `timedate.py` | systemd-timedated, on the test's session bus | the computer's time zone (America/New_York to start); SetTimezone changes it and says so; calls are logged |
 | `packagekit.py` | PackageKit, on the test's session bus | every check finds two updates: Wayland 95 0.9.9 (a security fix) and one other |

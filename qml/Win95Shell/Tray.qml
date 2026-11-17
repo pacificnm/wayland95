@@ -116,6 +116,15 @@ Ui.Bevel {
                 tray: area
                 visible: Ui.Wayland95Settings.showBattery && Ui.Battery.present
             }
+            // removable drives plugged in: one icon each (partitions together)
+            Repeater {
+                model: Ui.Wayland95Settings.showDrives ? area.driveGroups : []
+                delegate: DrivesTray {
+                    required property var modelData
+                    tray: area
+                    group: modelData
+                }
+            }
             VolumeTray {
                 tray: area
                 visible: Ui.Wayland95Settings.showVolume && Ui.Audio.available
@@ -128,6 +137,29 @@ Ui.Bevel {
             visible: Ui.Wayland95Settings.showClock
             anchors.verticalCenter: parent.verticalCenter
         }
+    }
+
+    // the plugged-in drives, a group per physical drive (its filesystems in it)
+    readonly property var driveGroups: {
+        var groups = [], byDrive = {};
+        Ui.Drives.drives.forEach(function (d) {
+            if (!d.removable)
+                return;
+            var key = d.drive || d.id;
+            if (!byDrive[key]) {
+                byDrive[key] = { drive: key, name: d.name, sizeText: d.sizeText, driveName: d.driveName, partitions: [] };
+                groups.push(byDrive[key]);
+            }
+            byDrive[key].partitions.push(d);
+        });
+        return groups;
+    }
+
+    // a built-in icon's right-click menu, just above it
+    function showMenu(item, items) {
+        closePopups();
+        var p = item.mapToItem(area.popupParent, 0, 0);
+        appMenu.popup(p.x, p.y, items);
     }
 
     // ----------------------------------------------------------- tooltips

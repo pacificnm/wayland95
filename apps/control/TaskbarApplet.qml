@@ -16,6 +16,7 @@ PropertySheet {
     property bool showNetwork: Wayland95Settings.showNetwork
     property bool showBluetooth: Wayland95Settings.showBluetooth
     property bool showBattery: Wayland95Settings.showBattery
+    property bool showDrives: Wayland95Settings.showDrives
     property bool showAppIcons: Wayland95Settings.showAppIcons
     property int startMenuSize: Wayland95Settings.startMenuSize
     property bool showNotifications: Wayland95Settings.showNotifications
@@ -27,6 +28,7 @@ PropertySheet {
         Wayland95Settings.showNetwork = showNetwork;
         Wayland95Settings.showBluetooth = showBluetooth;
         Wayland95Settings.showBattery = showBattery;
+        Wayland95Settings.showDrives = showDrives;
         Wayland95Settings.showAppIcons = showAppIcons;
         Wayland95Settings.startMenuSize = startMenuSize;
         Wayland95Settings.showNotifications = showNotifications;
@@ -145,7 +147,7 @@ PropertySheet {
         GroupBox95 {
             y: preview.height + 80
             width: parent.width
-            height: 112
+            height: 136
             title: "Notification area"
 
 
@@ -172,6 +174,11 @@ PropertySheet {
                     text: "B<u>a</u>ttery (laptops)"
                     checked: sheet.showBattery
                     onToggled: (on) => { sheet.showBattery = on; sheet.dirty = true; }
+                }
+                CheckBox95 {
+                    text: "Removable d<u>r</u>ives"
+                    checked: sheet.showDrives
+                    onToggled: (on) => { sheet.showDrives = on; sheet.dirty = true; }
                 }
                 CheckBox95 {
                     text: "No<u>t</u>ifications"

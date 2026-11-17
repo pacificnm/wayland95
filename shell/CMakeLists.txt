@@ -56,7 +56,7 @@ set(shared_qml
     Taskbar.qml TaskButton.qml StartButton.qml StartMenu.qml Clock.qml Bevel.qml
     DesktopIcons.qml DesktopBackground.qml Theme.qml MenuIcon.qml
     Tray.qml TrayIcon.qml ClockTray.qml NotificationsTray.qml VolumeTray.qml
-    NetworkTray.qml BluetoothTray.qml BatteryTray.qml
+    NetworkTray.qml BluetoothTray.qml BatteryTray.qml DrivesTray.qml
     RunDialog.qml ShutDownDialog.qml
     SystemNotices.qml NotificationPopup.qml LevelOsd.qml PasswordDialog.qml NetworkPasswordDialog.qml
     UnlockDialog.qml ScreenCapture.qml TaskSwitcher.qml

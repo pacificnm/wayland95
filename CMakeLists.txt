@@ -131,6 +131,7 @@ set(win95shell_qml_files
     NetworkTray.qml
     BluetoothTray.qml
     BatteryTray.qml
+    DrivesTray.qml
     XWindowFrame.qml
     XPopup.qml
     RunDialog.qml

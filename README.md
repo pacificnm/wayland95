@@ -375,6 +375,11 @@ up next to the shell first, then on `$PATH`.
   - **Notifications:** a speech balloon, with a red count of notifications
     you missed. Click for the recent ones (newest first), **Clear All**, and
     **Do not disturb**, which holds back pop-ups except critical ones.
+  - **Removable drives:** a USB stick for each drive plugged in (a green
+    light once it's open), its name and size on hover. Click for the
+    drive, its filesystems and where each is open, with Open and Eject;
+    right-click for Open and Eject; double-click opens it. Eject says when
+    it's safe to pull out ([DrivesTray.qml](qml/Win95Shell/DrivesTray.qml)).
   - **Network:** cable, or Wi-Fi bars for the signal strength, with a red
     cross when disconnected, a yellow "!" when there's no internet, and a
     gold padlock while a WireGuard tunnel is connected. Click for the

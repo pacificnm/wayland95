@@ -213,6 +213,7 @@ void Wayland95Settings::load()
     const bool showNetwork = m_settings.value(QStringLiteral("Taskbar/ShowNetwork"), true).toBool();
     const bool showBluetooth = m_settings.value(QStringLiteral("Taskbar/ShowBluetooth"), true).toBool();
     const bool showBattery = m_settings.value(QStringLiteral("Taskbar/ShowBattery"), true).toBool();
+    const bool showDrives = m_settings.value(QStringLiteral("Taskbar/ShowDrives"), true).toBool();
     const bool showAppIcons = m_settings.value(QStringLiteral("Taskbar/ShowAppIcons"), true).toBool();
     const int startMenuSize = qBound(0, m_settings.value(QStringLiteral("StartMenu/Size"), 1).toInt(), 2);
     const QString layout = m_settings.value(QStringLiteral("Keyboard/Layout")).toString();
@@ -234,7 +235,7 @@ void Wayland95Settings::load()
 
     const bool differs = bg != m_backgroundColor || wallpaper != m_wallpaper || mode != m_wallpaperMode
         || colors != m_colors || colorScheme != m_colorScheme || showClock != m_showClock
-        || clock24 != m_clock24Hour || showVolume != m_showVolume || showNotifications != m_showNotifications || doNotDisturb != m_doNotDisturb || showNetwork != m_showNetwork || showBluetooth != m_showBluetooth || showBattery != m_showBattery || showAppIcons != m_showAppIcons || startMenuSize != m_startMenuSize || layout != m_keyboardLayout || delay != m_keyRepeatDelay
+        || clock24 != m_clock24Hour || showVolume != m_showVolume || showNotifications != m_showNotifications || doNotDisturb != m_doNotDisturb || showNetwork != m_showNetwork || showBluetooth != m_showBluetooth || showBattery != m_showBattery || showDrives != m_showDrives || showAppIcons != m_showAppIcons || startMenuSize != m_startMenuSize || layout != m_keyboardLayout || delay != m_keyRepeatDelay
         || rate != m_keyRepeatRate || flash != m_cursorFlashTime || dblClick != m_doubleClickInterval
         || sounds != m_sounds || soundScheme != m_soundScheme;
 
@@ -292,6 +293,7 @@ void Wayland95Settings::load()
     m_showNetwork = showNetwork;
     m_showBluetooth = showBluetooth;
     m_showBattery = showBattery;
+    m_showDrives = showDrives;
     m_showAppIcons = showAppIcons;
     m_startMenuSize = startMenuSize;
     m_keyboardLayout = layout;
@@ -677,6 +679,14 @@ void Wayland95Settings::setShowBattery(bool on)
         return;
     m_showBattery = on;
     store(QStringLiteral("Taskbar/ShowBattery"), on);
+}
+
+void Wayland95Settings::setShowDrives(bool on)
+{
+    if (on == m_showDrives)
+        return;
+    m_showDrives = on;
+    store(QStringLiteral("Taskbar/ShowDrives"), on);
 }
 
 void Wayland95Settings::setShowAppIcons(bool on)

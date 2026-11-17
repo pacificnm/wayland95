@@ -2856,7 +2856,7 @@ suite_startup() {
 # touched. Plug(label) plugs another one in.
 start_files_at() { # ARGS...
     HOME=$WORK/home-$SUITE XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland \
-        DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS WAYLAND95_TEST_AGENTS_ON_SESSION_BUS=1 \
+        DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS WAYLAND95_TEST_AGENTS_ON_SESSION_BUS=1 W95_FILES_DEBUG=1 \
         "$BUILD/win95files" "$@" >>"$WORK/$SUITE-files.log" 2>&1 &
     PIDS+=($!)
     for _ in $(seq 40); do [ "$(windows_of win95files)" -ge 1 ] && break; sleep 0.25; done
@@ -2892,7 +2892,8 @@ suite_drives() {
     expect_true $? "Eject unmounts it and powers it off" "$(tail -3 "$FAKE_LOG")"
     pointer key:Return wait:0.8
     away; shot after-eject
-    [ "$(pixel after-eject 56 199)" = ffffff ]; expect_true $? "and it's gone from My Computer" "$(pixel after-eject 56 199) where it was"
+    ! grep "files: computer:" "$WORK/$SUITE-files.log" | tail -1 | grep -q "STICK"
+    expect_true $? "and it's gone from My Computer" "$(grep "files: computer:" "$WORK/$SUITE-files.log" | tail -1)"
     ! shell_said "removed without ejecting"; expect_true $? "(and no \"removed without ejecting\" warning for it)" "$(grep -i drives "$WORK/$SUITE-shell.log" | tail -3)"
 
     # another one plugged in: a notice, and My Computer shows it at once
@@ -2901,7 +2902,8 @@ suite_drives() {
     for _ in $(seq 20); do shell_said "notice from Drives: PHOTOS was plugged in" && break; sleep 0.25; done
     shell_said "notice from Drives: PHOTOS was plugged in"; expect_true $? "plugging one in: a notice says so" "$(grep -i notice "$WORK/$SUITE-shell.log" | tail -3)"
     sleep 0.5; away; shot plugged
-    [ "$(pixel plugged 56 199)" != ffffff ]; expect_true $? "and My Computer shows it straight away" "$(pixel plugged 56 199)"
+    grep "files: computer:" "$WORK/$SUITE-files.log" | tail -1 | grep -q "PHOTOS"
+    expect_true $? "and My Computer shows it straight away" "$(grep "files: computer:" "$WORK/$SUITE-files.log" | tail -1)"
     pointer click:1100,$(($(note_title_y plugged) + 30)) wait:1.5
     for _ in $(seq 20); do query list | grep -q "^PHOTOS|win95files|" && break; sleep 0.25; done
     query list | grep -q "^PHOTOS|win95files|" && udisks_said "Mount /org/freedesktop/UDisks2/block_devices/photos1"
@@ -2912,6 +2914,29 @@ suite_drives() {
         --method org.wayland95.Test.Pull PHOTOS >/dev/null
     for _ in $(seq 20); do shell_said "PHOTOS was removed without ejecting it" && break; sleep 0.25; done
     shell_said "PHOTOS was removed without ejecting it"; expect_true $? "pulling one out while it's open warns to eject first" "$(grep -i drives "$WORK/$SUITE-shell.log" | tail -3)"
+
+    # the tray: an icon for a drive plugged in; right-click: Open, Eject
+    query list | sed -n 's/^\([^|]*\)|win95files|.*/\1/p' | while read -r t; do query close "$t"; done; sleep 0.6
+    in_bus gdbus call --session --dest org.freedesktop.UDisks2 --object-path /org/freedesktop/UDisks2 \
+        --method org.wayland95.Test.Plug CARD >/dev/null
+    sleep 1.5; close_notes; away; shot tray
+    local tx; tx=$(magick "$WORK/$SUITE-tray.png" -crop 500x20+780+774 +repage txt:- 2>/dev/null | grep -i "#2050B0" | head -1 | cut -d, -f1)
+    [ -n "$tx" ]; expect_true $? "a drive plugged in: an icon for it in the notification area" "no drive icon in the tray"
+    tx=$((780 + ${tx:-0} + 3))
+    pointer move:$tx,$TASKBAR_Y wait:1.2; shot tray-tip
+    pointer click:$tx,$TASKBAR_Y,right wait:0.6; away; shot tray-menu
+    pointer key:o wait:1.5
+    for _ in $(seq 20); do query list | grep -q "^CARD|win95files|" && break; sleep 0.25; done
+    query list | grep -q "^CARD|win95files|" && udisks_said "Mount /org/freedesktop/UDisks2/block_devices/card1"
+    expect_true $? "right-click > Open opens it in a folder window" "$(query list | tr '\n' ' '); $(tail -2 "$FAKE_LOG")"
+    query close CARD; sleep 0.6
+    pointer click:$tx,$TASKBAR_Y,right wait:0.6 key:e wait:1.5
+    udisks_said "PowerOff /org/freedesktop/UDisks2/drives/CARD"; expect_true $? "right-click > Eject ejects it" "$(tail -3 "$FAKE_LOG")"
+    for _ in $(seq 20); do shell_said "notice from Drives: CARD can now be safely removed" && break; sleep 0.25; done
+    shell_said "notice from Drives: CARD can now be safely removed"; expect_true $? "and says it can be safely removed" "$(grep -i drives "$WORK/$SUITE-shell.log" | tail -2)"
+    sleep 0.5; close_notes; away; shot tray-gone
+    [ -z "$(magick "$WORK/$SUITE-tray-gone.png" -crop 500x20+780+774 +repage txt:- 2>/dev/null | grep -i "#2050B0" | head -1)" ]
+    expect_true $? "and its icon goes" "still there"
 }
 
 # --- Control Panel > Backup: folders to a USB drive, with cron (all stand-ins) -------------

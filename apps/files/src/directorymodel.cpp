@@ -500,6 +500,13 @@ void DirectoryModel::loadComputer()
         }
         m_entries.append(e);
     }
+    // (W95_FILES_DEBUG: what My Computer shows, for the tests)
+    if (qEnvironmentVariableIsSet("W95_FILES_DEBUG")) {
+        QStringList names;
+        for (const Entry &e : std::as_const(m_entries))
+            names << e.name;
+        qInfo().noquote() << "files: computer:" << names.join(QStringLiteral(", "));
+    }
 }
 
 void DirectoryModel::openDrive(const QString &id)

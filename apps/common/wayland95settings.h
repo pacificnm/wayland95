@@ -56,6 +56,8 @@ class Wayland95Settings : public QObject
     Q_PROPERTY(bool showNetwork READ showNetwork WRITE setShowNetwork NOTIFY changed)
     Q_PROPERTY(bool showBluetooth READ showBluetooth WRITE setShowBluetooth NOTIFY changed)
     Q_PROPERTY(bool showBattery READ showBattery WRITE setShowBattery NOTIFY changed)
+    // an icon for each removable drive plugged in (Open, Eject)
+    Q_PROPERTY(bool showDrives READ showDrives WRITE setShowDrives NOTIFY changed)
     Q_PROPERTY(bool showAppIcons READ showAppIcons WRITE setShowAppIcons NOTIFY changed)
     // the Start menu's size: 0 small (Win95's own), 1 medium, 2 large
     Q_PROPERTY(int startMenuSize READ startMenuSize WRITE setStartMenuSize NOTIFY changed)
@@ -132,6 +134,8 @@ public:
     void setShowBluetooth(bool on);
     bool showBattery() const { return m_showBattery; }
     void setShowBattery(bool on);
+    bool showDrives() const { return m_showDrives; }
+    void setShowDrives(bool on);
     bool showAppIcons() const { return m_showAppIcons; }
     int startMenuSize() const { return m_startMenuSize; }
     void setShowAppIcons(bool on);
@@ -218,6 +222,7 @@ private:
     bool m_showNetwork = true;
     bool m_showBluetooth = true;
     bool m_showBattery = true;
+    bool m_showDrives = true;
     bool m_showAppIcons = true;
     int m_startMenuSize = 1;
     QString m_keyboardLayout;

@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""A stand-in for GitHub's gh command, for tests/run.sh's repos suite: made-up
+repositories, issues and pull requests kept in $FAKE_GH (a folder), never
+GitHub's. Each repository's "GitHub" copy is a bare git repository in
+$FAKE_GH/remotes/OWNER/NAME.git, which git reaches as https://github.com/...
+through url.insteadOf in the test's git config. Every call is logged to
+$FAKE_GH/log, one line, arguments separated by tabs.
+
+  $FAKE_GH/state.json   { "user": ..., "orgs": [...], "repos": [...],
+                          "issues": { "owner/name": [...] }, "pulls": {...} }
+  $FAKE_GH/no-delete-scope   if it exists, delete fails as gh does without
+                             the delete_repo scope
+  $FAKE_GH/old-gh       if it exists, it's an older gh (Debian 13's 2.46),
+                        which doesn't know --accept-visibility-change-consequences
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+HOME = os.environ.get("FAKE_GH")
+if not HOME:
+    sys.exit("FAKE_GH isn't set: this is the tests' stand-in for gh")
+STATE = os.path.join(HOME, "state.json")
+args = sys.argv[1:]
+with open(os.path.join(HOME, "log"), "a") as log:
+    log.write("\t".join(args) + "\n")
+
+
+def load():
+    with open(STATE) as f:
+        return json.load(f)
+
+
+def save(state):
+    with open(STATE + ".tmp", "w") as f:
+        json.dump(state, f, indent=1)
+    os.replace(STATE + ".tmp", STATE)
+
+
+def opt(name, default=None):
+    if name in args:
+        i = args.index(name)
+        return args[i + 1] if i + 1 < len(args) else default
+    for a in args:
+        if a.startswith(name + "="):
+            return a.split("=", 1)[1]
+    return default
+
+
+def find(state, slug):
+    for r in state["repos"]:
+        if r["nameWithOwner"].lower() == slug.lower():
+            return r
+    sys.stderr.write("GraphQL: Could not resolve to a Repository with the name '%s'. (repository)\n" % slug)
+    sys.exit(1)
+
+
+def bare(slug):
+    return os.path.join(HOME, "remotes", slug + ".git")
+
+
+def git(*a, cwd=None):
+    subprocess.run(["git"] + list(a), cwd=cwd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def new_repo(state, owner, name, private, description=""):
+    slug = owner + "/" + name
+    r = {"name": name, "nameWithOwner": slug, "owner": {"login": owner}, "description": description,
+         "visibility": "PRIVATE" if private else "PUBLIC", "isFork": False, "isArchived": False,
+         "pushedAt": "2026-11-10T12:00:00Z", "url": "https://github.com/" + slug,
+         "defaultBranchRef": {"name": "main"}, "stargazerCount": 0, "forkCount": 0,
+         "primaryLanguage": None, "parent": None}
+    state["repos"].append(r)
+    os.makedirs(os.path.dirname(bare(slug)), exist_ok=True)
+    git("init", "-q", "--bare", "-b", "main", bare(slug))
+    return r
+
+
+if args[:1] == ["--version"]:
+    print("gh version 2.46.0 (fake)")
+    sys.exit(0)
+
+state = load()
+cmd = args[:2]
+
+if cmd == ["api", "user"]:
+    print(state["user"])
+elif cmd == ["api", "user/orgs"]:
+    for o in state["orgs"]:
+        print(o)
+elif cmd == ["auth", "setup-git"]:
+    pass
+elif cmd == ["repo", "list"]:
+    owner = args[2]
+    print(json.dumps([r for r in state["repos"] if r["owner"]["login"] == owner]))
+elif cmd in (["issue", "list"], ["pr", "list"]):
+    slug, want = opt("-R"), opt("--state", "open")
+    entries = state["issues" if cmd[0] == "issue" else "pulls"].get(slug, [])
+    print(json.dumps([e for e in entries if want == "all" or e.get("state", "open") == want]))
+elif cmd == ["repo", "clone"]:
+    slug, dest = args[2], args[3]
+    find(state, slug)
+    r = subprocess.run(["git", "clone", "-q", "https://github.com/%s.git" % slug, dest])
+    sys.exit(r.returncode)
+elif cmd == ["repo", "create"]:
+    name = args[2]
+    owner, name = name.split("/") if "/" in name else (state["user"], name)
+    if any(r["nameWithOwner"].lower() == (owner + "/" + name).lower() for r in state["repos"]):
+        sys.stderr.write("GraphQL: Name already exists on this account (createRepository)\n")
+        sys.exit(1)
+    r = new_repo(state, owner, name, "--private" in args, opt("--description", ""))
+    slug = r["nameWithOwner"]
+    if "--add-readme" in args:
+        work = os.path.join(HOME, "work-" + name)
+        git("clone", "-q", bare(slug), work)
+        with open(os.path.join(work, "README.md"), "w") as f:
+            f.write("# %s\n" % name)
+        git("add", "README.md", cwd=work)
+        git("-c", "user.name=GitHub", "-c", "user.email=noreply@example.com", "commit", "-q", "-m", "Initial commit", cwd=work)
+        git("push", "-q", "origin", "HEAD:main", cwd=work)
+        shutil.rmtree(work)
+    source = opt("--source")
+    if source:
+        git("remote", "add", opt("--remote", "origin"), "https://github.com/%s.git" % slug, cwd=source)
+        if "--push" in args:
+            git("push", "-q", "-u", opt("--remote", "origin"), "HEAD", cwd=source)
+    save(state)
+    print(r["url"])
+elif cmd == ["repo", "rename"]:
+    new, slug = args[2], opt("-R")
+    r = find(state, slug)
+    owner = r["owner"]["login"]
+    os.rename(bare(slug), bare(owner + "/" + new))
+    r["name"], r["nameWithOwner"], r["url"] = new, owner + "/" + new, "https://github.com/%s/%s" % (owner, new)
+    save(state)
+elif cmd == ["repo", "edit"]:
+    r = find(state, args[2])
+    if os.path.exists(os.path.join(HOME, "old-gh")) and "--accept-visibility-change-consequences" in args:
+        # gh before 2.49 (Debian 13 has 2.46)
+        sys.stderr.write("unknown flag: --accept-visibility-change-consequences\n")
+        sys.exit(1)
+    if opt("--visibility"):
+        if "--accept-visibility-change-consequences" not in args and not os.path.exists(os.path.join(HOME, "old-gh")):
+            sys.stderr.write("use of --visibility flag requires --accept-visibility-change-consequences flag\n")
+            sys.exit(1)
+        r["visibility"] = opt("--visibility").upper()
+    if opt("--description") is not None:
+        r["description"] = opt("--description")
+    save(state)
+elif cmd in (["repo", "archive"], ["repo", "unarchive"]):
+    r = find(state, args[2])
+    r["isArchived"] = cmd[1] == "archive"
+    save(state)
+elif cmd == ["repo", "delete"]:
+    slug = args[2]
+    find(state, slug)
+    if os.path.exists(os.path.join(HOME, "no-delete-scope")):
+        sys.stderr.write("HTTP 403: Must have admin rights to Repository. (https://api.github.com/repos/%s)\n"
+                         "This API operation needs the \"delete_repo\" scope. To request it, run:  gh auth refresh -h github.com -s delete_repo\n" % slug)
+        sys.exit(1)
+    state["repos"] = [r for r in state["repos"] if r["nameWithOwner"].lower() != slug.lower()]
+    shutil.rmtree(bare(slug), ignore_errors=True)
+    save(state)
+else:
+    sys.stderr.write("fake gh: unknown command: %s\n" % " ".join(args))
+    sys.exit(1)

@@ -207,6 +207,7 @@ add_subdirectory(apps/notify)   # win95notify (command line)
 add_subdirectory(apps/portal)   # win95portal (file dialogs for other programs)
 add_subdirectory(apps/imagewriter) # win95imagewriter (disk images to USB drives)
 add_subdirectory(apps/games)    # win95solitaire, win95mines
+add_subdirectory(apps/repos)    # win95repos
 
 pkg_check_modules(VTERM IMPORTED_TARGET vterm)
 if(VTERM_FOUND)

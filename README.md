@@ -215,6 +215,33 @@ up next to the shell first, then on `$PATH`.
     the file selected) and Properties. It never follows a link to a folder
     and leaves out /proc, /sys, /dev and /run; it stops at 10,000 found.
 
+- **Repositories** (`win95repos`, [apps/repos/](apps/repos/)): Start >
+  Programs > Programming > Repositories. Every GitHub repository you can
+  reach (yours and your organisations'), grouped by owner, with the ones
+  cloned on this computer marked, plus git repositories that are only
+  here. It works through GitHub's `gh` command (and `git`), so it uses
+  `gh`'s sign-in and never keeps a token itself; without `gh`, or signed
+  out, it still lists and works on the local ones.
+  - **For the one chosen:** Overview (visibility, default branch,
+    language, stars, last push, where its clone is, its branch and how far
+    it is from GitHub, a branch switcher); Changes (the changed files with
+    a box each and a coloured diff; commit the ticked ones with a summary
+    and description); History (commits, and what each changed); Issues
+    and Pull Requests (open, closed or all; double-click opens one in the
+    browser).
+  - **Toolbar:** Fetch, Pull (fast-forward only: it says when the two
+    sides have diverged), Push (it publishes a new branch), Open Folder,
+    Terminal, View on GitHub.
+  - **Managing them:** Clone (into the clone folder, Options),
+    New Repository (private or public, a README, cloned), Publish to
+    GitHub (a repository that's only here), Add Local Repository,
+    Edit Description, Rename, Make Private/Public and Archive (each asks
+    first), and Delete (type its full name; if `gh`'s sign-in isn't
+    allowed to delete, it offers to ask GitHub for that). When git can't
+    sign in to push, it offers `gh auth setup-git`.
+  - Options: where to clone, and which folders to look in for clones
+    (the home folder, three folders down, by default).
+
 - **Notepad** (`win95notepad`, [apps/notepad/](apps/notepad/)): Start >
   Programs > Notepad, or double-click a text file in the file manager. It
   has File (New, Open, Save, Save As) with Win95-style Open/Save dialogs,

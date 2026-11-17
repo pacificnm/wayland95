@@ -57,6 +57,7 @@ QString ProblemReports::displayName(const QString &program)
         { QStringLiteral("win95imagewriter"), QStringLiteral("Disk Image Writer") },
         { QStringLiteral("win95solitaire"), QStringLiteral("Solitaire") },
         { QStringLiteral("win95mines"), QStringLiteral("Mines") },
+        { QStringLiteral("win95repos"), QStringLiteral("Repositories") },
         { QStringLiteral("win95notify"), QStringLiteral("win95notify") },
     };
     return names.value(program, program);

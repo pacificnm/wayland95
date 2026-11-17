@@ -123,6 +123,19 @@ Canvas {
             rect(10, 18, 12, 7, "#004080");
             rect(14, 21, 4, 4, "#f8d878");
             break;
+        case "repos":
+            // stacked books (repositories) with a branch drawn over them
+            frame(3, 16, 24, 6, "#2050b0");
+            frame(5, 10, 24, 6, "#806000");
+            frame(2, 22, 26, 6, "#008040");
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(22, 2); ctx.lineTo(22, 9); ctx.moveTo(29, 2); ctx.lineTo(29, 5);
+            ctx.quadraticCurveTo(29, 8, 22, 9); ctx.stroke();
+            ctx.fillStyle = "#ff8000";
+            ctx.beginPath(); ctx.arc(22, 3, 2.2, 0, 2 * Math.PI); ctx.fill();
+            ctx.beginPath(); ctx.arc(29, 3, 2.2, 0, 2 * Math.PI); ctx.fill();
+            break;
         case "solitaire":
             // two cards fanned: a blue back behind a red heart
             frame(4, 3, 16, 22, "#ffffff");

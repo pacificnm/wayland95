@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games find monitors screen
+#                                  games find repos monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -2066,6 +2066,157 @@ suite_find() {
     sleep 1; away; shot folder
 }
 
+# --- Repositories (win95repos): GitHub through a stand-in gh -------------------------
+# tests/fakes-gh/gh keeps made-up repositories in $FAKE_GH, never GitHub's;
+# their "GitHub" copies are bare repositories there, which git reaches as
+# https://github.com/... through url.insteadOf in a git config of the test's own.
+repos_setup() {
+    FAKE_GH=$WORK/gh; RHOME=$WORK/home-$SUITE
+    rm -rf "$FAKE_GH" "$RHOME"; mkdir -p "$FAKE_GH/remotes" "$RHOME"
+    export GIT_CONFIG_GLOBAL=$WORK/gitconfig GIT_CONFIG_NOSYSTEM=1
+    printf '[user]\n\tname = Tester\n\temail = tester@example.com\n[init]\n\tdefaultBranch = main\n[url "file://%s/remotes/"]\n\tinsteadOf = https://github.com/\n' "$FAKE_GH" >"$GIT_CONFIG_GLOBAL"
+    cat >"$FAKE_GH/state.json" <<JSON
+{"user": "tester", "orgs": ["acme"], "repos": [], "issues": {
+  "tester/alpha": [{"number": 7, "title": "Crash on start", "author": {"login": "sam"}, "updatedAt": "2026-11-15T10:00:00Z", "labels": [{"name": "bug"}], "url": "https://github.com/tester/alpha/issues/7", "comments": [], "state": "open"},
+                   {"number": 9, "title": "Add dark mode", "author": {"login": "lee"}, "updatedAt": "2026-11-14T10:00:00Z", "labels": [], "url": "https://github.com/tester/alpha/issues/9", "comments": [], "state": "open"}]},
+ "pulls": {"tester/alpha": [{"number": 8, "title": "Fix the crash", "author": {"login": "sam"}, "updatedAt": "2026-11-15T11:00:00Z", "headRefName": "fix-crash", "isDraft": false, "url": "https://github.com/tester/alpha/pull/8", "state": "open"}]}}
+JSON
+    python3 - "$FAKE_GH" <<'PY'
+import json, os, subprocess, sys
+home = sys.argv[1]
+sys.argv = ["gh"]
+state = json.load(open(home + "/state.json"))
+def repo(owner, name, private, desc, lang):
+    slug = owner + "/" + name
+    state["repos"].append({"name": name, "nameWithOwner": slug, "owner": {"login": owner}, "description": desc,
+        "visibility": "PRIVATE" if private else "PUBLIC", "isFork": False, "isArchived": False,
+        "pushedAt": "2026-11-12T09:30:00Z", "url": "https://github.com/" + slug, "defaultBranchRef": {"name": "main"},
+        "stargazerCount": 3, "forkCount": 1, "primaryLanguage": {"name": lang} if lang else None, "parent": None})
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", home + "/remotes/" + slug + ".git"], check=True)
+repo("tester", "alpha", False, "The alpha project", "C++")
+repo("tester", "beta", True, "Private notes", "")
+repo("acme", "gamma", False, "Acme's shared tools", "Python")
+json.dump(state, open(home + "/state.json", "w"), indent=1)
+PY
+    local w=$WORK/seed
+    rm -rf "$w"; git init -q "$w" && printf 'hello\n' >"$w/hello.txt" && git -C "$w" add . && git -C "$w" commit -qm "First commit" \
+        && printf 'hello\nworld\n' >"$w/hello.txt" && git -C "$w" commit -qam "Say world" \
+        && git -C "$w" push -q https://github.com/tester/alpha.git HEAD:main
+    git -C "$w" push -q https://github.com/tester/beta.git HEAD:main
+    git -C "$w" push -q https://github.com/acme/gamma.git HEAD:main
+    # a clone of alpha with two changes; a repository only here
+    mkdir -p "$RHOME/src"
+    git clone -q https://github.com/tester/alpha.git "$RHOME/src/alpha"
+    printf 'hello\nworld\nagain\n' >"$RHOME/src/alpha/hello.txt"; printf 'new file\n' >"$RHOME/src/alpha/notes.md"
+    git init -q "$RHOME/scratch" && printf 'x\n' >"$RHOME/scratch/x.txt" && git -C "$RHOME/scratch" add . && git -C "$RHOME/scratch" commit -qm "Scratch"
+}
+start_repos() {
+    HOME=$RHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        PATH=$REPO/tests/fakes-gh:$PATH FAKE_GH=$FAKE_GH W95_REPOS_DEBUG=1 "$BUILD/win95repos" >"$WORK/$SUITE-repos.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95repos)" -ge 1 ] && break; sleep 0.25; done
+    for _ in $(seq 40); do grep -q "repos: list .*tester/alpha" "$WORK/$SUITE-repos.log" && grep -q "repos: list .*scratch" "$WORK/$SUITE-repos.log" && break; sleep 0.25; done
+}
+rsaid() { grep -q "repos: $1" "$WORK/$SUITE-repos.log"; }
+rwait() { local i; for i in $(seq 40); do rsaid "$1" && return 0; sleep 0.25; done; return 1; } # TEXT (a regex)
+rlast() { grep "repos: $1" "$WORK/$SUITE-repos.log" | tail -1; }
+ghlog() { grep -q "$1" "$FAKE_GH/log"; }
+
+suite_repos() {
+    say "repos: Repositories (win95repos) with a stand-in gh: list, changes, commit, push, clone, new, manage"
+    [ -x "$BUILD/win95repos" ] || { bad "win95repos" "not built"; return; }
+    fresh
+    start_shell || return
+    repos_setup
+    start_repos
+    [ "$(windows_of win95repos)" -ge 1 ]; expect_true $? "Repositories opens" "$(tail -3 "$WORK/$SUITE-repos.log")"
+    rwait "list tester/alpha\*,tester/beta,acme/gamma,scratch\*"
+    expect_true $? "it lists yours, your organisations' and the ones only on this computer, with the clones marked" "$(rlast list)"
+    away; shot list
+
+    # alpha: its clone's changes
+    pointer click:150,184 wait:0.8
+    rwait "status tester/alpha main upstream=origin/main ahead=0 behind=0 files=modified:hello.txt,new:notes.md"
+    expect_true $? "choosing a clone reads its branch and changed files" "$(rlast status)"
+    pointer click:427,155 wait:0.5 click:420,215 wait:0.8; away; shot changes
+    local green; green=$(magick "$WORK/$SUITE-changes.png" -crop 360x120+598+185 +repage -fx "g - r > 0.25 && g - b > 0.25 ? 1 : 0" -format "%[fx:int(mean*w*h)]" info: 2>/dev/null)
+    [ "${green:-0}" -gt 20 ]; expect_true $? "Changes: a file's diff, added lines green" "green pixels: $green"
+
+    # commit only hello.txt (notes.md's box off), then push
+    pointer click:352,236 wait:0.3 click:465,572 type:more\ hello key:Return wait:1.2
+    [ "$(git -C "$RHOME/src/alpha" log -1 --format=%s)" = "more hello" ] && git -C "$RHOME/src/alpha" status --porcelain | grep -q "^?? notes.md"
+    expect_true $? "Commit commits the files ticked (not the one left out)" "$(git -C "$RHOME/src/alpha" log -1 --format=%s) / $(git -C "$RHOME/src/alpha" status --porcelain | tr '\n' ' ')"
+    rwait "status tester/alpha main upstream=origin/main ahead=1 "
+    expect_true $? "and it has one to push" "$(rlast status)"
+    pointer click:304,87 wait:1.5
+    [ "$(git --git-dir="$FAKE_GH/remotes/tester/alpha.git" log -1 --format=%s main)" = "more hello" ]
+    expect_true $? "Push sends it to GitHub" "GitHub's newest: $(git --git-dir="$FAKE_GH/remotes/tester/alpha.git" log -1 --format=%s main)"
+
+    # pull: a commit made elsewhere comes down
+    local w=$WORK/other; rm -rf "$w"; git clone -q https://github.com/tester/alpha.git "$w"
+    printf 'from elsewhere\n' >"$w/other.txt"; git -C "$w" add . && git -C "$w" commit -qm "Elsewhere" && git -C "$w" push -q
+    pointer click:231,87 wait:1.2
+    rwait "status tester/alpha main upstream=origin/main ahead=0 behind=1"; expect_true $? "Fetch sees one to pull" "$(rlast status)"
+    pointer click:268,87 wait:1.2
+    [ -f "$RHOME/src/alpha/other.txt" ]; expect_true $? "Pull brings it down" "$(git -C "$RHOME/src/alpha" log -1 --format=%s)"
+    pointer click:490,155 wait:1; away; shot history
+    rsaid "say Pulled tester/alpha"; expect_true $? "(and says so)" "$(rlast say)"
+
+    # issues and pull requests (through gh)
+    pointer click:539,155 wait:1.5
+    rwait "issues tester/alpha 2" && rwait "pulls tester/alpha 1"; expect_true $? "Issues and Pull Requests list them" "$(rlast issues) $(rlast pulls)"
+    away; shot issues
+
+    # clone beta into the clone folder (home)
+    pointer click:150,204 wait:0.6 click:132,87 wait:0.6 key:Return
+    rwait "list tester/alpha\*,tester/beta\*"; expect_true $? "Clone clones it, and it's marked as on this computer" "$(rlast list)"
+    [ "$(git -C "$RHOME/beta" config --get remote.origin.url)" = https://github.com/tester/beta.git ] && [ -f "$RHOME/beta/hello.txt" ]
+    expect_true $? "(into the clone folder: the home folder unless set)" "$(ls "$RHOME")"
+
+    # a new repository (private, with a README, cloned)
+    pointer click:180,87 wait:0.6 type:delta key:Return
+    for _ in $(seq 40); do [ -d "$RHOME/delta/.git" ] && break; sleep 0.25; done
+    ghlog $'repo\tcreate\tdelta\t--private\t--add-readme' && [ -f "$RHOME/delta/README.md" ]
+    expect_true $? "New: creates it on GitHub (private, with a README) and clones it" "$(grep create "$FAKE_GH/log") / $(ls "$RHOME")"
+    rwait "list .*tester/delta\*"; expect_true $? "(and lists it)" "$(rlast list)"
+
+    # publish the repository that's only here
+    pointer click:150,304,right wait:0.6 key:b wait:0.5 key:Return
+    for _ in $(seq 30); do ghlog $'repo\tcreate\tscratch' && break; sleep 0.25; done
+    [ "$(git --git-dir="$FAKE_GH/remotes/tester/scratch.git" log -1 --format=%s main 2>/dev/null)" = Scratch ]
+    expect_true $? "Publish to GitHub: makes the repository and pushes this one to it" "$(grep scratch "$FAKE_GH/log")"
+
+    # managing one: rename, visibility, archive, delete (gamma, acme's; the
+    # list is now alpha, beta, delta, scratch, then acme's)
+    rwait "list tester/alpha\*,tester/beta\*,tester/delta\*,tester/scratch\*,acme/gamma"
+    pointer click:150,284 wait:0.6
+    rwait "chose acme/gamma"
+    pointer click:150,284,right wait:0.5 key:r wait:0.5 key:ctrl+a type:gamma2 key:Return wait:1.2
+    ghlog $'repo\trename\tgamma2\t-R\tacme/gamma\t--yes'; expect_true $? "Rename renames it on GitHub" "$(tail -3 "$FAKE_GH/log")"
+    rwait "list .*acme/gamma2"; expect_true $? "(and the list follows)" "$(rlast list)"
+    touch "$FAKE_GH/old-gh"   # (Debian 13's gh 2.46: no --accept-visibility-change-consequences)
+    pointer click:150,284,right wait:0.5 key:i wait:0.5 key:Return wait:1.2
+    rm -f "$FAKE_GH/old-gh"
+    grep -q '"nameWithOwner": "acme/gamma2"' "$FAKE_GH/state.json" && python3 -c "import json,sys; r=[r for r in json.load(open('$FAKE_GH/state.json'))['repos'] if r['nameWithOwner']=='acme/gamma2'][0]; sys.exit(r['visibility']!='PRIVATE')"
+    expect_true $? "Make Private asks, then makes it private (with an older gh too)" "$(tail -2 "$FAKE_GH/log")"
+    pointer click:150,284,right wait:0.5 key:a wait:0.5 key:Return wait:1.2
+    ghlog $'repo\tarchive\tacme/gamma2\t--yes'; expect_true $? "Archive asks, then archives it" "$(tail -2 "$FAKE_GH/log")"
+    # delete: without the right, it says how to get it
+    touch "$FAKE_GH/no-delete-scope"
+    pointer click:150,284,right wait:0.5 key:d wait:0.5 type:acme key:slash type:gamma2 key:Return wait:1.2; away; shot no-scope
+    ghlog $'repo\tdelete\tacme/gamma2' && grep -q '"acme/gamma2"' "$FAKE_GH/state.json" && ! rsaid "say Deleted"
+    expect_true $? "without the right to delete, it isn't deleted (and it says how to allow it)" "$(tail -1 "$FAKE_GH/log")"
+    pointer key:Tab key:Return wait:0.4   # (No: no terminal for gh auth refresh)
+    rm -f "$FAKE_GH/no-delete-scope"
+    local before; before=$(grep -c $'repo\tdelete' "$FAKE_GH/log")
+    pointer click:150,284,right wait:0.5 key:d wait:0.5 type:acme key:slash type:gamma key:Return wait:0.6
+    [ "$(grep -c $'repo\tdelete' "$FAKE_GH/log")" = "$before" ]; expect_true $? "Delete needs its full name typed (a wrong one does nothing)" "$(tail -2 "$FAKE_GH/log")"
+    pointer type:2 key:Return wait:1.2
+    rwait "say Deleted acme/gamma2"; expect_true $? "typed right, it's deleted" "$(rlast say)"
+    ! grep -q '"acme/gamma2"' "$FAKE_GH/state.json"; expect_true $? "(gone from GitHub)" "still there"
+    away; shot end
+}
+
 # --- the taskbar's network icon: the connection, its addresses, WireGuard ----------
 # A made-up connection (tests/fakes/nmcli with FAKE_NETWORK), not this
 # computer's: Wi-Fi "TestNet", its addresses, and a WireGuard tunnel.
@@ -2390,7 +2541,7 @@ suite_classic() {
 }
 
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

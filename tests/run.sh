@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games find repos markdown startup drives backup calc email monitors screen
+#                                  games find repos markdown startup drives backup calc email web monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -3241,7 +3241,185 @@ suite_email() {
 }
 
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup calc email monitors screen classic vscode)
+# --------------------------------------------------------------- web
+web_setup() {
+    WEBDIR=$WORK/web-$SUITE; rm -rf "$WEBDIR"; mkdir -p "$WEBDIR"
+    WEB_PORT=$((21000 + $$ % 20000))
+    python3 -I "$HERE/fakes/webserver.py" "$WEBDIR" $WEB_PORT &
+    PIDS+=($!)
+    for _ in $(seq 50); do grep -q "web: ready" "$WEBDIR/log" 2>/dev/null && break; sleep 0.1; done
+    HOME_URL=http://127.0.0.1:$WEB_PORT/
+    mkdir -p "$CONFIG/wayland95" "$WORK/home-$SUITE"
+    cat >"$CONFIG/wayland95/web.json" <<JSON
+{"homePage": "$HOME_URL", "searchEngine": "duckduckgo", "searchUrl": "${HOME_URL}search?q=%s"}
+JSON
+}
+start_web() { # [URL...]
+    XDG_CONFIG_HOME=$CONFIG XDG_CACHE_HOME=$WORK/cache-$SUITE XDG_DATA_HOME=$WORK/data-$SUITE HOME=$WORK/home-$SUITE \
+        WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS W95_WEB_DEBUG=1 \
+        "$BUILD/win95web" "$@" >>"$WORK/$SUITE-web.log" 2>&1 &
+    PIDS+=($!)
+}
+wsaid() { grep -q "web: $1" "$WORK/$SUITE-web.log"; }
+wwait() { local i; for i in $(seq ${2:-40}); do wsaid "$1" && return 0; sleep 0.25; done; return 1; }
+wlast() { grep "web: $1" "$WORK/$SUITE-web.log" | tail -1 | sed 's/.*web: //'; }
+slog() { grep -qF -- "web: $1" "$WEBDIR/log"; } # (the server's log)
+# (the page's top left on the screen: the window's client area at 43,55,
+# the page 2,72 into it; the test page's things, from there)
+PX=45; PY=127
+wclick() { pointer click:$((PX + $1)),$((PY + $2)) wait:${3:-1}; }
+suite_web() {
+    say "web: Web Browser (win95web, Chromium) with a stand-in web server"
+    [ -x "$BUILD/win95web" ] || { bad "win95web" "not built"; return; }
+    fresh
+    start_shell || return
+    web_setup
+    start_web
+    for _ in $(seq 60); do [ "$(windows_of win95web)" -ge 1 ] && break; sleep 0.25; done
+    wwait "loaded $HOME_URL Test Home"; expect_true $? "Web Browser opens its home page (Chromium draws it)" "$(tail -5 "$WORK/$SUITE-web.log")"
+    query list | grep -q "^Test Home - Web Browser|win95web|"; expect_true $? "(its title is the page's)" "$(query list | tr '\n' ' ')"
+    sleep 1; away; shot home
+
+    # a link, then Back (Alt+Left)
+    wclick 60 153
+    wwait "loaded ${HOME_URL}two.html Page Two"; expect_true $? "a link: Page Two" "$(wlast loaded)"
+    pointer key:alt+Left wait:1
+    [ "$(wlast loaded)" = "loaded $HOME_URL Test Home" ]; expect_true $? "Alt+Left goes back" "$(wlast loaded)"
+
+    # a link that opens a new tab (target=_blank); Ctrl+W closes it
+    wclick 60 191 1.5
+    wwait "tabs 2" && wwait "loaded ${HOME_URL}two.html?from=newtab Page Two"
+    expect_true $? "a target=_blank link opens in a new tab" "$(grep web: "$WORK/$SUITE-web.log" | tail -3)"
+    away; shot new-tab
+    pointer key:ctrl+w wait:1
+    [ "$(wlast tabs)" = "tabs 1" ]; expect_true $? "Ctrl+W closes the tab" "$(wlast tabs)"
+
+    # the page's alert(), confirm() and prompt(): the desktop's message boxes
+    wclick 24 229
+    wwait "alert Hello from the page"; expect_true $? "alert(): a message box" "$(wlast alert)"
+    away; shot alert
+    pointer key:Return wait:0.6
+    wclick 88 229
+    wwait "confirm Are you sure"; pointer key:Return wait:0.8
+    wwait "title confirmed"; expect_true $? "confirm(): OK answers true" "$(wlast title)"
+    wclick 88 229; pointer key:Escape wait:0.8
+    wwait "title not confirmed"; expect_true $? "(and Escape, Cancel: false)" "$(wlast title)"
+    wclick 163 229
+    wwait "prompt Your name"; away; shot prompt
+    pointer type:sam key:Return wait:0.8
+    wwait "title name: sam"; expect_true $? "prompt(): its text box, with what's typed given back" "$(wlast title)"
+
+    # a site asking to show notifications: asked; Allow, and they're the desktop's
+    wclick 230 229
+    wwait "permission http://127.0.0.1:$WEB_PORT show notifications"; expect_true $? "a site wanting notifications is asked about" "$(wlast permission)"
+    away; shot permission
+    pointer key:Return wait:1.5
+    wwait "title permission granted"; expect_true $? "Allow grants it" "$(wlast title)"
+    for _ in $(seq 20); do grep -q "Notifications: 1 from Web Browser shown" "$WORK/$SUITE-shell.log" && break; sleep 0.25; done
+    grep -q "Notifications: 1 from Web Browser shown" "$WORK/$SUITE-shell.log"; expect_true $? "and the page's notification shows on the desktop" "$(grep -i notif "$WORK/$SUITE-shell.log" | tail -3)"
+    away; shot notification
+
+    # the address bar: words are a search; a name is a site
+    pointer key:ctrl+l "type:hello world" key:Return wait:1.5
+    slog "search hello world" && wwait "loaded ${HOME_URL}search?q=hello world Search: hello world"
+    expect_true $? "words in the address bar search (with the chosen search engine)" "$(tail -2 "$WEBDIR/log"); $(wlast loaded)"
+    away; shot search
+    pointer key:ctrl+l type:127 key:period type:0 key:period type:0 key:period type:1 key:shift+semicolon type:$WEB_PORT key:slash type:two key:period type:html key:Return wait:1.5
+    wwait "loaded http://127.0.0.1:$WEB_PORT/two.html Page Two"; expect_true $? "127.0.0.1:PORT/two.html: the site (http, being local)" "$(wlast loaded)"
+
+    # find on the page (Ctrl+F)
+    pointer key:ctrl+f type:needle wait:1
+    wwait "find 3"; expect_true $? "Ctrl+F finds the 3 needles" "$(wlast find)"
+    away; shot find
+    pointer key:Escape wait:0.5
+
+    # favorites (Ctrl+D) and history
+    pointer key:ctrl+d wait:0.6
+    away; shot add-favorite
+    pointer key:Return wait:0.5
+    for _ in $(seq 20); do grep -q '"url": "http://127.0.0.1:'$WEB_PORT'/two.html"' "$CONFIG/wayland95/web.json" && break; sleep 0.25; done
+    grep -q '"title": "Page Two"' "$CONFIG/wayland95/web.json"; expect_true $? "Ctrl+D adds it to Favorites" "$(cat "$CONFIG/wayland95/web.json")"
+    pointer click:205,65 wait:0.6
+    away; shot favorites-menu
+    pointer key:Escape wait:0.4
+    grep -q '"title":"Test Home"' "$WORK/data-$SUITE/wayland95/web-history.json" 2>/dev/null && grep -q "search?q=hello" "$WORK/data-$SUITE/wayland95/web-history.json"
+    expect_true $? "the pages visited are in History" "$(head -c 400 "$WORK/data-$SUITE/wayland95/web-history.json" 2>&1)"
+    pointer key:ctrl+h wait:0.8
+    away; shot history
+    pointer key:Escape wait:0.4
+
+    # the address bar suggests from history while typing
+    pointer key:ctrl+l type:two wait:0.8
+    away; shot suggestions
+    pointer key:Escape wait:0.4
+
+    # a download: to Downloads, with the Downloads window
+    pointer key:alt+Home wait:1.5
+    wclick 56 431 2
+    for _ in $(seq 40); do [ -s "$WORK/home-$SUITE/Downloads/notes.txt" ] && break; sleep 0.25; done
+    [ "$(wc -c <"$WORK/home-$SUITE/Downloads/notes.txt" 2>/dev/null)" = 2800 ]; expect_true $? "a download is saved in Downloads" "$(ls -la "$WORK/home-$SUITE/Downloads" 2>&1)"
+    query list | grep -q "^Downloads|win95web|"; expect_true $? "and the Downloads window shows it" "$(query list | tr '\n' ' ')"
+    sleep 0.5; away; shot downloads
+    pointer key:Escape wait:0.6
+
+    # a page that wants a user name and password
+    pointer click:600,40 wait:0.4
+    wclick 183 431 1.5
+    wwait "loaded ${HOME_URL}secret/" 4 ; slog "auth asked"; expect_true $? "a private page: the site asks for a name and password" "$(tail -2 "$WEBDIR/log")"
+    away; shot password
+    pointer type:tester key:Return type:opensesame wait:0.3
+    away; shot password-typed
+    pointer key:Return wait:1.5
+    wwait "loaded ${HOME_URL}secret/ Private Page"; slog "auth ok"
+    expect_true $? "they're sent, and the page opens" "$(tail -2 "$WEBDIR/log"); $(wlast loaded)"
+
+    # the context menu on a link
+    pointer key:alt+Home wait:1.5
+    pointer click:$((PX + 60)),$((PY + 153)),right wait:0.6
+    away; shot link-menu
+    pointer key:t wait:1.5
+    wwait "link in new tab ${HOME_URL}two.html" && [ "$(wlast tabs)" = "tabs 2" ]
+    expect_true $? "a link's menu: Open Link in New Tab (behind this one)" "$(wlast link); $(wlast tabs)"
+    pointer key:ctrl+Tab wait:0.6 key:ctrl+w wait:0.6
+    [ "$(wlast tabs)" = "tabs 1" ] && query list | grep -q "^Test Home - Web Browser|"
+    expect_true $? "Ctrl+Tab goes to it; Ctrl+W closes it, back to the first" "$(wlast tabs); $(query list | tr '\n' ' ')"
+
+    # zoom
+    pointer key:ctrl+equal wait:0.5 key:ctrl+equal wait:0.5
+    [ "$(wlast zoom)" = "zoom 120" ]; expect_true $? "Ctrl+= zooms in (120%)" "$(wlast zoom)"
+    away; shot zoom
+    pointer key:ctrl+0 wait:0.5
+
+    # `win95web URL` again: a new tab here (one browser at a time)
+    start_web "${HOME_URL}two.html?again"
+    wwait "opened from outside ${HOME_URL}two.html?again" && wwait "loaded ${HOME_URL}two.html?again Page Two"
+    expect_true $? "another win95web URL opens in this browser's window" "$(grep web: "$WORK/$SUITE-web.log" | tail -3)"
+    sleep 1
+    [ "$(pgrep -fc "$BUILD/win95web")" = 1 ] && [ "$(windows_of win95web)" = 1 ]
+    expect_true $? "(and the second one goes: one browser)" "$(pgrep -fa "$BUILD/win95web"; query list | tr '\n' ' ')"
+    away; shot again
+
+    # Clear Browsing Data: history and the cache now; cookies at the next start
+    STORE=$WORK/data-$SUITE/win95-wayland/win95web/QtWebEngine/win95web
+    grep -q visited "$STORE/Cookies"; expect_true $? "(the site's cookie is kept)" "$(ls "$STORE" 2>&1 | tr '\n' ' ')"
+    pointer click:255,65 wait:0.5 key:c wait:0.8
+    away; shot clear
+    pointer click:$CLEAR_COOKIES wait:0.3 click:$CLEAR_BUTTON wait:0.8
+    wwait "cleared history cache cookies"; expect_true $? "Clear Browsing Data: history, cache and cookies" "$(wlast cleared)"
+    away; shot cleared
+    grep -q '"forgetCookies"' "$CONFIG/wayland95/web.json" && [ "$(tr -d ' \n' <"$WORK/data-$SUITE/wayland95/web-history.json")" = "[]" ]
+    expect_true $? "(history emptied; the cookies to go next time)" "$(cat "$CONFIG/wayland95/web.json")"
+    pointer key:Return wait:0.4 key:alt+F4 wait:2
+    for _ in $(seq 20); do pgrep -f "$BUILD/win95web" >/dev/null || break; sleep 0.25; done
+    start_web about:blank
+    for _ in $(seq 40); do [ "$(windows_of win95web)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1
+    ! grep -qs visited "$STORE/Cookies" && ! grep -q '"forgetCookies"' "$CONFIG/wayland95/web.json"
+    expect_true $? "started again: the cookies are gone" "$(ls "$STORE" 2>&1 | tr '\n' ' '); $(cat "$CONFIG/wayland95/web.json")"
+}
+CLEAR_COOKIES=378,436; CLEAR_BUTTON=561,460
+
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup calc email web monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

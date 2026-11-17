@@ -286,6 +286,31 @@ up next to the shell first, then on `$PATH`.
   cached in `~/.cache/wayland95/email` (only you can read it). Not yet:
   POP3, OAuth sign-in (accounts that only allow it), HTML writing, an
   address book, and being the desktop's mailto: handler.
+- **Web Browser** (`win95web`, [apps/web/](apps/web/)): Start > Programs >
+  Internet > Web Browser. Pages are drawn by Qt WebEngine, the Chromium
+  engine, so sites work as they do in Chrome; around it, Win95-era
+  chrome: menus, a toolbar (Back, Forward, Stop, Refresh, Home, Favorites,
+  History, Downloads), the address bar (a web address, a name like
+  `example.com`, or words to search for, with suggestions from your
+  favorites and history), tabs (Ctrl+T, Ctrl+W, Ctrl+Tab, middle-click
+  closes; Ctrl+Shift+T reopens), Find on This Page (Ctrl+F), zoom
+  (Ctrl+plus/minus/0), full screen (F11, or a video's own button), Save as
+  PDF and View Source. What sites ask for is asked in the desktop's
+  style: their alert, confirm and prompt boxes, a user name and password,
+  using the camera, microphone, location or notifications (Allow or
+  Block; notifications allowed show as the desktop's), and certificate
+  problems (Go Back, or Go On Anyway when that's allowed). Downloads go to
+  your Downloads folder, with a Downloads window (progress, Pause, Cancel,
+  Open, Show in Folder). Tools > Internet Options sets the home page, the
+  search engine (DuckDuckGo, Google, Bing, Startpage or Wikipedia) and
+  makes it the desktop's default browser; Clear Browsing Data removes
+  history, the cache and cookies. One browser runs at a time: starting
+  `win95web URL` again opens the page in its window. Settings and
+  favorites are `~/.config/wayland95/web.json`, history
+  `~/.local/share/wayland95/web-history.json`; cookies and the cache are
+  WebEngine's, under `~/.local/share/win95-wayland` and
+  `~/.cache/win95-wayland`. Not yet: saved passwords, extensions, sync,
+  and a private (incognito) window.
 - **Calculator** (`win95calc`, [apps/calc/](apps/calc/)): Start >
   Programs > Accessories > Calculator. View > Standard: memory (MC, MR,
   MS, M+), digits, + - * /, sqrt, %, 1/x, +/-, Back, CE and C, worked out

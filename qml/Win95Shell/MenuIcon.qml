@@ -223,6 +223,24 @@ Canvas {
             for (var r = 0; r < 5; ++r)
                 frame(8 + r * 4, 1, 2, 6, "#c0c0c0"); // spiral rings
             break;
+        case "web":
+            // a page with the world in front of it
+            frame(5, 2, 20, 26, "#ffffff");
+            for (var l = 0; l < 4; ++l)
+                rect(8, 6 + l * 4, 12, 2, "#808080");
+            ctx.save();
+            ctx.beginPath(); ctx.arc(20, 20, 10, 0, Math.PI * 2); ctx.clip();
+            rect(10, 10, 20, 20, "#3a7bd5");
+            ctx.fillStyle = "#3c9a3c";
+            ctx.beginPath(); ctx.ellipse(10, 11, 10, 9); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(20, 20, 8, 9); ctx.fill();
+            ctx.restore();
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.arc(20, 20, 10, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(15.5, 10, 9, 20); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(10, 20); ctx.lineTo(30, 20); ctx.stroke();
+            break;
         case "email":
             // an envelope with a blue arrow flying in
             frame(3, 11, 26, 18, "#ffffe8");

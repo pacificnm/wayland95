@@ -461,9 +461,9 @@ up next to the shell first, then on `$PATH`.
     scroll signals. Then add it to [Tray.qml](qml/Win95Shell/Tray.qml) and
     give it a show/hide setting.
 
-- **Control Panel** (`win95control`, [apps/control/](apps/control/)): Start
-  > Settings > Control Panel. Each applet is a Win95 property sheet with
-  tabs and OK / Cancel / Apply:
+- **Control Panel** (`win95control`, [apps/control/](apps/control/)):
+  Start > Settings > Control Panel. Each applet is a Win95 property sheet
+  with tabs and OK / Cancel / Apply:
   - **Display:** wallpaper (from ~/Pictures and the system wallpaper
     folders, or Browse...), Center, Tile or Stretch, and background color,
     with a preview monitor. **Appearance:** 17 color schemes, plus your own

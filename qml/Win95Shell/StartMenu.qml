@@ -62,6 +62,8 @@ FocusScope {
     // Wayland 95's own programs, and where they go
     readonly property var ownPrograms: ({
         "Accessories":  [{ label: "Notepad",        icon: "notepad", program: "win95notepad" }],
+        "Games":        [{ label: "Mines",          icon: "mines",   program: "win95mines" },
+                         { label: "Solitaire",      icon: "solitaire", program: "win95solitaire" }],
         "Multimedia":   [{ label: "Volume Control", icon: "volume",  program: "win95volume" }],
         "System Tools": [{ label: "Image Writer",   icon: "imagewriter", program: "win95imagewriter" },
                          { label: "System Monitor", icon: "sysmon",  program: "win95sysmon" }],

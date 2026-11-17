@@ -13,6 +13,7 @@ Item {
     readonly property var ownIcons: ({
         win95notepad: "notepad", win95files: "files", win95terminal: "terminal", win95control: "control",
         win95sysmon: "sysmon", win95volume: "volume", win95imagewriter: "imagewriter",
+        win95solitaire: "solitaire", win95mines: "mines",
     })
     readonly property string iconUrl: ownIcons[appId] || !appId ? "" : ProgramMenu.iconFor(appId)
     signal clicked()

@@ -8,7 +8,8 @@
 #   tests/run.sh [SUITE...]        all suites, or some of: input (Chromium) firefox
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
-#                                  capture accessibility windowkeys shellstart screen
+#                                  capture accessibility windowkeys shellstart timezone network
+#                                  games monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -1833,6 +1834,117 @@ suite_timezone() {
     grep -q "Time zone: UTC" "$WORK/$SUITE-control.log"; expect_true $? "(the Control Panel's own time follows too)" "$(tail -2 "$WORK/$SUITE-control.log")"
 }
 
+# --- the games: Solitaire and Mines --------------------------------------------
+# Each game deals the same game for the same --seed (W95_GAMES_SEED), and
+# with W95_GAMES_DEBUG says where its presses landed and what's where, so
+# these know what to click. Their options and best times go in $CONFIG.
+start_game() { # NAME SEED
+    XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        W95_GAMES_SEED=$2 W95_GAMES_DEBUG=1 "$BUILD/win95$1" >"$WORK/$SUITE-$1.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of "win95$1")" -ge 1 ] && break; sleep 0.25; done
+    sleep 1
+    [ "$(windows_of "win95$1")" -ge 1 ]
+}
+game_said() { grep -q "$2" "$WORK/$SUITE-$1.log"; } # GAME TEXT
+# where the game's window is: a click at X,Y and where the game says it
+# landed. Sets GX, GY (the window's top left on screen).
+locate_game() { # GAME X Y
+    pointer click:"$2","$3"
+    local line; line=$(grep "$1: press" "$WORK/$SUITE-$1.log" | tail -1)
+    [ -n "$line" ] || return 1
+    GX=$(($2 - $(echo "$line" | awk '{print $(NF-1)}')))
+    GY=$(($3 - $(echo "$line" | awk '{print $NF}')))
+}
+# Solitaire's piles as it last told them: pile NAME COUNT TOP X Y FACEUP
+spile() { grep "solitaire: pile $1 " "$WORK/$SUITE-solitaire.log" | tail -1 | awk -v f="$2" '{ print $(f + 5) }'; } # NAME FIELD(1 count, 2 top, 3 x, 4 y)
+sat() { echo "$((GX + $(spile "$1" 3))),$((GY + $(spile "$1" 4)))"; } # NAME: the middle of its top card, on screen
+suite_games() {
+    say "games: Start > Programs > Games: Solitaire and Mines"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    [ -x "$BUILD/win95solitaire" ] && [ -x "$BUILD/win95mines" ] || { bad "games" "not built"; return; }
+    fresh
+    start_shell || return
+
+    # the Start menu: Programs > Games has both
+    pointer click:30,787 wait:0.6 click:60,547 wait:0.6 move:240,564 wait:0.8
+    shot start-games
+    pointer click:400,586 wait:0.5
+    for _ in $(seq 20); do [ "$(windows_of win95solitaire)" -ge 1 ] && break; sleep 0.25; done
+    [ "$(windows_of win95solitaire)" -ge 1 ]; expect_true $? "Start > Programs > Games > Solitaire starts it" "$(query list | tr '\n' ' ')"
+    query close "Solitaire"; sleep 0.8
+
+    # --- Solitaire (seed 5: the Ace of diamonds is on column 5, 2S can go on 3H) ---
+    start_game solitaire 5; expect_true $? "Solitaire opens" "$(tail -3 "$WORK/$SUITE-solitaire.log")"
+    locate_game solitaire 340 430; expect_true $? "(found its window)" "$(tail -3 "$WORK/$SUITE-solitaire.log")"
+    away; shot solitaire-dealt
+    [ "$(spile stock 1)" = 24 ] && [ "$(spile tab6 1)" = 7 ] && [ "$(spile tab4 2)" = AD ]
+    expect_true $? "it deals 7 columns (1 to 7 cards) and 24 in the stock" "stock $(spile stock 1), tab6 $(spile tab6 1), tab4 top $(spile tab4 2)"
+    pointer click:"$(sat stock)" wait:0.5
+    [ "$(spile stock 1)" = 23 ] && [ "$(spile waste 1)" = 1 ]
+    expect_true $? "clicking the stock turns a card over onto the waste" "stock $(spile stock 1), waste $(spile waste 1)"
+    pointer move:"$(sat tab4)" click:"$(sat tab4)" click:"$(sat tab4)" wait:0.6
+    [ "$(spile found0 2)" = AD ] && [ "$(spile tab4 1)" = 4 ]
+    expect_true $? "double-clicking an Ace sends it to a foundation (and the card under it turns over)" "found0 $(spile found0 2), tab4 $(spile tab4 1)"
+    local from to; from=$(sat tab1); to=$(sat tab5)
+    drag "${from%,*}" "${from#*,}" "${to%,*}" "$((${to#*,} + 10))"; sleep 0.6
+    [ "$(spile tab5 2)" = 2S ] && [ "$(spile tab5 1)" = 7 ]
+    expect_true $? "dragging the 2 of spades onto the 3 of hearts moves it" "tab5: $(spile tab5 2) ($(spile tab5 1) cards)"
+    away; shot solitaire-moved
+    from=$(sat tab3); to=$(sat tab0)
+    drag "${from%,*}" "${from#*,}" "${to%,*}" "$((${to#*,} + 10))"; sleep 0.6
+    game_said solitaire "refused" && [ "$(spile tab3 2)" = 7S ]
+    expect_true $? "a card dropped where it can't go goes back" "tab3 top $(spile tab3 2)"
+    in_compositor "$W95INPUT" key:ctrl+z >/dev/null 2>&1; sleep 0.6
+    [ "$(spile tab5 2)" = 3H ] && [ "$(spile tab1 2)" = 2S ]
+    expect_true $? "Ctrl+Z undoes the last move" "tab5 $(spile tab5 2), tab1 $(spile tab1 2)"
+    query close "Solitaire"; sleep 0.8
+
+    # --- Mines (seed 3) ---
+    start_game mines 3; expect_true $? "Mines opens" "$(tail -3 "$WORK/$SUITE-mines.log")"
+    # the first click: never a mine
+    locate_game mines 110 170; expect_true $? "(found its window)" "$(tail -3 "$WORK/$SUITE-mines.log")"
+    game_said mines "opened" && ! game_said mines "lost"
+    expect_true $? "the first cell opened is never a mine" "$(grep 'mines:' "$WORK/$SUITE-mines.log" | tail -3)"
+    away; shot mines-first
+    local mines cellx celly
+    mines=$(grep "mines: mines " "$WORK/$SUITE-mines.log" | tail -1 | awk '{print $NF}')
+    # cells: the board is 11,74 in the window, 16 pixels a cell, 9 across
+    cellx() { echo $((GX + 11 + ($1 % 9) * 16 + 8)); }
+    celly() { echo $((GY + 74 + ($1 / 9) * 16 + 8)); }
+    local m0=${mines%%,*}
+    pointer click:"$(cellx "$m0")","$(celly "$m0")",right
+    game_said mines "mark $m0 1"; expect_true $? "right-click puts a flag on a cell" "$(grep 'mines:' "$WORK/$SUITE-mines.log" | tail -2)"
+    away; shot mines-flag
+    # open every cell without a mine
+    local args=() i
+    for i in $(seq 0 80); do
+        case ",$mines," in *",$i,"*) continue ;; esac
+        args+=("click:$(cellx "$i"),$(celly "$i")")
+    done
+    pointer "${args[@]}"; sleep 0.6
+    game_said mines "won"; expect_true $? "opening every cell without a mine wins" "$(grep 'mines:' "$WORK/$SUITE-mines.log" | tail -2)"
+    sleep 0.8; away; shot mines-won
+    # (the clicks went on after the last cell: on Mines, behind its dialog)
+    query list | grep -q "^New Best Time|win95mines|activated"
+    expect_true $? "its dialog stays in front of Mines, with the keyboard, when Mines is clicked" "$(query list | tr '\n' ' ')"
+    in_compositor "$W95INPUT" type:tester key:Return >/dev/null 2>&1; sleep 0.8
+    grep -q "name=tester" "$CONFIG/win95-wayland/win95mines.conf" 2>/dev/null
+    expect_true $? "a best time asks for a name and keeps it" "$(cat "$CONFIG/win95-wayland/win95mines.conf" 2>/dev/null | tr '\n' ' ')"
+    away; shot mines-best
+    grep -q "mines: best tester" "$WORK/$SUITE-mines.log"
+    expect_true $? "Best Times shows the new name" "$(grep 'mines: best' "$WORK/$SUITE-mines.log" | tail -1)"
+    in_compositor "$W95INPUT" key:Return >/dev/null 2>&1; sleep 0.3
+    # F2: a new game; then a mine loses it
+    in_compositor "$W95INPUT" key:F2 >/dev/null 2>&1; sleep 0.4
+    pointer click:"$(cellx 40)","$(celly 40)"
+    mines=$(grep "mines: mines " "$WORK/$SUITE-mines.log" | tail -1 | awk '{print $NF}')
+    m0=${mines%%,*}
+    pointer click:"$(cellx "$m0")","$(celly "$m0")"
+    game_said mines "lost"; expect_true $? "F2 starts again, and opening a mine loses" "$(grep 'mines:' "$WORK/$SUITE-mines.log" | tail -2)"
+    away; shot mines-lost
+}
+
 # --- the taskbar's network icon: the connection, its addresses, WireGuard ----------
 # A made-up connection (tests/fakes/nmcli with FAKE_NETWORK), not this
 # computer's: Wi-Fi "TestNet", its addresses, and a WireGuard tunnel.
@@ -2157,7 +2269,7 @@ suite_classic() {
 }
 
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

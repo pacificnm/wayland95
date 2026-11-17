@@ -225,6 +225,20 @@ up next to the shell first, then on `$PATH`.
   which asks for the administrator password, so the program itself never
   runs as root. (`WIN95_IMAGEWRITER_LOOP=1` also lists loop devices from
   `udisksctl loop-setup`, for testing without a USB stick.)
+- **Games** (Start > Programs > Games, [apps/games/](apps/games/)), our
+  own versions of two classics, with their own card and tile art:
+  - **Solitaire** (`win95solitaire`): Klondike patience. Click the deck to
+    turn cards over, drag cards (or a run of them) between columns,
+    double-click a card to send it up to its foundation, right-click to send
+    up everything that can go. Undo (Ctrl+Z), Draw One or Draw Three,
+    standard scoring and a clock (each can be turned off), and four card
+    backs (Game > Deck...).
+  - **Mines** (`win95mines`): clear a minefield. Left click opens a cell
+    (the first is never a mine), right click flags one, and a number with
+    all its flags opens the cells around it (click it, or both buttons, or
+    the middle one). Beginner, Intermediate, Expert or a custom field; best
+    times with names; plays from the keyboard too (arrows, Space, F).
+  Options and best times are kept in `~/.config/win95-wayland/`.
 - **System Monitor** (`win95sysmon`, [apps/sysmon/](apps/sysmon/)): Start >
   Programs > System Monitor, or **Ctrl+Shift+Esc** from anywhere. It reads
   everything straight from the kernel's `/proc` files and needs nothing but

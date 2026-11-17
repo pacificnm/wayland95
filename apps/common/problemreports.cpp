@@ -55,6 +55,8 @@ QString ProblemReports::displayName(const QString &program)
         { QStringLiteral("win95volume"), QStringLiteral("Volume Control") },
         { QStringLiteral("win95portal"), QStringLiteral("File dialogs (portal)") },
         { QStringLiteral("win95imagewriter"), QStringLiteral("Disk Image Writer") },
+        { QStringLiteral("win95solitaire"), QStringLiteral("Solitaire") },
+        { QStringLiteral("win95mines"), QStringLiteral("Mines") },
         { QStringLiteral("win95notify"), QStringLiteral("win95notify") },
     };
     return names.value(program, program);

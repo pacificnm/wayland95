@@ -29,6 +29,7 @@ qt_add_qml_module(win95ui
         MessageBox95.qml
         FocusRect95.qml
         Dialog95.qml
+        DialogWindow95.qml
         RadioButton95.qml
         CheckBox95.qml
         ComboBox95.qml

@@ -123,6 +123,34 @@ Canvas {
             rect(10, 18, 12, 7, "#004080");
             rect(14, 21, 4, 4, "#f8d878");
             break;
+        case "solitaire":
+            // two cards fanned: a blue back behind a red heart
+            frame(4, 3, 16, 22, "#ffffff");
+            rect(6, 5, 12, 18, "#000080");
+            for (var cb = 0; cb < 4; ++cb)
+                rect(7 + (cb % 2) * 6, 7 + Math.floor(cb / 2) * 8, 4, 4, "#4080ff");
+            frame(12, 8, 16, 22, "#ffffff");
+            ctx.fillStyle = "#d00000";
+            ctx.beginPath();
+            ctx.arc(17.5, 16.5, 2.5, Math.PI, 0); ctx.arc(22.5, 16.5, 2.5, Math.PI, 0);
+            ctx.lineTo(20, 24); ctx.closePath(); ctx.fill();
+            rect(14, 10, 2, 3, "#d00000");
+            break;
+        case "mines":
+            // a mine on a grey cell, with a red flag beside it
+            frame(2, 2, 28, 28, "#c0c0c0");
+            rect(3, 3, 26, 1, "#ffffff"); rect(3, 3, 1, 26, "#ffffff");
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(14, 9); ctx.lineTo(14, 27); ctx.moveTo(5, 18); ctx.lineTo(23, 18);
+            ctx.moveTo(8, 12); ctx.lineTo(20, 24); ctx.moveTo(20, 12); ctx.lineTo(8, 24); ctx.stroke();
+            ctx.fillStyle = "#000000";
+            ctx.beginPath(); ctx.arc(14, 18, 6, 0, 2 * Math.PI); ctx.fill();
+            rect(11, 15, 3, 3, "#ffffff");
+            rect(24, 4, 1, 10, "#000000");
+            ctx.fillStyle = "#ff0000";
+            ctx.beginPath(); ctx.moveTo(25, 4); ctx.lineTo(25, 9); ctx.lineTo(29, 6.5); ctx.closePath(); ctx.fill();
+            break;
         case "sysmon":
             // a little monitor showing a green chart
             frame(3, 4, 26, 20, "#c0c0c0");

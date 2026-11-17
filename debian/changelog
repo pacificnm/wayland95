@@ -1,3 +1,9 @@
+wayland95 (0.3.0) trixie; urgency=medium
+
+  * New: Solitaire and Mines (Start > Programs > Games), Find: All Files (Start > Find), a Matrix screen saver, a bigger Start menu (Control Panel > Taskbar: Start menu size), WireGuard in Control Panel > Services, IP details and a VPN padlock in the network icon, program icons on taskbar buttons, time zones in Date/Time, and right-click menus on My Computer and the Recycle Bin. Fixes: X11 programs such as LibreOffice could end the desktop; dialogs now stay in front of their window.
+
+ -- Wayland 95 <wayland95@localhost>  Mon, 16 Nov 2026 20:50:03 -0800
+
 wayland95 (0.2.0) trixie; urgency=medium
 
   * The desktop is now wayland95-compositor (wlroots) with win95shell, replacing the Qt compositor: GPU buffer sharing, popups and input as other desktops do them, a real lock screen, two or more displays, and display settings (resolution, refresh rate, scale, orientation, arrangement) in Control Panel > Display. Faster window frames and resizing.

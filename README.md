@@ -465,7 +465,8 @@ up next to the shell first, then on `$PATH`.
     systemd-timedated (an administrator's password, through the desktop's
     prompt). The taskbar clock and the programs that are open follow it
     at once ([apps/common/timezones.cpp](apps/common/timezones.cpp)).
-    Read-only: the system clock belongs to the administrator.
+    The date and time themselves come from the computer's clock and, when
+    it's online, the network.
   - **Keyboard:** key repeat delay and rate, cursor blink rate, and the
     keyboard layout (from xkb).
   - **Mouse:** double-click speed, with a test box.

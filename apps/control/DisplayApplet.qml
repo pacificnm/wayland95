@@ -45,6 +45,16 @@ PropertySheet {
             { key: "speed", label: "Speed:", type: "slider", from: 1, to: 10, def: 5 },
             { key: "density", label: "Lines:", type: "slider", from: 5, to: 40, def: 20 },
         ],
+        matrix: [
+            { key: "speed", label: "Speed:", type: "slider", from: 1, to: 10, def: 5 },
+            { key: "density", label: "Density:", type: "slider", from: 1, to: 10, def: 6 },
+            { key: "size", label: "Character size:", type: "slider", from: 10, to: 32, def: 16 },
+            { key: "glyphs", label: "Characters:", type: "choice", def: "code",
+              choices: [["Code", "code"], ["Binary", "binary"]] },
+            { key: "rain", label: "Color:", type: "choice", def: "#00ff41",
+              choices: [["Green", "#00ff41"], ["Amber", "#ffb000"], ["Cyan", "#00e0ff"],
+                        ["Red", "#ff3030"], ["White", "#e0e0e0"]] },
+        ],
         marquee: [
             { key: "text", label: "Text:", type: "text", def: "Wayland 95" },
             { key: "speed", label: "Speed:", type: "slider", from: 1, to: 10, def: 5 },

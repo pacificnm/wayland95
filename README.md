@@ -416,7 +416,9 @@ up next to the shell first, then on `$PATH`.
     a Settings... dialog for its options, Preview, and Wait: N minutes.
     - **The savers:** Blank Screen, Curves (a sweeping ribbon of colored
       lines), Polygons (bouncing outlines with trails), Scrolling Marquee
-      (your text, colors and speed), and Starfield.
+      (your text, colors and speed), Matrix (digital rain: falling columns of
+      glowing characters, with speed, density, size, characters and color
+      settings), and Starfield.
     - **Starting and stopping:** after the wait with no keyboard or mouse
       input, the desktop shows it over everything. Any key, click or real
       mouse movement brings the desktop back, and that input isn't passed

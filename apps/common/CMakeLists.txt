@@ -45,6 +45,7 @@ qt_add_qml_module(win95ui
         SaverPolygons.qml
         SaverCurves.qml
         SaverMarquee.qml
+        SaverMatrix.qml
     SOURCES
         win95fs.h
         win95fs.cpp

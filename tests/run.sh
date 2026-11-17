@@ -1337,6 +1337,24 @@ suite_screensaver() {
     sleep 1.5; pointer move:300,300 wait:0.1 move:500,500 wait:0.3; shot preview-end
     ! saver_on preview-end; expect_true $? "(a move after that does)" "still showing"
 
+    # the Matrix saver (digital rain): chosen in the settings, it's what shows
+    printf '[ScreenSaver]\nName=matrix\nWait=1\nPassword=false\n' >"$CONFIG/wayland95/settings.ini"; sleep 0.6
+    in_bus gdbus call --session --dest org.wayland95.ScreenSaver --object-path /org/wayland95/ScreenSaver \
+        --method org.wayland95.ScreenSaver.Preview >/dev/null
+    sleep 4; shot matrix
+    local rain dark
+    rain=$(magick "$WORK/$SUITE-matrix.png" -fill black +opaque "#00ff41" -fill white -opaque "#00ff41" -format "%[fx:int(mean*w*h)]" info: 2>/dev/null)
+    dark=$(magick "$WORK/$SUITE-matrix.png" -crop 1280x12+0+788 +repage -fill white +opaque black -format "%[fx:int(100*mean)]" info: 2>/dev/null)
+    [ "${rain:-0}" -gt 300 ] && [ "$(magick "$WORK/$SUITE-matrix.png" -format "%[fx:int(100*mean)]" info:)" -lt 25 ] && [ "${dark:-100}" -lt 60 ]
+    expect_true $? "the Matrix saver: green rain on black, over the taskbar too" "green pixels: $rain; the taskbar's strip $dark% not black"
+    sleep 1.5; shot matrix2
+    [ "$(magick compare -metric AE "$WORK/$SUITE-matrix.png" "$WORK/$SUITE-matrix2.png" null: 2>&1 | cut -d' ' -f1)" -gt 500 ]
+    expect_true $? "and it moves" "two pictures 1.5 s apart are the same"
+    pointer move:300,300 wait:0.1 move:520,480 wait:0.3; shot matrix-end
+    [ "$(pixel matrix-end 640 790)" != 000000 ] || [ "$(pixel matrix-end 100 600)" = 008080 ]
+    expect_true $? "(a move ends it)" "still showing"
+    printf '[ScreenSaver]\nName=blank\nWait=1\nPassword=false\n' >"$CONFIG/wayland95/settings.ini"; sleep 0.6
+
     # held off over D-Bus (browsers, video players)
     holder
     away; sleep 3.5; shot held

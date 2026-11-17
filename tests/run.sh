@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games find repos monitors screen
+#                                  games find repos markdown monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -2540,8 +2540,188 @@ suite_classic() {
     pointer key:Escape
 }
 
+# --- Markdown Editor (win95markdown): a WordPad-style page for .md files -----------------
+# The window is the first one, so its inside starts at 43,55; its toolbar
+# buttons are 23 wide from x 4 (toolbar y 39, format bar y 69).
+start_markdown() { # [FILE]
+    HOME=$MHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        W95_MARKDOWN_DEBUG=1 W95_MARKDOWN_NO_OPEN=1 "$BUILD/win95markdown" "$@" >>"$WORK/$SUITE-markdown.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95markdown)" -ge 1 ] && break; sleep 0.25; done
+    for _ in $(seq 40); do msaid "ready" && break; sleep 0.25; done
+    sleep 0.5
+}
+msaid() { grep -q "markdown: $1" "$WORK/$SUITE-markdown.log"; }
+mwait() { local i; for i in $(seq 40); do msaid "$1" && return 0; sleep 0.25; done; return 1; }
+MX=43; MY=55
+mbtn() { echo "$((MX + 4 + $1)),$((MY + $2))"; } # X-IN-BAR BAR-Y: a toolbar button's middle on screen
+suite_markdown() {
+    say "markdown: the Markdown Editor (win95markdown): open, format, lists, links, tables, the Markdown view, save"
+    [ -x "$BUILD/win95markdown" ] || { bad "win95markdown" "not built"; return; }
+    fresh
+    start_shell || return
+    MHOME=$WORK/home-$SUITE
+    rm -rf "$MHOME"; mkdir -p "$MHOME/Documents"
+    magick -size 120x60 xc:'#3080ff' -fill '#ffd000' -draw 'circle 90,20 100,20' "$MHOME/Documents/sky.png"
+    cat >"$MHOME/Documents/sample.md" <<'MD'
+# Sample Document
+
+Some **bold**, *italic*, ~~struck~~, <u>underlined</u> and `code` text, with a [link](https://example.com).
+
+## Lists
+
+- First item
+- Second item
+  - Nested item
+
+1. One
+2. Two
+
+- [ ] Task to do
+- [x] Task done
+
+> A block quote.
+
+```sh
+echo "a code block"
+```
+
+| Name | Size |
+| --- | ---: |
+| sky.png | 1 KB |
+
+---
+
+![A sky](sky.png)
+MD
+    cp "$MHOME/Documents/sample.md" "$WORK/sample-original.md"
+    start_markdown "$MHOME/Documents/sample.md"
+    [ "$(windows_of win95markdown)" -ge 1 ]; expect_true $? "the Markdown Editor opens a file" "$(tail -3 "$WORK/$SUITE-markdown.log")"
+    query list | grep -q "sample.md - Markdown Editor"; expect_true $? "its title is the file's name" "$(query list | tr '\n' ' ')"
+    away; shot opened
+    expect_pixel "the page is white" opened $((MX + 400)) $((MY + 500)) ffffff
+    # the code block's gray bar, right of its text
+    local cb; cb=$(grep -c "markdown: checkbox" "$WORK/$SUITE-markdown.log")
+    [ "$cb" = 2 ]; expect_true $? "it shows the task list's two check boxes" "$cb check boxes"
+
+    # Ctrl+click on a link opens it (here: logged)
+    local lk; lk=$(grep "markdown: linkat 0 " "$WORK/$SUITE-markdown.log" | tail -1 | awk '{print $(NF-1)","$NF}')
+    pointer keydown:Control_L click:$((MX + ${lk%,*})),$((MY + ${lk#*,})) keyup:Control_L wait:0.3
+    mwait "link https://example.com"; expect_true $? "Ctrl+click on a link opens it" "$(tail -3 "$WORK/$SUITE-markdown.log")"
+    pointer click:$((MX + ${lk%,*} + 2)),$((MY + ${lk#*,})) wait:0.3
+    pointer move:$((MX + ${lk%,*} + 6)),$((MY + ${lk#*,})) wait:0.4; shot hover-link
+    [ "$(grep -c "markdown: link https://example.com" "$WORK/$SUITE-markdown.log")" = 1 ]
+    expect_true $? "(a plain click just puts the cursor there)" "$(grep -c "markdown: link " "$WORK/$SUITE-markdown.log") opened"
+
+    # a check box ticks with a click, and Save keeps it
+    local at; at=$(grep "markdown: checkbox 0 " "$WORK/$SUITE-markdown.log" | tail -1 | awk '{print $(NF-1)","$NF}')
+    pointer click:$((MX + ${at%,*})),$((MY + ${at#*,})) wait:0.3
+    mwait "check "; expect_true $? "clicking a check box ticks it" "$(tail -3 "$WORK/$SUITE-markdown.log")"
+    query list | grep -q "\*sample.md\|sample.md - Markdown" ; true
+    pointer key:ctrl+s wait:0.5
+    mwait "saved .*sample.md"; expect_true $? "Ctrl+S saves it" "$(tail -3 "$WORK/$SUITE-markdown.log")"
+    grep -qx -- "- \[x\] Task to do" "$MHOME/Documents/sample.md"; expect_true $? "the file has it ticked: - [x] Task to do" "$(grep Task "$MHOME/Documents/sample.md")"
+    # and everything else as it was
+    cp "$MHOME/Documents/sample.md" "$WORK/sample-saved.md"
+    sed -i 's/- \[x\] Task to do/- [ ] Task to do/' "$WORK/sample-saved.md"
+    diff -u "$WORK/sample-original.md" "$WORK/sample-saved.md" >"$WORK/$SUITE-sample.diff"
+    expect_true $? "and the rest of the file the same (bold, italic, lists, quote, code, table, rule, picture)" "$(head -30 "$WORK/$SUITE-sample.diff")"
+
+    # --- a new document, typed: a heading (Ctrl+1), bold (Ctrl+B), bullets (the format bar)
+    pointer key:ctrl+n wait:0.5
+    pointer "type:my title" key:ctrl+1 key:Return "type:some " key:ctrl+b type:bold key:ctrl+b "type: text" key:Return
+    pointer click:"$(mbtn 275 69)" type:one key:Return type:two key:Return key:Return "type:the end" wait:0.3
+    away; shot typed
+    pointer key:ctrl+s wait:0.8 type:notes key:Return wait:0.5
+    mwait "saved .*/notes.md"; expect_true $? "Save on a new document asks for a name (Save As) and saves it as .md" "$(tail -3 "$WORK/$SUITE-markdown.log")"
+    printf '# my title\n\nsome **bold** text\n\n- one\n- two\n\nthe end\n' >"$WORK/notes-expected.md"
+    diff -u "$WORK/notes-expected.md" "$MHOME/notes.md" >"$WORK/$SUITE-notes.diff"
+    expect_true $? "what was typed is saved as Markdown: # heading, **bold**, - bullets (Enter twice ends the list)" "$(cat "$WORK/$SUITE-notes.diff")"
+    query list | grep -q "notes.md - Markdown Editor"; expect_true $? "and the title follows the new name" "$(query list | tr '\n' ' ')"
+
+    # --- View > Markdown (Ctrl+M): the Markdown itself, edited there and back on the page
+    pointer key:ctrl+m wait:0.5
+    mwait "view markdown"; expect_true $? "Ctrl+M shows the Markdown" "$(tail -2 "$WORK/$SUITE-markdown.log")"
+    away; shot markdown-view
+    pointer key:ctrl+End key:Return "type:added in markdown" key:ctrl+m wait:0.5
+    mwait "view page"; expect_true $? "and Ctrl+M goes back to the page" "$(tail -2 "$WORK/$SUITE-markdown.log")"
+    pointer key:ctrl+s wait:0.6
+    [ "$(tail -1 "$MHOME/notes.md")" = "added in markdown" ]; expect_true $? "what was typed in the Markdown is on the page (and saved)" "$(tail -3 "$MHOME/notes.md")"
+
+    # --- a link (Ctrl+K) over selected text
+    pointer key:ctrl+End key:shift+Home key:ctrl+k wait:0.5 key:End type:example key:Return wait:0.4
+    mwait "link set https://example"; expect_true $? "Ctrl+K puts a link on the selected text" "$(tail -2 "$WORK/$SUITE-markdown.log")"
+    pointer key:ctrl+s wait:0.6
+    [ "$(tail -1 "$MHOME/notes.md")" = "[added in markdown](https://example)" ]; expect_true $? "saved as [text](address)" "$(tail -2 "$MHOME/notes.md")"
+
+    # --- Insert > Table (the format bar's button), Tab to the next cell
+    pointer key:ctrl+End key:Return click:"$(mbtn 444 69)" wait:0.6
+    away; shot table-dialog
+    pointer key:Return wait:0.5
+    mwait "table 3x3"; expect_true $? "the Table button asks for rows and columns and inserts it" "$(tail -2 "$WORK/$SUITE-markdown.log")"
+    pointer type:name key:Tab type:size key:Tab type:x key:Tab type:alpha key:Tab type:1 wait:0.3
+    away; shot table
+    pointer key:ctrl+s wait:0.6
+    grep -qx "| name | size | x |" "$MHOME/notes.md" && grep -qx "| alpha | 1 |  |" "$MHOME/notes.md" && grep -qx "| --- | --- | --- |" "$MHOME/notes.md"
+    expect_true $? "Tab moves through the cells; it's saved as a Markdown table" "$(tail -6 "$MHOME/notes.md")"
+
+    # --- Find (Ctrl+F)
+    pointer key:ctrl+Home key:ctrl+f wait:0.4 type:two key:Return wait:0.3
+    mwait "found "; expect_true $? "Find finds text on the page" "$(tail -2 "$WORK/$SUITE-markdown.log")"
+    pointer key:Escape wait:0.3
+
+    # --- Reading View: a click on a link opens it (here: logged)
+    pointer click:$((MX + 86)),$((MY + 12)) wait:0.4 key:r wait:0.6
+    mwait "view reading"; expect_true $? "View > Reading View" "$(tail -2 "$WORK/$SUITE-markdown.log")"
+    local la; la=$(grep "markdown: linkat 0 " "$WORK/$SUITE-markdown.log" | tail -1 | awk '{print $(NF-1)","$NF}')
+    pointer click:$((MX + ${la%,*})),$((MY + ${la#*,})) wait:0.4
+    mwait "link https://example\$"; expect_true $? "in Reading View, clicking a link opens it" "$(tail -3 "$WORK/$SUITE-markdown.log")"
+    query close "notes.md - Markdown Editor"; sleep 0.8
+
+    # --- HTML in a file: the page can't keep it, so Save asks first
+    printf '# Notes\n\n<details>\n<summary>More</summary>\n\nHidden text.\n\n</details>\n' >"$MHOME/html.md"
+    cp "$MHOME/html.md" "$WORK/html-original.md"
+    start_markdown "$MHOME/html.md"
+    pointer key:ctrl+End "type: edited" key:ctrl+s wait:0.6
+    mwait "html warning"; expect_true $? "saving a file with HTML in it from the page warns first" "$(tail -2 "$WORK/$SUITE-markdown.log")"
+    away; shot html-warning
+    pointer key:Escape wait:0.4
+    cmp -s "$MHOME/html.md" "$WORK/html-original.md"; expect_true $? "and No leaves the file as it was" "$(cat "$MHOME/html.md")"
+    # undone, the page is the file again: View > Markdown shows it as it is
+    pointer key:ctrl+z wait:0.3 key:ctrl+m wait:0.4 key:ctrl+End "type:kept" key:ctrl+s wait:0.6
+    grep -q "<details>" "$MHOME/html.md" && grep -q "kept" "$MHOME/html.md"
+    expect_true $? "saved from View > Markdown, the HTML stays as typed" "$(cat "$MHOME/html.md")"
+    cp "$MHOME/html.md" "$WORK/html-kept.md"
+    pointer key:ctrl+m wait:0.4 key:ctrl+s wait:0.6
+    cmp -s "$MHOME/html.md" "$WORK/html-kept.md" && [ "$(grep -c "markdown: html warning" "$WORK/$SUITE-markdown.log")" = 1 ]
+    expect_true $? "unchanged on the page, Save writes the file back as it was (no warning)" "$(cat "$MHOME/html.md")"
+    query close "html.md - Markdown Editor"; sleep 0.5
+    for _ in $(seq 20); do [ "$(windows_of win95markdown)" -eq 0 ] && break; sleep 0.25; done
+
+    # --- the file manager opens .md files in it
+    HOME=$MHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        W95_MARKDOWN_DEBUG=1 W95_MARKDOWN_NO_OPEN=1 "$BUILD/win95files" "$MHOME/Documents" --select sample.md >>"$WORK/$SUITE-markdown.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95files)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1
+    pointer key:Return
+    for _ in $(seq 40); do [ "$(windows_of win95markdown)" -ge 1 ] && break; sleep 0.25; done
+    [ "$(windows_of win95markdown)" -ge 1 ]; expect_true $? "the file manager opens a .md file in the Markdown Editor" "$(query list | tr '\n' ' ')"
+    query list | sed -n 's/^\([^|]*\)|win95markdown|.*/\1/p' | while read -r t; do query close "$t"; done
+    query list | sed -n 's/^\([^|]*\)|win95files|.*/\1/p' | while read -r t; do query close "$t"; done
+    sleep 0.6
+
+    # --- Start > Programs > Accessories > Markdown Editor
+    pointer key:ctrl+Escape wait:0.6 key:p wait:0.5 key:a wait:0.5
+    away; shot start-accessories
+    pointer key:m
+    for _ in $(seq 40); do [ "$(windows_of win95markdown)" -ge 1 ] && break; sleep 0.25; done
+    [ "$(windows_of win95markdown)" -ge 1 ]; expect_true $? "Start > Programs > Accessories > Markdown Editor starts it" "$(query list | tr '\n' ' ')"
+    query list | grep -q "Untitled - Markdown Editor"; expect_true $? "with an Untitled document" "$(query list | tr '\n' ' ')"
+}
+
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

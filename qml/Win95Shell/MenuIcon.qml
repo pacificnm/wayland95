@@ -223,6 +223,23 @@ Canvas {
             for (var r = 0; r < 5; ++r)
                 frame(8 + r * 4, 1, 2, 6, "#c0c0c0"); // spiral rings
             break;
+        case "markdown":
+            // a page with a big M and a down arrow (the Markdown mark), a
+            // pen across its corner
+            frame(5, 2, 21, 28, "#ffffff");
+            rect(8, 6, 15, 1, "#808080");
+            ctx.strokeStyle = "#000080";
+            ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.moveTo(9, 22); ctx.lineTo(9, 11); ctx.lineTo(13, 16); ctx.lineTo(17, 11); ctx.lineTo(17, 22); ctx.stroke();
+            ctx.fillStyle = "#000080";
+            ctx.beginPath(); ctx.moveTo(19, 18); ctx.lineTo(25, 18); ctx.lineTo(22, 22); ctx.closePath(); ctx.fill();
+            rect(21, 11, 2, 8, "#000080");
+            rect(8, 25, 15, 1, "#808080");
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1;
+            ctx.fillStyle = "#e0a000";
+            ctx.beginPath(); ctx.moveTo(30, 18); ctx.lineTo(32, 20); ctx.lineTo(22, 30); ctx.lineTo(19, 31); ctx.lineTo(20, 28); ctx.closePath(); ctx.fill(); ctx.stroke();
+            break;
         case "doc":
             page(7, 2, 19, 28, 7);
             break;

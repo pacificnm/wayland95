@@ -610,11 +610,21 @@ QString DirectoryModel::openFile(const QString &path)
     }
     QString kind, type;
     describeFile(path, false, &kind, &type);
+    // our own programs: next to this one (a build tree) or on the PATH
+    auto ours = [](const QString &program) {
+        const QString beside = QDir(QCoreApplication::applicationDirPath()).filePath(program);
+        return QFileInfo(beside).isExecutable() ? beside : QStandardPaths::findExecutable(program);
+    };
+    static const QStringList markdown{QStringLiteral("md"), QStringLiteral("markdown"), QStringLiteral("mdown"), QStringLiteral("mkd")};
+    if (markdown.contains(info.suffix().toLower())) {
+        // Markdown opens formatted, in the Markdown Editor
+        const QString editor = ours(QStringLiteral("win95markdown"));
+        if (!editor.isEmpty() && QProcess::startDetached(editor, {path}, info.absolutePath()))
+            return QString();
+    }
     if (kind == QLatin1String("text")) {
         // plain text opens in our Notepad, as in Win95
-        QString notepad = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("win95notepad"));
-        if (!QFileInfo(notepad).isExecutable())
-            notepad = QStandardPaths::findExecutable(QStringLiteral("win95notepad"));
+        const QString notepad = ours(QStringLiteral("win95notepad"));
         if (!notepad.isEmpty() && QProcess::startDetached(notepad, {path}, info.absolutePath()))
             return QString();
     }

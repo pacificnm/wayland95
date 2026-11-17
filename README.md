@@ -28,7 +28,7 @@ compositor in [docs/migration.md](docs/migration.md).
   server, the tray watcher, the update check. (The rest of `src/` is the
   old Qt compositor, kept only for the tests that compare the two until
   it's removed.)
-- `apps/` - the programs (File Manager, Notepad, Terminal, Control Panel,
+- `apps/` - the programs (File Manager, Notepad, Markdown Editor, Terminal, Control Panel,
   System Monitor, Volume, the file dialogs portal, Disk Image Writer) and
   `apps/common`, the shared Win95 controls.
 - `session/` - the login session (`wayland95-session`) and its files.
@@ -111,7 +111,7 @@ submenus:
   `.desktop` files in `~/.local/share/applications`, Flatpak's exports and
   `XDG_DATA_DIRS`, and the menu updates by itself when programs are
   installed or removed. Wayland 95's own apps go in the same folders
-  (Notepad in Accessories, System Monitor in System Tools, Volume Control
+  (Notepad and the Markdown Editor in Accessories, System Monitor in System Tools, Volume Control
   in Multimedia), and File Manager and Terminal sit at the bottom.
   Programs that run in a terminal (htop, vim...) open in Wayland 95's
   Terminal (`win95terminal -e ...`). A folder too long for the screen
@@ -252,6 +252,35 @@ up next to the shell first, then on `$PATH`.
   and saved as UTF-8. A file with Windows (CRLF) line endings keeps them.
   Saves are atomic, so a failed save never leaves a half-written file.
   Usage: `win95notepad [file]`.
+- **Markdown Editor** (`win95markdown`, [apps/markdown/](apps/markdown/)):
+  Start > Programs > Accessories > Markdown Editor, or double-click a `.md`
+  file in the file manager. A WordPad-style window for Markdown files: the
+  page shows the document formatted, and you edit it there.
+  - **Format bar:** the paragraph style (Normal, Heading 1-6, Code Block),
+    Bold, Italic, Underline, Strikethrough, Code, Link; Bullets, Numbering,
+    Check List, Decrease/Increase Indent, Block Quote; Picture, Table,
+    Horizontal Line. With nothing selected, a format applies to what you
+    type next, as in WordPad. Keys: Ctrl+B/I/U, Ctrl+` (code), Ctrl+K
+    (link), Ctrl+0 (Normal), Ctrl+1/2/3 (headings); Tab and Shift+Tab move
+    list items in and out and go between table cells; Enter on an empty
+    list item ends the list.
+  - **The page:** check boxes tick with a click; Ctrl+click opens a link (a
+    link to another `.md` file opens it here); the Table menu adds and
+    removes rows and columns; pictures show (relative to the file).
+  - **View:** the Toolbar, Format Bar and Status Bar (a button's help, the
+    link under the mouse, the word count); Page; Reading View (read-only,
+    a click opens a link); Markdown (Ctrl+M) shows and edits the Markdown
+    itself. An unchanged file shows exactly as it is on disk; saved from
+    there, it's kept as typed.
+  - **Saving:** our own Markdown writer (Qt's loses code blocks, joins
+    lists and re-wraps lines): `**bold**`, `*italic*`, `~~struck~~`,
+    `<u>underline</u>`, `` `code` ``, fenced code blocks, `-`/`1.`/`- [ ]`
+    lists, `>` quotes, tables, `---` and pictures. Each paragraph is
+    written on one line, so a file whose paragraphs were wrapped by hand
+    comes out unwrapped. HTML in a file (`<details>`, `<img>`...) can't be
+    kept by the page, so saving such a file from the page asks first (the
+    Markdown view keeps it). File > Export as Web Page saves an `.html` copy.
+    Usage: `win95markdown [file]`.
 - **Image Writer** (`win95imagewriter`, [apps/imagewriter/](apps/imagewriter/)):
   Start > Programs > System Tools > Image Writer, or `win95imagewriter
   IMAGE`. Like KDE's ISO Image Writer: choose a disk image (a Linux `.iso`,

@@ -97,8 +97,8 @@ void Launcher::startSession()
             seen.insert(f.fileName());
             const DesktopEntry e = DesktopEntry::read(f.absoluteFilePath());
             // autostart entries are often NoDisplay (not for menus); Hidden
-            // means "turned off"
-            if (!e.application || e.hidden || e.exec.isEmpty())
+            // (or GNOME's X-GNOME-Autostart-enabled=false) means "turned off"
+            if (!e.application || e.hidden || e.autostartOff || e.exec.isEmpty())
                 continue;
             if (!e.onlyShowIn.isEmpty() && !e.onlyShowIn.contains(QLatin1String("Wayland95")))
                 continue;

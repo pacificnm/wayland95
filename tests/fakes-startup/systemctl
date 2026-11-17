@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+# Stand-in systemctl for tests/run.sh's startup suite: made-up services in
+# $FAKE_SYSTEMD/state.json ({"system": {UNIT: {...}}, "user": {...},
+# "default": TARGET}), never this computer's. Every call goes to
+# $FAKE_SYSTEMD/log. A file $FAKE_SYSTEMD/deny makes changes to the
+# computer's services fail as a cancelled password box does.
+import json, os, sys
+
+home = os.environ["FAKE_SYSTEMD"]
+state_path = os.path.join(home, "state.json")
+args = sys.argv[1:]
+with open(os.path.join(home, "log"), "a") as log:
+    log.write("systemctl " + " ".join(args) + "\n")
+state = json.load(open(state_path))
+
+user = "--user" in args
+json_out = False
+rest = []
+skip = False
+for i, a in enumerate(args):
+    if skip:
+        skip = False
+        continue
+    if a in ("--user", "--no-pager", "--full", "--all", "--"):
+        continue
+    if a == "-o":
+        json_out = args[i + 1] == "json"
+        skip = True
+        continue
+    if a.startswith("--type=") or a.startswith("--lines="):
+        continue
+    if a == "-p":
+        skip = True
+        continue
+    rest.append(a)
+units = state["user" if user else "system"]
+cmd, names = rest[0], rest[1:]
+
+def save():
+    json.dump(state, open(state_path, "w"), indent=1)
+
+if cmd == "list-unit-files":
+    print(json.dumps([{"unit_file": n, "state": u["file"], "preset": u.get("preset")} for n, u in sorted(units.items())]))
+elif cmd == "list-units":
+    # loaded ones only, as systemd: running, failed, or wanted by something
+    print(json.dumps([{"unit": n, "load": "loaded", "active": u["active"], "sub": u["sub"], "description": u["description"]}
+                      for n, u in sorted(units.items()) if u["active"] != "inactive" or u["file"] == "enabled"]))
+elif cmd == "show":
+    for n in names:
+        print("Id=" + n)
+        print("Description=" + units.get(n, {}).get("description", ""))
+        print()
+elif cmd == "status":
+    u = units.get(names[0])
+    print("* %s - %s\n     Loaded: loaded (/usr/lib/systemd/system/%s; %s)\n     Active: %s (%s)\n\nNov 17 09:00:00 test fake[1]: Started %s."
+          % (names[0], u["description"], names[0], u["file"], u["active"], u["sub"], u["description"]))
+    sys.exit(0 if u["active"] == "active" else 3)
+elif cmd == "get-default":
+    print(state["default"])
+elif cmd == "set-default":
+    if os.path.exists(os.path.join(home, "deny")):
+        print("Failed to set default target: Access denied", file=sys.stderr)
+        sys.exit(1)
+    state["default"] = names[0]
+    save()
+elif cmd in ("start", "stop", "restart", "enable", "disable", "mask", "unmask"):
+    if not user and os.path.exists(os.path.join(home, "deny")):
+        print("Failed to %s %s: Access denied" % (cmd, names[0]), file=sys.stderr)
+        sys.exit(1)
+    for n in names:
+        u = units.get(n)
+        if u is None:
+            print("Failed to %s %s: Unit %s not found." % (cmd, n, n), file=sys.stderr)
+            sys.exit(5)
+        if cmd in ("start", "restart"):
+            if u["file"] == "masked":
+                print("Failed to start %s: Unit %s is masked." % (n, n), file=sys.stderr)
+                sys.exit(1)
+            u["active"], u["sub"] = "active", "running"
+        elif cmd == "stop":
+            u["active"], u["sub"] = "inactive", "dead"
+        elif cmd == "enable":
+            u["file"] = "enabled"
+        elif cmd == "disable":
+            u["file"] = "disabled"
+        elif cmd == "mask":
+            u["was"] = u["file"]
+            u["file"] = "masked"
+        elif cmd == "unmask":
+            u["file"] = u.pop("was", "disabled")
+    save()
+else:
+    print("stand-in systemctl: %s isn't done here" % cmd, file=sys.stderr)
+    sys.exit(1)

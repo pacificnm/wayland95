@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games find repos markdown monitors screen
+#                                  games find repos markdown startup monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -1213,6 +1213,7 @@ suite_session() {
     printf '[Desktop Entry]\nType=Application\nName=Auto\nExec=%s\n' "$BUILD/win95notepad" >"$CONFIG/autostart/w95-yes.desktop"
     printf '[Desktop Entry]\nType=Application\nName=Off\nExec=%s\nHidden=true\n' "$BUILD/win95files" >"$CONFIG/autostart/w95-hidden.desktop"
     printf '[Desktop Entry]\nType=Application\nName=Other\nExec=%s\nOnlyShowIn=GNOME;\n' "$BUILD/win95sysmon" >"$CONFIG/autostart/w95-gnome.desktop"
+    printf '[Desktop Entry]\nType=Application\nName=Off GNOME way\nExec=%s\nX-GNOME-Autostart-enabled=false\n' "$BUILD/win95volume" >"$CONFIG/autostart/w95-gnome-off.desktop"
     start_probe A qt cc0000 || return
     WITH_PACKAGEKIT=1 start_shell --desktop-session || return
     AGENT=$(in_bus gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
@@ -1221,8 +1222,8 @@ suite_session() {
     # autostart
     for _ in $(seq 20); do [ "$(windows_of win95notepad)" -ge 1 ] && break; sleep 0.5; done
     [ "$(windows_of win95notepad)" -ge 1 ]; expect_true $? "autostart: the session starts its programs" "$(query list | tr '\n' ' ')"
-    [ "$(windows_of win95files)" -eq 0 ] && [ "$(windows_of win95sysmon)" -eq 0 ]
-    expect_true $? "(not one turned off, nor one only for another desktop)" "$(query list | tr '\n' ' ')"
+    [ "$(windows_of win95files)" -eq 0 ] && [ "$(windows_of win95sysmon)" -eq 0 ] && [ "$(windows_of win95volume)" -eq 0 ]
+    expect_true $? "(not one turned off, by Hidden or GNOME's X-GNOME-Autostart-enabled, nor one only for another desktop)" "$(query list | tr '\n' ' ')"
     shell_said "Session: would tell systemd and D-Bus WAYLAND_DISPLAY=$SOCKET"
     expect_true $? "it would tell systemd where the display is (only logged: the tests run inside your session)" "$(grep Session: "$WORK/$SUITE-shell.log")"
     query list | sed -n 's/^\([^|]*\)|win95notepad|.*/\1/p' | while read -r t; do query close "$t"; done; sleep 0.5
@@ -2720,8 +2721,130 @@ MD
     query list | grep -q "Untitled - Markdown Editor"; expect_true $? "with an Untitled document" "$(query list | tr '\n' ' ')"
 }
 
+# --- Control Panel > Start Up: autostart programs and systemd services -----------------
+# systemctl and systemd-analyze are stand-ins (tests/fakes-startup) with
+# made-up services in $FAKE_SYSTEMD: nothing of this computer's is changed.
+startup_setup() {
+    FAKE_SYSTEMD=$WORK/systemd; SXDG=$WORK/xdg-$SUITE
+    rm -rf "$FAKE_SYSTEMD" "$SXDG"; mkdir -p "$FAKE_SYSTEMD" "$SXDG/autostart" "$SXDG/data/applications" "$CONFIG/autostart"
+    cat >"$FAKE_SYSTEMD/state.json" <<'JSON'
+{"default": "graphical.target",
+ "system": {
+  "bluetooth.service": {"file": "disabled", "active": "inactive", "sub": "dead", "description": "Bluetooth service"},
+  "broken.service": {"file": "enabled", "active": "failed", "sub": "failed", "description": "Broken Daemon"},
+  "cups.service": {"file": "enabled", "active": "active", "sub": "running", "description": "CUPS Scheduler"},
+  "dbus.service": {"file": "static", "active": "active", "sub": "running", "description": "D-Bus System Message Bus"},
+  "fake-slow.service": {"file": "enabled", "active": "active", "sub": "exited", "description": "Slow Thing"},
+  "NetworkManager.service": {"file": "enabled", "active": "active", "sub": "running", "description": "Network Manager"}},
+ "user": {
+  "pipewire.service": {"file": "enabled", "active": "active", "sub": "running", "description": "PipeWire Multimedia Service"},
+  "syncthing.service": {"file": "disabled", "active": "inactive", "sub": "dead", "description": "Syncthing - Open Source Continuous File Synchronization"}}}
+JSON
+    printf '[Desktop Entry]\nType=Application\nName=Clipboard Helper\nExec=clip-helper --tray\n' >"$SXDG/autostart/clip.desktop"
+    printf '[Desktop Entry]\nType=Application\nName=KDE Only Thing\nExec=kthing\nOnlyShowIn=KDE;\n' >"$SXDG/autostart/kthing.desktop"
+    printf '[Desktop Entry]\nType=Application\nName=My Backup\nExec=backup --quiet\n' >"$CONFIG/autostart/backup.desktop"
+    printf '[Desktop Entry]\nType=Application\nName=Test Calculator\nExec=testcalc %%U\nIcon=accessories-calculator\nCategories=Utility;\n' \
+        >"$SXDG/data/applications/testcalc.desktop"
+}
+start_startup() { # [TAB]
+    XDG_CONFIG_HOME=$CONFIG XDG_CONFIG_DIRS=$SXDG XDG_DATA_DIRS=$SXDG/data XDG_DATA_HOME=$SXDG/data-home \
+        WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland PATH=$REPO/tests/fakes-startup:$PATH FAKE_SYSTEMD=$FAKE_SYSTEMD \
+        "$BUILD/win95control" --applet startup --tab "${1:-0}" >>"$WORK/$SUITE-control.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95control)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1
+}
+syslog() { grep -q -- "$1" "$FAKE_SYSTEMD/log" 2>/dev/null; }
+sywait() { local i; for i in $(seq 30); do syslog "$1" && return 0; sleep 0.2; done; return 1; }
+unit_field() { python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); print(s[sys.argv[2]][sys.argv[3]][sys.argv[4]])' "$FAKE_SYSTEMD/state.json" "$@"; }
+BOOT_TEXT_X=80; BOOT_TEXT_Y=460 # (Boot: "A text console only")
+suite_startup() {
+    say "startup: Control Panel > Start Up with stand-in systemctl: programs at login, services, boot"
+    [ -x "$BUILD/win95control" ] || { bad "win95control" "not built"; return; }
+    fresh
+    start_shell || return
+    startup_setup
+    start_startup 0
+    [ "$(windows_of win95control)" -ge 1 ]; expect_true $? "Control Panel > Start Up opens" "$(tail -3 "$WORK/$SUITE-control.log")"
+    away; shot programs
+    local auto=$CONFIG/autostart
+    # --- Programs: the list is Clipboard Helper (system), KDE Only Thing, My Backup (yours), 20 apart from y 144
+    pointer click:69,144 wait:0.5
+    grep -qx "Hidden=true" "$auto/clip.desktop" 2>/dev/null && grep -qx "Exec=clip-helper --tray" "$auto/clip.desktop"
+    expect_true $? "unticking one of the system's turns it off just for you (a copy with Hidden=true)" "$(cat "$auto/clip.desktop" 2>&1)"
+    [ -f "$SXDG/autostart/clip.desktop" ] && ! grep -q Hidden "$SXDG/autostart/clip.desktop"
+    expect_true $? "(the system's file is left alone)" "$(cat "$SXDG/autostart/clip.desktop")"
+    pointer click:69,144 wait:0.5
+    grep -qx "Hidden=false" "$auto/clip.desktop"; expect_true $? "ticking it again turns it back on" "$(cat "$auto/clip.desktop")"
+    pointer click:69,184 wait:0.5
+    grep -qx "Hidden=true" "$auto/backup.desktop" && grep -qx "Exec=backup --quiet" "$auto/backup.desktop"
+    expect_true $? "unticking your own keeps it, turned off" "$(cat "$auto/backup.desktop")"
+    # Edit... (My Backup, still selected): a new name
+    pointer click:200,184 click:518,473 wait:0.6 key:ctrl+a "type:nightly backup" key:Return wait:0.5
+    grep -qx "Name=nightly backup" "$auto/backup.desktop" && grep -qx "Exec=backup --quiet" "$auto/backup.desktop"
+    expect_true $? "Edit... renames it" "$(cat "$auto/backup.desktop")"
+    # Add...: one of the installed programs (Test Calculator, the only one)
+    pointer click:443,473 wait:0.8
+    away; shot add
+    pointer click:200,192 wait:0.3 key:Return wait:0.6
+    grep -qx "Exec=testcalc %U" "$auto/testcalc.desktop" 2>/dev/null && grep -qx "Hidden=false" "$auto/testcalc.desktop"
+    expect_true $? "Add... puts an installed program in, as the menu starts it" "$(cat "$auto/testcalc.desktop" 2>&1)"
+    away; shot programs-added
+    query close "Start Up Properties"; sleep 0.6
+
+    # --- Services: Find leaves one row at y 148; Start 88, Stop 159, Restart 228, Properties 308 (y 473)
+    start_startup 1
+    sywait "list-units"; expect_true $? "the Services tab asks systemctl for the computer's services" "$(cat "$FAKE_SYSTEMD/log")"
+    pointer click:430,103 type:bluetooth wait:0.4 click:69,148 wait:0.8
+    sywait "enable -- bluetooth.service" && [ "$(unit_field system bluetooth.service file)" = enabled ]
+    expect_true $? "ticking a service: systemctl enable (it starts with the computer)" "$(tail -3 "$FAKE_SYSTEMD/log")"
+    ! grep -q "user" <(grep "enable -- bluetooth" "$FAKE_SYSTEMD/log"); expect_true $? "(the computer's, not --user)" "$(grep bluetooth "$FAKE_SYSTEMD/log")"
+    pointer click:150,148 click:88,473 wait:0.8
+    [ "$(unit_field system bluetooth.service active)" = active ]; expect_true $? "Start starts it" "$(tail -3 "$FAKE_SYSTEMD/log")"
+    away; shot services-started
+    pointer click:430,103 key:ctrl+a type:networkmanager wait:0.4 click:150,148 click:159,473 wait:0.6
+    away; shot important
+    ! syslog "stop -- NetworkManager.service"; expect_true $? "stopping something the desktop needs (NetworkManager) asks first" "$(tail -3 "$FAKE_SYSTEMD/log")"
+    pointer key:Escape wait:0.4
+    ! syslog "stop -- NetworkManager.service" && [ "$(unit_field system NetworkManager.service active)" = active ]
+    expect_true $? "and No leaves it running" "$(tail -3 "$FAKE_SYSTEMD/log")"
+    : >"$FAKE_SYSTEMD/deny"
+    pointer click:430,103 key:ctrl+a type:cups wait:0.4 click:150,148 click:159,473 wait:0.8
+    away; shot denied
+    [ "$(unit_field system cups.service active)" = active ]; expect_true $? "a refused password: it stays running, and says why" "$(tail -3 "$FAKE_SYSTEMD/log")"
+    pointer key:Return wait:0.4
+    rm -f "$FAKE_SYSTEMD/deny"
+    pointer click:150,148 click:308,473 wait:1
+    for _ in $(seq 20); do query list | grep -q "cups Properties" && break; sleep 0.25; done
+    query list | grep -q "cups Properties"; expect_true $? "Properties shows systemctl status in a window" "$(query list | tr '\n' ' ')"
+    away; shot status
+    query close "cups Properties"; sleep 0.5
+    pointer click:430,103 key:ctrl+a type:bluetooth wait:0.4 click:150,148,right wait:0.4 key:n wait:0.8
+    [ "$(unit_field system bluetooth.service file)" = masked ]; expect_true $? "right-click > Never Start masks it" "$(tail -2 "$FAKE_SYSTEMD/log")"
+    query close "Start Up Properties"; sleep 0.6
+
+    # --- My Services: systemctl --user, no password
+    start_startup 2
+    sywait "--user --no-pager -o json list-units"; expect_true $? "My Services asks systemctl --user" "$(tail -3 "$FAKE_SYSTEMD/log")"
+    pointer click:430,103 type:syncthing wait:0.4 click:150,148 click:88,473 wait:0.8
+    syslog "systemctl --user --no-pager start -- syncthing.service" && [ "$(unit_field user syncthing.service active)" = active ]
+    expect_true $? "Start starts your own (systemctl --user start)" "$(tail -3 "$FAKE_SYSTEMD/log")"
+    query close "Start Up Properties"; sleep 0.6
+
+    # --- Boot
+    start_startup 3
+    sywait "systemd-analyze --no-pager blame"; expect_true $? "Boot shows how long starting took and what was slowest" "$(tail -3 "$FAKE_SYSTEMD/log")"
+    away; shot boot
+    pointer click:$BOOT_TEXT_X,$BOOT_TEXT_Y wait:0.5
+    away; shot boot-warning
+    pointer key:Return wait:0.4 click:610,514 wait:0.8
+    [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["default"])' "$FAKE_SYSTEMD/state.json")" = multi-user.target ]
+    expect_true $? "a text console, confirmed and applied: systemctl set-default multi-user.target" "$(tail -3 "$FAKE_SYSTEMD/log")"
+    query close "Start Up Properties"; sleep 0.6
+}
+
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

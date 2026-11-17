@@ -267,6 +267,16 @@ Canvas {
             rect(2, 3, 3, 21, "#a0a0a0"); // the bracket
             rect(15, 17, 13, 2, "#c0c0c0");
             break;
+        case "startup":
+            // a monitor with a green "go" arrow on it, and a power button
+            monitor("#008080");
+            ctx.fillStyle = "#00e000";
+            ctx.beginPath(); ctx.moveTo(12, 6); ctx.lineTo(22, 11); ctx.lineTo(12, 16); ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = "#004000"; ctx.lineWidth = 1; ctx.stroke();
+            ctx.strokeStyle = "#000000"; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(24, 27.5, 2.5, -1.1, 4.2); ctx.stroke();
+            rect(23.3, 24, 1.5, 3, "#000000");
+            break;
         case "services":
             // two rack servers, lights on, and a cable between them
             for (var su = 0; su < 2; ++su) {

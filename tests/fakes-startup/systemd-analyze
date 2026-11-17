@@ -1,0 +1,12 @@
+#!/bin/sh
+# Stand-in systemd-analyze for tests/run.sh's startup suite (made-up times)
+echo "systemd-analyze $*" >>"${FAKE_SYSTEMD:?}/log"
+case " $* " in
+    *" blame "*)
+        echo "     12.345s fake-slow.service"
+        echo "      2.100s NetworkManager.service"
+        echo "       480ms cups.service" ;;
+    *)
+        echo "Startup finished in 3.210s (kernel) + 9.876s (userspace) = 13.086s"
+        echo "graphical.target reached after 9.800s in userspace." ;;
+esac

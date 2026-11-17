@@ -692,6 +692,31 @@ up next to the shell first, then on `$PATH`.
     maximize, minimize, restore, menu popup, the four message-box types,
     Empty Recycle Bin and the default beep (the terminal bell). Sounds play
     through `pw-play`, falling back to `paplay`, then `aplay` for .wav files.
+  - **Start Up:** what starts with the computer and when you log in
+    ([apps/control/src/startup.cpp](apps/control/src/startup.cpp)).
+    - **Programs:** the autostart programs (`~/.config/autostart`, and
+      the system's in `/etc/xdg/autostart`), each with a check box. The
+      system's are turned off just for you, by a copy in
+      `~/.config/autostart` with `Hidden=true`; Reset puts one back. Add...
+      picks an installed program or takes a name and command; Edit...
+      changes them; Remove takes yours out. Ones meant for another desktop
+      are listed as such. The session skips entries turned off with
+      `Hidden=true` or GNOME's `X-GNOME-Autostart-enabled=false`.
+    - **Services** and **My Services:** systemd's services, the
+      computer's and your own (`systemctl --user`), with Show (all,
+      starting with the computer, running, failed) and Find. The check box
+      is "starts with the computer" (enable/disable); Start, Stop, Restart
+      and Properties (`systemctl status`); right-click for Never Start
+      (mask) and back. Stopping or turning off one the desktop, network or
+      login depend on asks first. The computer's ask for an
+      administrator's password: `systemctl` itself asks polkit, which
+      shows the desktop's password box (no helper of ours runs as root).
+      The `app-...@autostart` services systemd makes for other desktops'
+      autostart are left out (Programs has them).
+    - **Boot:** how long starting took and what took longest
+      (`systemd-analyze`), and whether the computer starts to the desktop
+      or a text console (`systemctl set-default`, with a warning).
+    - Not here (yet): the boot menu (GRUB) and kernel options.
   - **Taskbar:** Start menu size (Small is Windows 95's own; Medium, the
     default, and Large are 25% and 50% bigger: rows, icons and text), Show
     Clock and 24-hour clock, and which icons the

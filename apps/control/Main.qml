@@ -53,6 +53,8 @@ Window {
           description: "Turns servers and programming languages on and off (SSH, PostgreSQL, Python, Node.js), and changes their settings." },
         { id: "sounds", name: "Sounds", file: "SoundsApplet.qml",
           description: "Changes the sounds played for desktop events." },
+        { id: "startup", name: "Start Up", file: "StartupApplet.qml",
+          description: "Chooses the programs that start when you log in and the services that start with the computer." },
         { id: "system", name: "System", file: "SystemApplet.qml",
           description: "Shows information about your computer and how it's running." },
         { id: "taskbar", name: "Taskbar", file: "TaskbarApplet.qml",

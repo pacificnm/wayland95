@@ -16,6 +16,8 @@ struct DesktopEntry
     bool terminal = false;
     bool noDisplay = false;
     bool hidden = false;
+    // X-GNOME-Autostart-enabled=false: an autostart entry that's turned off
+    bool autostartOff = false;
 
     static DesktopEntry read(const QString &path, const QString &id = QString());
     // should appear in menus: an application, not hidden, runnable

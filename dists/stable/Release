@@ -1,24 +1,24 @@
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Tue, 17 Nov 2026 00:04:34 +0000
+Date: Tue, 17 Nov 2026 04:51:52 +0000
 Description: Wayland 95 updates
 Label: Wayland 95
 Origin: Wayland 95
 Suite: stable
 MD5Sum:
- 817ad42b35a7474b56213bb67111b7f7             1486 Release
- c70e7c86e9feabfdd431dce45d5a353d             6242 main/binary-amd64/Packages
- 56a43e4b74d32724595d3dfd216831aa             1653 main/binary-amd64/Packages.gz
+ 10a79ae13c6bdcde703c1808b739f388             1486 Release
+ c480c9d4ecabf9622d5819a851652397             6460 main/binary-amd64/Packages
+ ca1ee99060eb591e293e7fb9547b3d04             1654 main/binary-amd64/Packages.gz
 SHA1:
- 17d39c348ae274b115e6c4650caea172ae528ee3             1486 Release
- ab6e842972644332b37347f63dbaf0aa983adf2c             6242 main/binary-amd64/Packages
- fc0120b8b517b7cf5c9482dd7f19da06fed5d1b1             1653 main/binary-amd64/Packages.gz
+ 2fef209b468872dab9305e14613cef470a25b492             1486 Release
+ f35070871535eba4837e58e31eba22cc7791dc35             6460 main/binary-amd64/Packages
+ 2be7a4da47ae4a67a61f562300ec2b8440e4103a             1654 main/binary-amd64/Packages.gz
 SHA256:
- 6bedd4cf26435948adf128f972854beb557f983ddbaaed5fc4f675268dbea391             1486 Release
- f453b0148612e10d1f3b12959aa8e2c21c93de66b2618316f2cbf5ddb0cc409c             6242 main/binary-amd64/Packages
- a8fb9da6de60d5a46e2cd59c84c4f8eb9c8f47b50e48f9c254bad186dda2f4d3             1653 main/binary-amd64/Packages.gz
+ 71ada0df0b0e864bfe4a099a3f15bce1757bba9ac2c003fc1dec26495c72545c             1486 Release
+ a7b706c1426c4907d34d60b1e176f6592e1e3fef5158403c895c5d3192e8e15e             6460 main/binary-amd64/Packages
+ 4cbc5fb2a7a75f50ac676ef49498c7f2ed42e009e51b2bddc72bb5b8689a128a             1654 main/binary-amd64/Packages.gz
 SHA512:
- dd75719dca43a2c34c6325bce18b7c2727f223ca8224c07a84b510d2a68f1e7d01338575ad7ae12d9532ea11de2bc1416069a42ed662d42d2ccef3fba2439616             1486 Release
- d972c48b5efe7c06787a1157d1f71525cae6aa297bcb0c136baee1c614d6c31c216278fbedebeb6c404484a806d2c6a6d9d61de36ba2f9124160b890f66283b7             6242 main/binary-amd64/Packages
- 2b3efa744a2edd5cb68eec4d7aaf6d432fd6acd3e620c02d3b4055ad9fe76dccde24c3e2581407eb169bef2558a09158cac64f7d5c5c33118a5c9e4b981549dc             1653 main/binary-amd64/Packages.gz
+ c536117fe7b1de2a4496010cd8b2df5d722089f82e1b799a3c718d056242b5b30eb8853196e39fbd72cfcbaae6cab9e676c7ca92bb7d2649831063d863c5dc54             1486 Release
+ ac146c40797d07d29fd8ec1744f9d8f427d5916632bff2822e2c5ed6e2f504cea1ae6b949d664385d7269110487dde0b4af5abbc30e090a9607feb163101dbf9             6460 main/binary-amd64/Packages
+ 452233540aec0053329aefd588cbd36270d204a357bc3fb41d9f8b1cc633ae9fd573cbd1ded90d4bcce54ce42d24e1e4322f10b5709f08be275aa79bfa2821a0             1654 main/binary-amd64/Packages.gz

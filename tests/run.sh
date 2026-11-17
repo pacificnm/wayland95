@@ -436,6 +436,23 @@ suite_x11() {
     n=$(pmark X); pointer click:$((XX + 100)),$((XY + 50)),right wait:0.6 key:Down key:Down key:Return
     pexpect "its menu, by keyboard" X "$n" "menu Second"
 
+    # an X11 program changing its class (WM_CLASS) once its window is up, as
+    # LibreOffice does: the window list follows (this once ended the desktop)
+    DISPLAY=$XDISPLAY python3 - <<'PY' 2>"$WORK/$SUITE-class.log"
+import subprocess, sys
+wid = None
+for line in subprocess.run(["xprop", "-root", "_NET_CLIENT_LIST"], capture_output=True, text=True).stdout.split("#")[-1].split(","):
+    w = line.strip()
+    if w and "= \"X\"" in subprocess.run(["xprop", "-id", w, "WM_NAME"], capture_output=True, text=True).stdout:
+        wid = w
+if not wid:
+    sys.exit("no X11 window titled X")
+sys.exit(subprocess.run(["xprop", "-id", wid, "-f", "WM_CLASS", "8s", "-set", "WM_CLASS", "renamed95"]).returncode)
+PY
+    sleep 0.6
+    kill -0 "$COMP_PID" 2>/dev/null; expect_true $? "an X11 window changing its class: the desktop keeps running" "the compositor ended: $(cat "$WORK/$SUITE-class.log")"
+    query list | grep -q "^X|renamed95|"; expect_true $? "and the window list has the new class" "$(query list | tr '\n' ' ') $(cat "$WORK/$SUITE-class.log")"
+
     start_probe W wayland 0000cc || return   # (it takes the keyboard as it opens)
     n=$(pmark X); pointer click:$((XX + 5)),$((XY + 100))
     pexpect "clicking the X11 window takes the keyboard from Wayland" X "$n" "focus in"

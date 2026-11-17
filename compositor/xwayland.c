@@ -173,6 +173,14 @@ static void xview_set_title(struct wl_listener *listener, void *data)
 	view_update_title(view);
 }
 
+// (its own function: the view is found from the listener, and this one is
+// set_app_id, not set_title - LibreOffice sets its class after its title)
+static void xview_set_class(struct wl_listener *listener, void *data)
+{
+	struct view *view = wl_container_of(listener, view, set_app_id);
+	view_update_title(view);
+}
+
 static void new_managed(struct server *server, struct wlr_xwayland_surface *xs)
 {
 	struct view *view = calloc(1, sizeof(*view));
@@ -202,7 +210,7 @@ static void new_managed(struct server *server, struct wlr_xwayland_surface *xs)
 	wl_signal_add(&xs->events.request_fullscreen, &view->request_fullscreen);
 	view->set_title.notify = xview_set_title;
 	wl_signal_add(&xs->events.set_title, &view->set_title);
-	view->set_app_id.notify = xview_set_title; // the class is the app id
+	view->set_app_id.notify = xview_set_class; // the class is the app id
 	wl_signal_add(&xs->events.set_class, &view->set_app_id);
 	view->decoration_mode.notify = xview_set_decorations;
 	wl_signal_add(&xs->events.set_decorations, &view->decoration_mode);

@@ -263,6 +263,29 @@ up next to the shell first, then on `$PATH`.
   and saved as UTF-8. A file with Windows (CRLF) line endings keeps them.
   Saves are atomic, so a failed save never leaves a half-written file.
   Usage: `win95notepad [file]`.
+- **Email** (`win95email`, [apps/email/](apps/email/)): Start > Programs >
+  Internet > Email. Mail by IMAP (reading) and SMTP (sending), laid out
+  like a Win95-era mail program: the account's folders on the left (Inbox,
+  Drafts, Sent, Trash and Junk first, then the rest, with unread counts),
+  the folder's messages at the top right (sort by a column; Find filters
+  them) and the one chosen below (the preview pane, with its
+  attachments: Open or Save As). The toolbar: Create Mail, Reply, Reply
+  All, Forward, Delete (to Trash; from Trash, for good) and Send/Recv; the
+  Message menu also flags, marks read or unread and moves to a folder.
+  Writing: To, Cc, Bcc, Subject, attachments, Send (a copy goes in Sent)
+  and Save (to Drafts); replies quote the original and are marked
+  answered. HTML mail is shown without its scripts and without pictures
+  from the web (they tell the sender when you read it: a bar says they're
+  hidden). New mail is checked every 10 minutes (Tools > Options) and
+  announced. Tools > Accounts adds accounts: Gmail, Outlook.com, Yahoo,
+  iCloud, Fastmail and others get their servers filled in (Gmail and
+  friends want an app password); SSL/TLS or STARTTLS, and the server's
+  certificate must be trusted. Passwords are kept in the desktop's keyring
+  (the Secret Service: gnome-keyring), never in Email's own files;
+  settings are `~/.config/wayland95/email.json`, and messages read are
+  cached in `~/.cache/wayland95/email` (only you can read it). Not yet:
+  POP3, OAuth sign-in (accounts that only allow it), HTML writing, an
+  address book, and being the desktop's mailto: handler.
 - **Calculator** (`win95calc`, [apps/calc/](apps/calc/)): Start >
   Programs > Accessories > Calculator. View > Standard: memory (MC, MR,
   MS, M+), digits, + - * /, sqrt, %, 1/x, +/-, Back, CE and C, worked out

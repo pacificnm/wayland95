@@ -223,6 +223,19 @@ Canvas {
             for (var r = 0; r < 5; ++r)
                 frame(8 + r * 4, 1, 2, 6, "#c0c0c0"); // spiral rings
             break;
+        case "email":
+            // an envelope with a blue arrow flying in
+            frame(3, 11, 26, 18, "#ffffe8");
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(4, 12); ctx.lineTo(16, 22); ctx.lineTo(28, 12); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(4, 28); ctx.lineTo(13, 19); ctx.moveTo(28, 28); ctx.lineTo(19, 19); ctx.stroke();
+            ctx.strokeStyle = "#0060c0";
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(4, 5); ctx.lineTo(20, 5); ctx.stroke();
+            ctx.fillStyle = "#0060c0";
+            ctx.beginPath(); ctx.moveTo(26, 5); ctx.lineTo(19, 0); ctx.lineTo(19, 10); ctx.closePath(); ctx.fill();
+            break;
         case "calc":
             // a gray pocket calculator: a display and a grid of keys
             frame(6, 2, 20, 28, "#c0c0c0");

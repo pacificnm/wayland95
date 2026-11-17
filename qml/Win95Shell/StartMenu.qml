@@ -69,6 +69,7 @@ FocusScope {
         "Accessories":  [{ label: "Calculator",     icon: "calc",    program: "win95calc" },
                          { label: "Markdown Editor", icon: "markdown", program: "win95markdown" },
                          { label: "Notepad",        icon: "notepad", program: "win95notepad" }],
+        "Internet":     [{ label: "Email",          icon: "email",   program: "win95email" }],
         "Programming":  [{ label: "Repositories",   icon: "repos",   program: "win95repos" }],
         "Games":        [{ label: "Mines",          icon: "mines",   program: "win95mines" },
                          { label: "Solitaire",      icon: "solitaire", program: "win95solitaire" }],

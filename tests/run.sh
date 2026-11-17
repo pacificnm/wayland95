@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games find repos markdown startup drives backup calc monitors screen
+#                                  games find repos markdown startup drives backup calc email monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -3108,8 +3108,140 @@ suite_calc() {
     away; shot hex
 }
 
+# --- Email (win95email): a stand-in mail server and keyring (never a real account) -------
+# tests/fakes/mailserver.py: IMAP and SMTP on 127.0.0.1 with a made-up
+# mailbox (tester@example.test, password "secret"); tests/fakes/secrets.py:
+# the keyring, on the test's own bus.
+email_setup() {
+    MAILDIR=$WORK/mail-$SUITE; rm -rf "$MAILDIR"; mkdir -p "$MAILDIR"
+    IMAP_PORT=$((20000 + $$ % 20000)); SMTP_PORT=$((IMAP_PORT + 1))
+    # a certificate of its own for its SSL port (throwaway, self-signed)
+    openssl req -x509 -newkey rsa:2048 -nodes -keyout "$MAILDIR/key.pem" -out "$MAILDIR/cert.pem" -days 2 \
+        -subj "/CN=127.0.0.1" -addext "subjectAltName=IP:127.0.0.1" >/dev/null 2>&1
+    python3 -I "$HERE/fakes/mailserver.py" "$MAILDIR" $IMAP_PORT $SMTP_PORT tester@example.test secret &
+    PIDS+=($!)
+    DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS python3 -I "$HERE/fakes/secrets.py" "$MAILDIR/secrets.log" "$MAILDIR/keyring.json" &
+    PIDS+=($!)
+    for _ in $(seq 50); do grep -q "mailserver: ready" "$MAILDIR/log" 2>/dev/null && grep -q "secrets: ready" "$MAILDIR/secrets.log" 2>/dev/null && break; sleep 0.1; done
+    mkdir -p "$CONFIG/wayland95"
+    cat >"$CONFIG/wayland95/email.json" <<JSON
+{"accounts": [{"id": "t1", "name": "Test Mail", "displayName": "Tester", "email": "tester@example.test",
+  "imapHost": "127.0.0.1", "imapPort": $IMAP_PORT, "imapSecurity": "none",
+  "smtpHost": "127.0.0.1", "smtpPort": $SMTP_PORT, "smtpSecurity": "none", "user": "tester@example.test"}],
+ "checkMinutes": 0}
+JSON
+}
+start_email() {
+    XDG_CONFIG_HOME=$CONFIG XDG_CACHE_HOME=$WORK/cache-$SUITE HOME=$WORK/home-$SUITE WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland \
+        DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS W95_EMAIL_DEBUG=1 "$BUILD/win95email" >>"$WORK/$SUITE-email.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95email)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+}
+esaid() { grep -q "email: $1" "$WORK/$SUITE-email.log"; }
+ewait() { local i; for i in $(seq 40); do esaid "$1" && return 0; sleep 0.25; done; return 1; }
+elast() { grep "email: $1" "$WORK/$SUITE-email.log" | tail -1 | sed 's/.*email: //'; }
+mlog() { grep -qF -- "$1" "$MAILDIR/log"; } # (plain text, not a pattern)
+ADD_X=610; ADD_Y=278
+suite_email() {
+    say "email: Email (win95email) with a stand-in mail server and keyring"
+    [ -x "$BUILD/win95email" ] || { bad "win95email" "not built"; return; }
+    fresh
+    start_shell || return
+    email_setup
+    start_email
+    [ "$(windows_of win95email)" -ge 1 ]; expect_true $? "Email opens" "$(tail -3 "$WORK/$SUITE-email.log")"
+    away; shot password
+    # a wrong one first: asked again, and not kept
+    pointer type:wrong key:Return wait:1
+    ewait "password asked again"; expect_true $? "a wrong password: it asks again" "$(grep email: "$WORK/$SUITE-email.log" | tail -3)"
+    away; shot wrong-password
+    pointer type:secret key:Return wait:0.5
+    ewait "messages 3"; expect_true $? "the password typed: it logs in and lists the Inbox's 3 messages" "$(grep email: "$WORK/$SUITE-email.log" | tail -4)"
+    for _ in $(seq 20); do grep -q '"secret": "secret"' "$MAILDIR/keyring.json" && break; sleep 0.25; done
+    grep -q '"secret": "secret"' "$MAILDIR/keyring.json" && grep -q '"account": "t1"' "$MAILDIR/keyring.json" && ! grep -q wrong "$MAILDIR/keyring.json"
+    expect_true $? "Remember it: the right one is in the keyring once the server took it (never the wrong one; not a file of Email's)" "$(cat "$MAILDIR/keyring.json")"
+    ! grep -rq secret "$CONFIG/wayland95/email.json"; expect_true $? "(and not in Email's settings)" "$(cat "$CONFIG/wayland95/email.json")"
+    ewait "folders .*Inbox(2)"; expect_true $? "the folders, with the Inbox's 2 unread" "$(elast folders)"
+    elast folders | grep -q "Drafts.*Sent.*Trash.*Junk.*Projects.*Old"; expect_true $? "(Inbox, Drafts, Sent, Trash, Junk, then the rest, Old under Projects)" "$(elast folders)"
+    sleep 0.5; away; shot inbox
+
+    # reading: the newest (The report, with an attachment)
+    pointer key:Home wait:1
+    ewait "shown The report"; expect_true $? "Home opens the newest message" "$(elast shown)"
+    mlog "imap: UID FETCH 3 (BODY.PEEK[])" && mlog 'imap: UID STORE 3 +FLAGS.SILENT (\Seen)'
+    expect_true $? "(fetched, and marked read on the server)" "$(tail -4 "$MAILDIR/log")"
+    away; shot report
+    pointer key:Down wait:1
+    ewait "shown Spring sale ☀"; expect_true $? "Down: the next (its subject's encoded word decoded)" "$(elast shown)"
+    away; shot html
+
+    # Reply (Ctrl+R): To and Subject filled in, the original quoted; Ctrl+Enter sends
+    pointer key:ctrl+r wait:1.5
+    for _ in $(seq 20); do query list | grep -q "^Re: Spring sale ☀|win95email|" && break; sleep 0.25; done
+    query list | grep -q "^Re: Spring sale ☀|win95email|"; expect_true $? "Ctrl+R opens a reply: Re: Spring sale ☀" "$(query list | tr '\n' ' ')"
+    away; shot reply
+    pointer "type:thanks i will look" key:ctrl+Return wait:1.5
+    for _ in $(seq 40); do [ -f "$MAILDIR/sent/1.eml" ] && break; sleep 0.25; done
+    grep -q '"to": \["news@shop.example.test"\]' "$MAILDIR/sent/1.json" 2>/dev/null && grep -q "^In-Reply-To: <" "$MAILDIR/sent/1.eml" \
+        && grep -q "^thanks i will look" "$MAILDIR/sent/1.eml" && grep -q "^> Hello Tester" "$MAILDIR/sent/1.eml" \
+        && grep -q "^Subject: =?UTF-8?B?" "$MAILDIR/sent/1.eml"
+    expect_true $? "sent by SMTP: to the sender, In-Reply-To, the text, the original quoted, the subject encoded" "$(cat "$MAILDIR/sent/1.eml" 2>&1 | head -20)"
+    for _ in $(seq 20); do mlog "imap: appended to Sent" && break; sleep 0.25; done
+    mlog "imap: appended to Sent" && mlog 'imap: UID STORE 2 +FLAGS.SILENT (\Answered)'
+    expect_true $? "a copy goes in Sent, and the message is marked answered" "$(tail -4 "$MAILDIR/log")"
+    [ "$(windows_of win95email)" = 1 ]; expect_true $? "(and the reply's window closes)" "$(query list | tr '\n' ' ')"
+
+    # a new message (Ctrl+N), with no subject: it asks first
+    pointer key:ctrl+n wait:1.5 type:sam key:shift+2 type:example key:period type:test key:ctrl+Return wait:0.6
+    away; shot no-subject
+    pointer key:Return wait:1.5
+    for _ in $(seq 40); do [ -f "$MAILDIR/sent/2.json" ] && break; sleep 0.25; done
+    grep -q '"to": \["sam@example.test"\]' "$MAILDIR/sent/2.json" 2>/dev/null && grep -q "^From: Tester <tester@example.test>" "$MAILDIR/sent/2.eml"
+    expect_true $? "Ctrl+N, To, Ctrl+Enter: no subject asks first; Yes sends it, from your name and address" "$(cat "$MAILDIR/sent/2.json" 2>&1)"
+
+    # Delete: to Trash
+    sleep 0.5
+    pointer key:Delete wait:1
+    for _ in $(seq 20); do mlog 'imap: UID MOVE 2 "Trash"' && break; sleep 0.25; done
+    mlog 'imap: UID MOVE 2 "Trash"' && [ "$(elast messages)" = "messages 2" ]
+    expect_true $? "Delete moves it to Trash (MOVE), and it leaves the list" "$(tail -3 "$MAILDIR/log"); $(elast messages)"
+
+    # new mail: Send/Recv (F5) finds it
+    printf 'From: Ann <ann@example.test>\r\nTo: tester@example.test\r\nSubject: Hello again\r\nDate: %s\r\n\r\nNew!\r\n' "$(date -R)" >"$MAILDIR/new/1.eml"
+    for _ in $(seq 20); do mlog "imap: delivered" && break; sleep 0.25; done
+    pointer key:F5 wait:2
+    ewait "messages 3"; expect_true $? "F5 (Send/Recv): the new message is listed" "$(elast messages)"
+    grep -q "Notifications.*Email\|win95email" "$WORK/$SUITE-shell.log"; expect_true $? "and a notification says new mail came" "$(grep -i notif "$WORK/$SUITE-shell.log" | tail -3)"
+    away; shot new-mail
+
+    # Tools > Accounts > Add: an address fills in its provider's servers
+    pointer click:166,65 wait:0.4 key:a wait:0.6
+    away; shot accounts
+    pointer click:$ADD_X,$ADD_Y wait:0.6 click:515,211 "type:someone" key:shift+2 type:gmail key:period type:com wait:0.4
+    away; shot add-account
+    ewait "servers imap.gmail.com:993 smtp.gmail.com:465"; expect_true $? "Add: a Gmail address fills in Gmail's servers (and says to use an app password)" "$(elast servers)"
+    pointer key:Escape wait:0.4 key:Escape wait:0.4
+
+    # IMAP over SSL: a certificate it can't trust is refused; the test's
+    # own authority trusted (W95_EMAIL_TEST_CA), it connects
+    query close "Inbox - Email"; sleep 1
+    python3 -c 'import json,sys; p=sys.argv[1]; c=json.load(open(p)); a=c["accounts"][0]; a["imapPort"]=int(sys.argv[2]); a["imapSecurity"]="ssl"; json.dump(c, open(p, "w"))' "$CONFIG/wayland95/email.json" $((IMAP_PORT + 2))
+    grep -q '"imapSecurity": "ssl"' "$CONFIG/wayland95/email.json" || bad "(the account changed to SSL)" "$(cat "$CONFIG/wayland95/email.json")"
+    : >"$WORK/$SUITE-email.log"
+    start_email
+    ewait "status .*certificate"; expect_true $? "SSL to a server whose certificate isn't trusted: refused, and it says why" "$(grep email: "$WORK/$SUITE-email.log" | tail -3)"
+    ! mlog "imaps: LOGIN"; expect_true $? "(the password never sent)" "$(grep imaps "$MAILDIR/log" | head -3)"
+    away; shot untrusted
+    query close "Inbox - Email"; sleep 1
+    : >"$WORK/$SUITE-email.log"
+    W95_EMAIL_TEST_CA=$MAILDIR/cert.pem start_email
+    ewait "messages 3"; mlog "imaps: LOGIN"
+    expect_true $? "trusted: it logs in over SSL (the password from the keyring) and lists the Inbox" "$(grep email: "$WORK/$SUITE-email.log" | tail -3); $(grep imaps "$MAILDIR/log" | head -3)"
+}
+
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup calc monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup calc email monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

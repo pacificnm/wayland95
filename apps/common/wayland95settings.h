@@ -57,6 +57,8 @@ class Wayland95Settings : public QObject
     Q_PROPERTY(bool showBluetooth READ showBluetooth WRITE setShowBluetooth NOTIFY changed)
     Q_PROPERTY(bool showBattery READ showBattery WRITE setShowBattery NOTIFY changed)
     Q_PROPERTY(bool showAppIcons READ showAppIcons WRITE setShowAppIcons NOTIFY changed)
+    // the Start menu's size: 0 small (Win95's own), 1 medium, 2 large
+    Q_PROPERTY(int startMenuSize READ startMenuSize WRITE setStartMenuSize NOTIFY changed)
     // Keyboard ("" layout = leave the compositor's default)
     Q_PROPERTY(QString keyboardLayout READ keyboardLayout WRITE setKeyboardLayout NOTIFY changed)
     Q_PROPERTY(int keyRepeatDelay READ keyRepeatDelay WRITE setKeyRepeatDelay NOTIFY changed) // ms
@@ -131,7 +133,9 @@ public:
     bool showBattery() const { return m_showBattery; }
     void setShowBattery(bool on);
     bool showAppIcons() const { return m_showAppIcons; }
+    int startMenuSize() const { return m_startMenuSize; }
     void setShowAppIcons(bool on);
+    void setStartMenuSize(int size);
     void setClock24Hour(bool on);
 
     QString keyboardLayout() const { return m_keyboardLayout; }
@@ -215,6 +219,7 @@ private:
     bool m_showBluetooth = true;
     bool m_showBattery = true;
     bool m_showAppIcons = true;
+    int m_startMenuSize = 1;
     QString m_keyboardLayout;
     int m_keyRepeatDelay = 600;
     int m_keyRepeatRate = 25;

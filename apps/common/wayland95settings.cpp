@@ -214,6 +214,7 @@ void Wayland95Settings::load()
     const bool showBluetooth = m_settings.value(QStringLiteral("Taskbar/ShowBluetooth"), true).toBool();
     const bool showBattery = m_settings.value(QStringLiteral("Taskbar/ShowBattery"), true).toBool();
     const bool showAppIcons = m_settings.value(QStringLiteral("Taskbar/ShowAppIcons"), true).toBool();
+    const int startMenuSize = qBound(0, m_settings.value(QStringLiteral("StartMenu/Size"), 1).toInt(), 2);
     const QString layout = m_settings.value(QStringLiteral("Keyboard/Layout")).toString();
     const int delay = qBound(100, m_settings.value(QStringLiteral("Keyboard/RepeatDelay"), 600).toInt(), 2000);
     const int rate = qBound(1, m_settings.value(QStringLiteral("Keyboard/RepeatRate"), 25).toInt(), 60);
@@ -233,7 +234,7 @@ void Wayland95Settings::load()
 
     const bool differs = bg != m_backgroundColor || wallpaper != m_wallpaper || mode != m_wallpaperMode
         || colors != m_colors || colorScheme != m_colorScheme || showClock != m_showClock
-        || clock24 != m_clock24Hour || showVolume != m_showVolume || showNotifications != m_showNotifications || doNotDisturb != m_doNotDisturb || showNetwork != m_showNetwork || showBluetooth != m_showBluetooth || showBattery != m_showBattery || showAppIcons != m_showAppIcons || layout != m_keyboardLayout || delay != m_keyRepeatDelay
+        || clock24 != m_clock24Hour || showVolume != m_showVolume || showNotifications != m_showNotifications || doNotDisturb != m_doNotDisturb || showNetwork != m_showNetwork || showBluetooth != m_showBluetooth || showBattery != m_showBattery || showAppIcons != m_showAppIcons || startMenuSize != m_startMenuSize || layout != m_keyboardLayout || delay != m_keyRepeatDelay
         || rate != m_keyRepeatRate || flash != m_cursorFlashTime || dblClick != m_doubleClickInterval
         || sounds != m_sounds || soundScheme != m_soundScheme;
 
@@ -292,6 +293,7 @@ void Wayland95Settings::load()
     m_showBluetooth = showBluetooth;
     m_showBattery = showBattery;
     m_showAppIcons = showAppIcons;
+    m_startMenuSize = startMenuSize;
     m_keyboardLayout = layout;
     m_keyRepeatDelay = delay;
     m_keyRepeatRate = rate;
@@ -683,6 +685,15 @@ void Wayland95Settings::setShowAppIcons(bool on)
         return;
     m_showAppIcons = on;
     store(QStringLiteral("Taskbar/ShowAppIcons"), on);
+}
+
+void Wayland95Settings::setStartMenuSize(int size)
+{
+    size = qBound(0, size, 2);
+    if (size == m_startMenuSize)
+        return;
+    m_startMenuSize = size;
+    store(QStringLiteral("StartMenu/Size"), size);
 }
 
 void Wayland95Settings::setShowNotifications(bool on)

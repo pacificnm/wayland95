@@ -15,7 +15,12 @@ FocusScope {
     id: menu
 
     visible: false
-    width: sidebar.width + 6 + 168
+    // Control Panel > Taskbar: Start menu size (small is Win95's own size)
+    readonly property real zoom: [1, 1.25, 1.5][Ui.Wayland95Settings.startMenuSize] || 1
+    function sz(n) { return Math.round(n * zoom); }
+    readonly property int fontSize: sz(Theme.fontSize)
+
+    width: sidebar.width + 6 + sz(168)
     height: mainHeight + 6
 
     signal runRequested()
@@ -94,9 +99,9 @@ FocusScope {
         ]);
     }
 
-    readonly property int rowHeight: 32
+    readonly property int rowHeight: sz(32)
     readonly property int separatorHeight: 8
-    readonly property int subRowHeight: 22
+    readonly property int subRowHeight: sz(22)
 
     // path[k]: the entry in level k whose submenu is open (level 0 is the
     // main menu), so path.length submenus are showing
@@ -127,7 +132,7 @@ FocusScope {
     FontMetrics {
         id: metrics
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSize
+        font.pixelSize: menu.fontSize
     }
 
     // the open submenus' entries and geometry, in this item's coordinates
@@ -143,7 +148,7 @@ FocusScope {
             for (var j = 0; j < list.length; ++j) {
                 w = Math.max(w, metrics.advanceWidth(list[j].label || ""));
             }
-            var colWidth = Math.max(140, Math.ceil(34 + w + 24));
+            var colWidth = Math.max(sz(140), Math.ceil(sz(34) + w + 24));
             var fit = Math.max(1, Math.floor((screenH - 6) / subRowHeight));
             var rows = Math.min(list.length, fit);
             var cols = Math.ceil(list.length / rows);
@@ -344,7 +349,7 @@ FocusScope {
         id: sidebar
         x: 3
         y: 3
-        width: 22
+        width: menu.sz(22)
         height: parent.height - 6
         color: "#808080"
 
@@ -364,14 +369,14 @@ FocusScope {
                     text: "Wayland"
                     color: "#c0c0c0"
                     font.family: "Liberation Sans"
-                    font.pixelSize: 18
+                    font.pixelSize: menu.sz(18)
                     font.bold: true
                 }
                 Text {
                     text: "95"
                     color: "#ffffff"
                     font.family: "Liberation Sans"
-                    font.pixelSize: 18
+                    font.pixelSize: menu.sz(18)
                 }
             }
         }
@@ -414,18 +419,19 @@ FocusScope {
                     visible: !row.modelData.separator
                     x: 4
                     anchors.verticalCenter: parent.verticalCenter
+                    size: menu.sz(32)
                     kind: row.modelData.icon || ""
                 }
 
                 Text {
                     visible: !row.modelData.separator
-                    x: 44
+                    x: menu.sz(32) + 12
                     anchors.verticalCenter: parent.verticalCenter
                     textFormat: Text.StyledText
                     text: row.modelData.separator ? "" : menu.underlined(row.modelData.label, row.modelData.key)
                     color: row.highlighted ? Theme.selectionText : Theme.menuText
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize
+                    font.pixelSize: menu.fontSize
                 }
 
                 Text {
@@ -434,7 +440,7 @@ FocusScope {
                     anchors.rightMargin: 6
                     anchors.verticalCenter: parent.verticalCenter
                     text: "▶"
-                    font.pixelSize: 8
+                    font.pixelSize: menu.sz(8)
                     color: row.highlighted ? Theme.selectionText : Theme.menuText
                 }
 
@@ -488,9 +494,9 @@ FocusScope {
                         visible: subRow.hasIcon && status === Image.Ready
                         x: 4
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 16
-                        height: 16
-                        sourceSize: Qt.size(16, 16)
+                        width: menu.sz(16)
+                        height: menu.sz(16)
+                        sourceSize: Qt.size(menu.sz(16), menu.sz(16))
                         source: subRow.modelData.iconSource || ""
                         asynchronous: true
                         fillMode: Image.PreserveAspectFit
@@ -499,28 +505,28 @@ FocusScope {
                         visible: !appIcon.visible && subRow.modelData.label !== "(Empty)"
                         x: 4
                         anchors.verticalCenter: parent.verticalCenter
-                        size: 16
+                        size: menu.sz(16)
                         kind: subRow.modelData.icon || (subRow.modelData.desktopId ? "app" : "")
                         opacity: subRow.enabledEntry ? 1 : 0.5
                     }
                     // disabled entries get the etched look
                     Text {
                         visible: !subRow.enabledEntry && !subRow.highlighted
-                        x: 29; y: subLabel.y + 1
+                        x: subLabel.x + 1; y: subLabel.y + 1
                         text: subRow.modelData.label
                         color: Theme.highlight
                         font: subLabel.font
                     }
                     Text {
                         id: subLabel
-                        x: 28
+                        x: menu.sz(16) + 12
                         width: parent.width - x - 18
                         elide: Text.ElideRight
                         anchors.verticalCenter: parent.verticalCenter
                         text: subRow.modelData.label
                         color: !subRow.enabledEntry ? Theme.shadow : (subRow.highlighted ? Theme.selectionText : Theme.menuText)
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSize
+                        font.pixelSize: menu.fontSize
                     }
                     Text {
                         visible: !!subRow.modelData.submenu
@@ -528,7 +534,7 @@ FocusScope {
                         anchors.rightMargin: 6
                         anchors.verticalCenter: parent.verticalCenter
                         text: "▶"
-                        font.pixelSize: 8
+                        font.pixelSize: menu.sz(8)
                         color: subRow.highlighted ? Theme.selectionText : Theme.menuText
                     }
                     MouseArea {

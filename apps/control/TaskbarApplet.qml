@@ -17,6 +17,7 @@ PropertySheet {
     property bool showBluetooth: Wayland95Settings.showBluetooth
     property bool showBattery: Wayland95Settings.showBattery
     property bool showAppIcons: Wayland95Settings.showAppIcons
+    property int startMenuSize: Wayland95Settings.startMenuSize
     property bool showNotifications: Wayland95Settings.showNotifications
 
     onApplyRequested: {
@@ -27,6 +28,7 @@ PropertySheet {
         Wayland95Settings.showBluetooth = showBluetooth;
         Wayland95Settings.showBattery = showBattery;
         Wayland95Settings.showAppIcons = showAppIcons;
+        Wayland95Settings.startMenuSize = startMenuSize;
         Wayland95Settings.showNotifications = showNotifications;
     }
 
@@ -112,6 +114,31 @@ PropertySheet {
                 enabled: sheet.showClock
                 opacity: enabled ? 1 : 0.5
                 onToggled: (on) => { sheet.clock24 = on; sheet.dirty = true; }
+            }
+        }
+
+        Column {
+            x: Math.round(parent.width / 2)
+            y: preview.height + 16
+            spacing: 8
+            Text {
+                height: 13
+                text: "Start menu size:"
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize
+            }
+            Row {
+                spacing: 10
+                Repeater {
+                    model: ["<u>S</u>mall", "<u>M</u>edium", "<u>L</u>arge"]
+                    delegate: RadioButton95 {
+                        required property string modelData
+                        required property int index
+                        text: modelData
+                        checked: sheet.startMenuSize === index
+                        onClicked: { sheet.startMenuSize = index; sheet.dirty = true; }
+                    }
+                }
             }
         }
 

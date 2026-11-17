@@ -964,12 +964,24 @@ suite_shell() {
     pointer click:$START_X,$TASKBAR_Y wait:0.6 click:900,300 wait:0.5; away; shot start-outside
     expect_pixel "a click outside closes it" start-outside 120 600 008080
     pointer click:$START_X,$TASKBAR_Y wait:0.6 key:d wait:0.6; away; shot documents
-    expect_pixel "a submenu opens by its letter (Documents)" documents 260 575 000080
+    expect_pixel "a submenu opens by its letter (Documents)" documents 400 520 000080
     pointer key:h
     for _ in $(seq 20); do [ "$(windows_of win95files)" -ge 1 ] && break; sleep 0.5; done
     [ "$(windows_of win95files)" -ge 1 ]; expect_true $? "an entry starts its program (Documents > Home: the file manager)" "$(query list | tr '\n' ' ')"
     grep -q 'Launcher: started ".*/win95files"' "$WORK/$SUITE-shell.log"
     expect_true $? "(the shell's log says so)" "$(grep Launcher "$WORK/$SUITE-shell.log")"
+
+    # its size (Control Panel > Taskbar): medium unless set; large and small
+    # (270,720 is in the large menu only; 215,600 not in the small one)
+    pointer click:900,500 wait:0.3 click:$START_X,$TASKBAR_Y wait:0.6; away; shot start-medium
+    printf '\n[StartMenu]\nSize=2\n' >>"$CONFIG/wayland95/settings.ini"; sleep 0.8; shot start-large
+    [ "$(pixel start-medium 270 720)" = 008080 ] && [ "$(pixel start-large 270 720)" = c0c0c0 ]
+    expect_true $? "Start menu size: Large makes it bigger, at once" "medium $(pixel start-medium 270 720), large $(pixel start-large 270 720)"
+    sed -i 's/^Size=2$/Size=0/' "$CONFIG/wayland95/settings.ini"; sleep 0.8; shot start-small
+    [ "$(pixel start-medium 215 600)" = c0c0c0 ] && [ "$(pixel start-small 215 600)" = 008080 ] && [ "$(pixel start-small 120 600)" = c0c0c0 ]
+    expect_true $? "and Small is Windows 95's own size" "medium $(pixel start-medium 215 600), small $(pixel start-small 215 600) and $(pixel start-small 120 600)"
+    sed -i '/^\[StartMenu\]$/d; /^Size=0$/d' "$CONFIG/wayland95/settings.ini"; sleep 0.6
+    pointer key:Escape wait:0.4
 
 
     # tooltips: shown, and in a layer that takes no clicks
@@ -1902,9 +1914,9 @@ suite_games() {
     start_shell || return
 
     # the Start menu: Programs > Games has both
-    pointer click:30,787 wait:0.6 click:60,547 wait:0.6 move:240,564 wait:0.8
+    pointer click:30,787 wait:0.6 click:60,496 wait:0.6 move:300,520 wait:0.8
     shot start-games
-    pointer click:400,586 wait:0.5
+    pointer click:480,548 wait:0.5
     for _ in $(seq 20); do [ "$(windows_of win95solitaire)" -ge 1 ] && break; sleep 0.25; done
     [ "$(windows_of win95solitaire)" -ge 1 ]; expect_true $? "Start > Programs > Games > Solitaire starts it" "$(query list | tr '\n' ' ')"
     query close "Solitaire"; sleep 0.8

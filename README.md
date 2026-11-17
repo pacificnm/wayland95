@@ -625,7 +625,9 @@ up next to the shell first, then on `$PATH`.
     maximize, minimize, restore, menu popup, the four message-box types,
     Empty Recycle Bin and the default beep (the terminal bell). Sounds play
     through `pw-play`, falling back to `paplay`, then `aplay` for .wav files.
-  - **Taskbar:** Show Clock and 24-hour clock, and which icons the
+  - **Taskbar:** Start menu size (Small is Windows 95's own; Medium, the
+    default, and Large are 25% and 50% bigger: rows, icons and text), Show
+    Clock and 24-hour clock, and which icons the
     notification area shows (Volume, Network, Bluetooth, Battery,
     Notifications, other programs' icons). Also opens from Start >
     Settings > Taskbar..., which runs `win95control --applet taskbar`.

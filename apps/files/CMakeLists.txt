@@ -8,6 +8,8 @@ qt_add_executable(win95files
     src/main.cpp
     src/directorymodel.h
     src/directorymodel.cpp
+    src/filesearch.h
+    src/filesearch.cpp
 )
 
 set_target_properties(win95files PROPERTIES
@@ -22,6 +24,7 @@ qt_add_qml_module(win95files
     QML_FILES
         Main.qml
         FileIcon.qml
+        FindWindow.qml
     RESOURCE_PREFIX /qt/qml
 )
 

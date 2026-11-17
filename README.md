@@ -202,7 +202,18 @@ up next to the shell first, then on `$PATH`.
   rename in place (F2), New Folder (Ctrl+Shift+N), type-to-jump, Show
   Hidden Files (Ctrl+H), Properties and Open Terminal Here. Double-clicking
   a file opens it with `xdg-open`. Usage:
-  `win95files [--details] [folder | computer: | trash:]`.
+  `win95files [--details] [--select NAME] [folder | computer: | trash:]`.
+  - **Find: All Files** (Start > Find > Files or Folders..., or
+    `win95files --find [folder]`): Named (several names with `;` between
+    them, `*` and `?` as wildcards; a name without them is found anywhere
+    in a file's name), Look in (with Browse...) and Include subfolders;
+    Date Modified (the previous N days); Advanced: Containing text (in
+    plain-text files) and Include hidden files. Options > Case Sensitive.
+    Find Now searches on its own thread (Stop, or Escape, ends it), and the
+    files found are listed below: sort by any column, double-click or Enter
+    to open, right-click for Open Containing Folder (the folder opens with
+    the file selected) and Properties. It never follows a link to a folder
+    and leaves out /proc, /sys, /dev and /run; it stops at 10,000 found.
 
 - **Notepad** (`win95notepad`, [apps/notepad/](apps/notepad/)): Start >
   Programs > Notepad, or double-click a text file in the file manager. It

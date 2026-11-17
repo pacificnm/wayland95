@@ -171,7 +171,14 @@ private:
     void updateCanPaste();
     void startTransfer(const QStringList &sources, const QString &destDir, bool move);
     void emitAllRowsChanged(int role);
+public:
     static QString formatSize(qint64 bytes);
+    // a file's icon ("folder", "text", ...) and Type column text
+    static void describeFile(const QString &path, bool isDir, QString *iconKind, QString *typeText);
+    // open a file as a double-click does (a program runs, text goes to
+    // Notepad, the rest to its program); "" or what went wrong
+    static QString openFile(const QString &path);
+private:
     static QString trashFilesDir();
     static QString trashInfoDir();
 

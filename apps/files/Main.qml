@@ -33,7 +33,10 @@ Window {
     DirectoryModel {
         id: dir
         autoRefresh: window.renameRow < 0
-        Component.onCompleted: path = initialPath
+        Component.onCompleted: {
+            path = initialPath;
+            window.selectPending();
+        }
 
         onError: (title, message) => msgBox.show(title, message, "error", ["OK"], window.focusView)
         onPathChanged: {
@@ -54,7 +57,21 @@ Window {
             var row = savedCurrent.length ? rowOfName(savedCurrent) : -1;
             iconView.currentIndex = row;
             detailsView.currentIndex = row;
+            window.selectPending();
         }
+    }
+
+    // --select NAME (Find's Open Containing Folder): that one, selected
+    property string pendingSelect: initialSelect
+    function selectPending() {
+        if (!pendingSelect)
+            return;
+        var row = dir.rowOfName(pendingSelect);
+        if (row < 0)
+            return;
+        pendingSelect = "";
+        dir.select(row, 0);
+        setCurrent(row);
     }
 
     function setCurrent(row) {

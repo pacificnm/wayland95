@@ -60,7 +60,7 @@ FocusScope {
             { label: "Taskbar...",    icon: "taskbar", program: "win95control", args: ["--applet", "taskbar"] },
         ],
         find: [
-            { label: "Files or Folders...", icon: "find" },
+            { label: "Files or Folders...", icon: "find", program: "win95files", args: ["--find"] },
         ],
     })
 

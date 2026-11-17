@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games monitors screen
+#                                  games find monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -1992,6 +1992,80 @@ suite_games() {
     away; shot mines-lost
 }
 
+# --- Find: All Files (Start > Find > Files or Folders...) ---------------------------
+# In a made-up home folder, never this computer's files. win95files says
+# how each search ended ("Find: N found", and each path with W95_FIND_DEBUG).
+find_said() { # COUNT: the last search found this many
+    local i
+    for i in $(seq 30); do
+        [ "$(grep -c '^Find: [0-9]* found' "$WORK/$SUITE-shell.log")" -gt "${FIND_SEARCHES:-0}" ] && break
+        sleep 0.2
+    done
+    FIND_SEARCHES=$(grep -c '^Find: [0-9]* found' "$WORK/$SUITE-shell.log")
+    grep '^Find: [0-9]* found' "$WORK/$SUITE-shell.log" | tail -1 | grep -q "^Find: $1 found"
+}
+find_last() { grep '^Find: [0-9]* found' "$WORK/$SUITE-shell.log" | tail -1; }
+find_paths() { # the paths of the last search (the lines after its count)
+    awk '/^Find: [0-9]+ found/ { n = 0; delete p; next } /^Find: found / { p[n++] = $3 } END { for (i = 0; i < n; i++) print p[i] }' "$WORK/$SUITE-shell.log"
+}
+suite_find() {
+    say "find: Start > Find > Files or Folders... (win95files --find)"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    local home=$WORK/home-$SUITE
+    rm -rf "$home"; mkdir -p "$home/Documents" "$home/Pictures" "$home/old" "$home/.secret"
+    printf 'This year'"'"'s Budget, in short\n' >"$home/Documents/report-2024.txt"
+    printf 'nothing to see\n' >"$home/Documents/notes.txt"
+    printf '\x89PNG\r\n\x1a\n\0\0budget' >"$home/Pictures/report.png"
+    printf 'budget\n' >"$home/old/report-old.txt"; touch -d '30 days ago' "$home/old/report-old.txt"
+    printf 'budget\n' >"$home/.secret/report-secret.txt"
+    FIND_SEARCHES=0
+    W95_FIND_DEBUG=1 start_shell || return
+
+    # the Start menu: Find (f), Files or Folders... (f)
+    pointer key:ctrl+Escape wait:0.6 key:f wait:0.5 key:f
+    for _ in $(seq 30); do [ "$(windows_of win95find)" -ge 1 ] && break; sleep 0.25; done
+    [ "$(windows_of win95find)" -ge 1 ]; expect_true $? "Start > Find > Files or Folders... opens Find" "$(query list | tr '\n' ' ')"
+    sleep 1; away; shot opened
+    expect_pixel "(Find: its Named box, ready)" opened 300 137 ffffff
+
+    # by name: anywhere in the name, any case, not hidden ones
+    pointer type:report key:Return
+    find_said 3 && [ "$(find_paths | grep -c 'report-2024.txt\|report.png\|report-old.txt')" = 3 ]
+    expect_true $? "Named: report finds the 3 with it in their names (in subfolders, not hidden ones)" "$(find_last): $(find_paths | tr '\n' ' ')"
+    away; shot named
+    local dark; dark=$(magick "$WORK/$SUITE-named.png" -crop 300x48+60+277 +repage -threshold 30% -negate -format "%[fx:int(mean*w*h)]" info: 2>/dev/null)
+    [ "$(pixel opened 300 400)" = 008080 ] && [ "${dark:-0}" -gt 150 ] && [ "$(pixel named 300 483)" = c0c0c0 ]
+    expect_true $? "and the list opens below with them, and a status bar" "dark text pixels in the rows: $dark; status bar $(pixel named 300 483)"
+
+    # Advanced: Containing text (any case), only text files
+    pointer click:269,91 wait:0.4 click:300,137 type:budget key:Return
+    find_said 2 && find_paths | grep -q 'Documents/report-2024.txt' && find_paths | grep -q 'old/report-old.txt'
+    expect_true $? "Containing text: budget finds the text files with it (not the picture)" "$(find_last): $(find_paths | tr '\n' ' ')"
+    # and hidden ones, when asked
+    pointer click:176,169 wait:0.3 click:300,137 key:Return
+    find_said 3 && find_paths | grep -q '.secret/report-secret.txt'
+    expect_true $? "Include hidden files finds the hidden one too" "$(find_last): $(find_paths | tr '\n' ' ')"
+
+    # Date Modified: the previous 7 days leaves out the old one
+    pointer click:195,91 wait:0.4 click:77,165 wait:0.3 click:627,112
+    find_said 2 && ! find_paths | grep -q 'report-old'
+    expect_true $? "Date Modified: the previous 7 days leaves out a file from 30 days ago" "$(find_last): $(find_paths | tr '\n' ' ')"
+    away; shot dated
+
+    # a result: double-click opens it (a text file: Notepad)
+    pointer click:120,285 click:120,285 wait:0.3
+    for _ in $(seq 30); do [ "$(windows_of win95notepad)" -ge 1 ] && break; sleep 0.25; done
+    [ "$(windows_of win95notepad)" -ge 1 ]; expect_true $? "double-clicking a result opens it (a text file: in Notepad)" "$(query list | tr '\n' ' ')"
+    query list | sed -n 's/^\([^|]*\)|win95notepad|.*/\1/p' | while read -r t; do query close "$t"; done; sleep 0.6
+    query activate "$(query list | sed -n 's/^\([^|]*\)|win95find|.*/\1/p' | head -1)"; sleep 0.4
+    # right-click: Open Containing Folder
+    pointer click:120,285,right wait:0.5 key:Down key:Down key:Return
+    for _ in $(seq 30); do [ "$(windows_of win95files)" -ge 1 ] && break; sleep 0.25; done
+    [ "$(windows_of win95files)" -ge 1 ]; expect_true $? "right-click > Open Containing Folder shows its folder" "$(query list | tr '\n' ' ')"
+    sleep 1; away; shot folder
+}
+
 # --- the taskbar's network icon: the connection, its addresses, WireGuard ----------
 # A made-up connection (tests/fakes/nmcli with FAKE_NETWORK), not this
 # computer's: Wi-Fi "TestNet", its addresses, and a WireGuard tunnel.
@@ -2316,7 +2390,7 @@ suite_classic() {
 }
 
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

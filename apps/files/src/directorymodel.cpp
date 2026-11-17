@@ -481,28 +481,33 @@ void DirectoryModel::loadDirectory(const QString &dir)
 
 void DirectoryModel::describe(Entry &e) const
 {
-    if (e.isDir) {
-        e.typeText = QStringLiteral("File Folder");
-        e.iconKind = QStringLiteral("folder");
+    describeFile(e.path, e.isDir, &e.iconKind, &e.typeText);
+}
+
+void DirectoryModel::describeFile(const QString &path, bool isDir, QString *iconKind, QString *typeText)
+{
+    if (isDir) {
+        *typeText = QStringLiteral("File Folder");
+        *iconKind = QStringLiteral("folder");
         return;
     }
     static const QMimeDatabase db;
-    const QFileInfo info(e.path);
+    const QFileInfo info(path);
     // extension-only matching: sniffing file contents would make big
     // folders slow to open
     const QMimeType mime = db.mimeTypeForFile(info, QMimeDatabase::MatchExtension);
-    e.iconKind = iconKindForMime(mime, info);
+    *iconKind = iconKindForMime(mime, info);
     if (mime.isDefault() && info.isExecutable()) {
-        e.iconKind = QStringLiteral("exec");
-        e.typeText = QStringLiteral("Application");
+        *iconKind = QStringLiteral("exec");
+        *typeText = QStringLiteral("Application");
     } else if (mime.isDefault()) {
         const QString suffix = info.suffix().toUpper();
-        e.typeText = suffix.isEmpty() ? QStringLiteral("File") : QStringLiteral("%1 File").arg(suffix);
+        *typeText = suffix.isEmpty() ? QStringLiteral("File") : QStringLiteral("%1 File").arg(suffix);
     } else {
         QString comment = mime.comment();
         if (!comment.isEmpty())
             comment[0] = comment[0].toUpper();
-        e.typeText = comment;
+        *typeText = comment;
     }
 }
 
@@ -589,21 +594,33 @@ void DirectoryModel::openRow(int row)
                    QStringLiteral("Files in the Recycle Bin can't be opened. Restore '%1' first.").arg(e.name));
         return;
     }
-    if (isElfExecutable(e.path)) {
-        if (!QProcess::startDetached(e.path, {}, QFileInfo(e.path).absolutePath()))
-            emit error(e.name, QStringLiteral("Cannot run '%1'.").arg(e.name));
-        return;
+    const QString problem = openFile(e.path);
+    if (!problem.isEmpty())
+        emit error(e.name, problem);
+}
+
+QString DirectoryModel::openFile(const QString &path)
+{
+    const QFileInfo info(path);
+    const QString name = info.fileName();
+    if (isElfExecutable(path)) {
+        if (!QProcess::startDetached(path, {}, info.absolutePath()))
+            return QStringLiteral("Cannot run '%1'.").arg(name);
+        return QString();
     }
-    if (e.iconKind == QLatin1String("text")) {
+    QString kind, type;
+    describeFile(path, false, &kind, &type);
+    if (kind == QLatin1String("text")) {
         // plain text opens in our Notepad, as in Win95
         QString notepad = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("win95notepad"));
         if (!QFileInfo(notepad).isExecutable())
             notepad = QStandardPaths::findExecutable(QStringLiteral("win95notepad"));
-        if (!notepad.isEmpty() && QProcess::startDetached(notepad, {e.path}, QFileInfo(e.path).absolutePath()))
-            return;
+        if (!notepad.isEmpty() && QProcess::startDetached(notepad, {path}, info.absolutePath()))
+            return QString();
     }
-    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(e.path)))
-        emit error(e.name, QStringLiteral("There is no program associated with '%1'.").arg(e.name));
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(path)))
+        return QStringLiteral("There is no program associated with '%1'.").arg(name);
+    return QString();
 }
 
 void DirectoryModel::openSelected()

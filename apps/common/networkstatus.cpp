@@ -5,6 +5,7 @@
 #include <QStandardPaths>
 
 #include <functional>
+#include <memory>
 
 namespace {
 
@@ -123,6 +124,8 @@ void NetworkStatus::readGeneral(bool ok, const QString &out)
         m_nextName.clear();
         m_nextSignal = 0;
         m_nextWifiEnabled = m_nextHasWifi = false;
+        m_nextDetails = Details();
+        m_nextVpns.clear();
         publish();
         return;
     }
@@ -139,7 +142,7 @@ void NetworkStatus::readGeneral(bool ok, const QString &out)
     } else {
         m_nextState = QStringLiteral("disconnected");
     }
-    runQuery({ QStringLiteral("-t"), QStringLiteral("-f"), QStringLiteral("TYPE,STATE,CONNECTION"),
+    runQuery({ QStringLiteral("-t"), QStringLiteral("-f"), QStringLiteral("TYPE,STATE,CONNECTION,DEVICE"),
                QStringLiteral("device") },
              [this](bool ok, const QString &out) { readDevices(ok, out); });
 }
@@ -148,39 +151,50 @@ void NetworkStatus::readDevices(bool ok, const QString &out)
 {
     m_nextType.clear();
     m_nextName.clear();
+    m_nextDevice.clear();
+    m_nextVpnDevices.clear();
     m_nextHasWifi = false;
-    QString otherName;
+    QString otherName, otherDevice;
     if (ok) {
         // the main connection: a cable wins over Wi-Fi, as NetworkManager's
         // default route usually does; anything else only if there's no
         // cable or Wi-Fi (docker bridges, loopback and VPNs don't count)
         for (const QString &line : out.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
             const QStringList f = splitTerse(line);
-            const QString type = f.value(0), state = f.value(1), name = f.value(2);
+            const QString type = f.value(0), state = f.value(1), name = f.value(2), dev = f.value(3);
             if (type == QLatin1String("wifi"))
                 m_nextHasWifi = true;
+            // a WireGuard tunnel that's up, whoever brought it up (wg-quick:
+            // "externally", the Services control panel; NetworkManager)
+            if (type == QLatin1String("wireguard") && state.startsWith(QLatin1String("connected")) && !dev.isEmpty()) {
+                m_nextVpnDevices << dev;
+                continue;
+            }
             if (!state.startsWith(QLatin1String("connected")) || state.contains(QLatin1String("externally")))
                 continue;
             if (type == QLatin1String("ethernet")) {
                 if (m_nextType != QLatin1String("ethernet")) {
                     m_nextType = QStringLiteral("ethernet");
                     m_nextName = name;
+                    m_nextDevice = dev;
                 }
             } else if (type == QLatin1String("wifi")) {
                 if (m_nextType.isEmpty()) {
                     m_nextType = QStringLiteral("wifi");
                     m_nextName = name;
+                    m_nextDevice = dev;
                 }
             } else if (type != QLatin1String("loopback") && type != QLatin1String("bridge")
-                       && type != QLatin1String("wireguard") && type != QLatin1String("tun")
-                       && otherName.isEmpty()) {
+                       && type != QLatin1String("tun") && otherName.isEmpty()) {
                 otherName = name;
+                otherDevice = dev;
             }
         }
     }
     if (m_nextType.isEmpty() && !otherName.isEmpty()) {
         m_nextType = QStringLiteral("other");
         m_nextName = otherName;
+        m_nextDevice = otherDevice;
     }
     m_nextSignal = 0;
     if (m_nextType == QLatin1String("wifi")) {
@@ -189,7 +203,7 @@ void NetworkStatus::readDevices(bool ok, const QString &out)
                  [this](bool ok, const QString &out) { readWifi(ok, out); });
         return;
     }
-    publish();
+    readDetails();
 }
 
 void NetworkStatus::readWifi(bool ok, const QString &out)
@@ -203,7 +217,68 @@ void NetworkStatus::readWifi(bool ok, const QString &out)
             }
         }
     }
-    publish();
+    readDetails();
+}
+
+NetworkStatus::Details NetworkStatus::parseDetails(const QString &out)
+{
+    Details d;
+    for (const QString &line : out.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        const QStringList f = splitTerse(line);
+        QString key = f.value(0);
+        const QString value = f.mid(1).join(QLatin1Char(':')).trimmed();
+        key = key.section(QLatin1Char('['), 0, 0); // IP4.ADDRESS[1] -> IP4.ADDRESS
+        if (value.isEmpty() || value == QLatin1String("--"))
+            continue;
+        if (key == QLatin1String("GENERAL.DEVICE"))
+            d.device = value;
+        else if (key == QLatin1String("GENERAL.HWADDR"))
+            d.hardwareAddress = value;
+        else if (key == QLatin1String("IP4.ADDRESS"))
+            d.ipv4 << value;
+        else if (key == QLatin1String("IP4.GATEWAY"))
+            d.gateway = value;
+        else if (key == QLatin1String("IP4.DNS") || key == QLatin1String("IP6.DNS"))
+            d.dns << value;
+        else if (key == QLatin1String("IP6.ADDRESS") && !value.startsWith(QLatin1String("fe80"), Qt::CaseInsensitive))
+            d.ipv6 << value;
+        else if (key == QLatin1String("IP6.GATEWAY") && d.gateway.isEmpty())
+            d.gateway = value;
+    }
+    return d;
+}
+
+// the main device's addresses, then each tunnel's, one nmcli at a time
+void NetworkStatus::readDetails()
+{
+    static const QString fields = QStringLiteral("GENERAL.DEVICE,GENERAL.HWADDR,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS,IP6.ADDRESS,IP6.GATEWAY,IP6.DNS");
+    m_nextDetails = Details();
+    m_nextVpns.clear();
+    m_pendingVpns = m_nextVpnDevices;
+    auto nextVpn = std::make_shared<std::function<void()>>();
+    *nextVpn = [this, nextVpn] {
+        if (m_pendingVpns.isEmpty()) {
+            publish();
+            return;
+        }
+        const QString dev = m_pendingVpns.takeFirst();
+        runQuery({ QStringLiteral("-t"), QStringLiteral("-f"), fields, QStringLiteral("device"), QStringLiteral("show"), dev },
+                 [this, dev, nextVpn](bool ok, const QString &out) {
+            const Details d = ok ? parseDetails(out) : Details();
+            m_nextVpns << QVariantMap{ { QStringLiteral("name"), dev }, { QStringLiteral("addresses"), d.ipv4 + d.ipv6 } };
+            (*nextVpn)();
+        });
+    };
+    if (m_nextDevice.isEmpty()) {
+        (*nextVpn)();
+        return;
+    }
+    runQuery({ QStringLiteral("-t"), QStringLiteral("-f"), fields, QStringLiteral("device"), QStringLiteral("show"), m_nextDevice },
+             [this, nextVpn](bool ok, const QString &out) {
+        if (ok)
+            m_nextDetails = parseDetails(out);
+        (*nextVpn)();
+    });
 }
 
 void NetworkStatus::publish()
@@ -211,7 +286,8 @@ void NetworkStatus::publish()
     m_refreshing = false;
     const bool differs = m_nextAvailable != m_available || m_nextState != m_state || m_nextType != m_type
                          || m_nextName != m_connectionName || m_nextSignal != m_signal
-                         || m_nextWifiEnabled != m_wifiEnabled || m_nextHasWifi != m_hasWifi;
+                         || m_nextWifiEnabled != m_wifiEnabled || m_nextHasWifi != m_hasWifi
+                         || !(m_nextDetails == m_details) || m_nextVpns != m_vpns;
     m_available = m_nextAvailable;
     m_state = m_nextState;
     m_type = m_nextType;
@@ -219,6 +295,8 @@ void NetworkStatus::publish()
     m_signal = m_nextSignal;
     m_wifiEnabled = m_nextWifiEnabled;
     m_hasWifi = m_nextHasWifi;
+    m_details = m_nextDetails;
+    m_vpns = m_nextVpns;
     if (differs)
         emit changed();
     if (m_refreshAgain) {

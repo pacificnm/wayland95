@@ -798,7 +798,7 @@ shell_prepare() {
 exec env HOME='$home' XDG_DATA_HOME='$home/.local/share' XDG_STATE_HOME='$home/.local/state' \\
     XDG_CACHE_HOME='$home/.cache' QT_NO_XDG_DESKTOP_PORTAL=1 DBUS_SESSION_BUS_ADDRESS='$SHELL_BUS' \\
     PATH='$HERE/fakes:$PATH' W95_FAKE_LOG='$FAKE_LOG' WAYLAND95_TEST_AGENTS_ON_SESSION_BUS=1 \\
-    XDG_CONFIG_DIRS='$WORK/no-config-dirs' \\
+    W95_FAKE_NETWORK='${FAKE_NETWORK:-}' XDG_CONFIG_DIRS='$WORK/no-config-dirs' \\
     WAYLAND95_NO_SYSTEM_AGENTS=1 WAYLAND95_NO_POWER_ACTIONS=1 \\
     WAYLAND95_TEST_POLKIT_HELPER='$HERE/fakes/polkit-agent-helper-1' WAYLAND95_TEST_CHKPWD='$HERE/fakes/unix_chkpwd' \\
     WAYLAND95_TEST_MINUTE_MS='${MINUTE_MS:-}' WAYLAND95_TEST_POWER_SUPPLY='${POWER_SUPPLY:-$WORK/no-power-supply}' \\
@@ -1793,6 +1793,64 @@ suite_shellstart() {
     [ "$st" -eq 0 ] && ! grep -q "Assertion" "$CLOG"; expect_true $? "(and stops cleanly)" "status $st: $(tail -2 "$CLOG")"
 }
 
+# --- the taskbar's network icon: the connection, its addresses, WireGuard ----------
+# A made-up connection (tests/fakes/nmcli with FAKE_NETWORK), not this
+# computer's: Wi-Fi "TestNet", its addresses, and a WireGuard tunnel.
+net_write() { # FILE CONTENT: one of the stand-in's answers
+    printf '%s\n' "$2" >"$FAKE_NETWORK/$1.tmp"; mv "$FAKE_NETWORK/$1.tmp" "$FAKE_NETWORK/$1"
+}
+net_tunnel() { # up|down
+    if [ "$1" = up ]; then
+        net_write device $'wifi:connected:TestNet:wlan0\nwireguard:connected (externally):wg0:wg0\nloopback:connected (externally):lo:lo'
+    else
+        net_write device $'wifi:connected:TestNet:wlan0\nloopback:connected (externally):lo:lo'
+    fi
+}
+suite_network() {
+    say "network: the taskbar's network icon and its pop-up (addresses, WireGuard)"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    FAKE_NETWORK=$WORK/network; mkdir -p "$FAKE_NETWORK"
+    net_write general 'connected:full:enabled'
+    net_tunnel down
+    net_write wifi $'*:72\n :40'
+    net_write show-wlan0 $'GENERAL.DEVICE:wlan0\nGENERAL.HWADDR:02\\:00\\:00\\:AA\\:BB\\:CC\nIP4.ADDRESS[1]:192.168.77.20/24\nIP4.GATEWAY:192.168.77.1\nIP4.DNS[1]:192.168.77.1\nIP6.ADDRESS[1]:2001\\:db8\\:\\:20/64\nIP6.ADDRESS[2]:fe80\\:\\:1/64\nIP6.GATEWAY:'
+    net_write show-wg0 $'GENERAL.DEVICE:wg0\nGENERAL.HWADDR:\nIP4.ADDRESS[1]:10.200.200.11/32\nIP4.GATEWAY:\nIP6.GATEWAY:'
+    start_shell || return
+    away; sleep 1; shot net
+    # (the icon is drawn a little scaled: colours are found approximately)
+    # x of the leftmost green (the Wi-Fi bars) in the tray
+    local ix; ix=$(magick "$WORK/$SUITE-net.png" -crop 160x30+1110+768 +repage txt:- 2>/dev/null | awk -F'[,: ()]+' \
+        'NR > 1 { r = $3; g = $4; b = $5; if (g > 80 && r < 40 && b < 40 && (min == "" || $1 < min)) min = $1 } END { print min }')
+    [ -n "$ix" ]; expect_true $? "the network icon shows Wi-Fi bars" "no green bars in the tray"
+    ix=$((1110 + ${ix:-0}))
+    gold() { # SHOT: gold pixels in the icon's bottom left (the padlock)
+        magick "$WORK/$SUITE-$1.png" -crop 10x10+$((ix - 4))+$((783))  +repage txt:- 2>/dev/null | awk -F'[,: ()]+' \
+            'NR > 1 { r = $3; g = $4; b = $5; if (r > 180 && g > 140 && b < 60) n++ } END { print n + 0 }'
+    }
+    [ "$(gold net)" -eq 0 ]; expect_true $? "(no padlock: no tunnel is up)" "$(gold net) gold pixels"
+
+    # the tunnel comes up: the padlock
+    net_tunnel up; sleep 1.5; away; shot net-vpn
+    [ "$(gold net-vpn)" -ge 6 ]; expect_true $? "a WireGuard tunnel up: a padlock on the icon" "$(gold net-vpn) gold pixels"
+
+    # the pop-up: the connection, its addresses and the tunnel
+    pointer click:$((ix + 4)),783 wait:0.8; away; shot net-popup
+    magick "$WORK/$SUITE-net-popup.png" -crop 330x290+950+470 +repage "$WORK/$SUITE-popup-crop.png"
+    local words; words=$(command -v tesseract >/dev/null && tesseract "$WORK/$SUITE-popup-crop.png" - 2>/dev/null | tr '\n' ' ')
+    [ "$(pixel net-popup 1200 700)" = c0c0c0 ] && ! grep -q "No notifications" <<<"$words"
+    expect_true $? "clicking it opens its pop-up" "$(pixel net-popup 1200 700); $words"
+    if [ -n "$words" ]; then
+        grep -q "TestNet" <<<"$words" && grep -q "192.168.77.20" <<<"$words" && grep -q "192.168.77.1" <<<"$words" \
+            && grep -q "10.200.200.11" <<<"$words" && grep -qi "wg0" <<<"$words" && ! grep -qi "fe80" <<<"$words"
+        expect_true $? "it shows the network, the IP address, gateway, and the tunnel with its address (not link-local IPv6)" "$words"
+    fi
+    pointer key:Escape wait:0.4
+    net_tunnel down; sleep 1.5; away; shot net-down
+    [ "$(gold net-down)" -eq 0 ]; expect_true $? "the tunnel down: the padlock goes" "$(gold net-down) gold pixels"
+    FAKE_NETWORK=
+}
+
 # --- two displays, and Control Panel > Display's settings ------------------------
 # HEADLESS-1 (1280x800) and, to its right, HEADLESS-2 (1024x768); a
 # screenshot is of both, side by side.
@@ -2059,7 +2117,7 @@ suite_classic() {
 }
 
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart network monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

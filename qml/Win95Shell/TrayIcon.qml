@@ -42,7 +42,7 @@ Item {
         // just above the taskbar, kept on screen
         var p = trayIcon.mapToItem(parentItem, 0, 0);
         popup.x = Math.max(2, Math.min(parentItem.width - popup.width - 2, p.x + width / 2 - popup.width / 2));
-        popup.y = p.y - popup.height - 6;
+        popup.bottomEdge = p.y - 6;
         popup.visible = true;
         popupOpened();
     }
@@ -94,6 +94,10 @@ Item {
         z: 100
         width: trayIcon.popupWidth
         height: trayIcon.popupHeight
+        // its bottom stays just above the taskbar if it grows while open
+        // (what it shows can arrive after it opens)
+        property real bottomEdge: 0
+        y: bottomEdge - height
         onVisibleChanged: if (visible) popupBody.forceActiveFocus()
 
         Ui.Bevel { anchors.fill: parent; style: "raised" }

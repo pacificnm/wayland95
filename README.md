@@ -281,8 +281,11 @@ up next to the shell first, then on `$PATH`.
     you missed. Click for the recent ones (newest first), **Clear All**, and
     **Do not disturb**, which holds back pop-ups except critical ones.
   - **Network:** cable, or Wi-Fi bars for the signal strength, with a red
-    cross when disconnected and a yellow "!" when there's no internet.
-    Click for the status and a Wireless networking switch; double-click for
+    cross when disconnected, a yellow "!" when there's no internet, and a
+    gold padlock while a WireGuard tunnel is connected. Click for the
+    status, the IP address, gateway, DNS servers, IPv6 address and
+    adapter, each connected tunnel with its address, and a Wireless
+    networking switch; double-click for
     Control Panel > Network. Kept up to date by `nmcli monitor`, and never
     blocks the desktop ([apps/common/networkstatus.cpp](apps/common/networkstatus.cpp)).
   - **Accessibility Options:** Win95's five tabs, done by the compositor,

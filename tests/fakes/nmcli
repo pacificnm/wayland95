@@ -1,0 +1,32 @@
+#!/bin/sh
+# Stand-in nmcli: only when a test sets W95_FAKE_NETWORK (a folder holding
+# what to answer); otherwise the real one, read-only as the tray uses it.
+#   general            STATE:CONNECTIVITY:WIFI
+#   device             TYPE:STATE:CONNECTION:DEVICE lines
+#   wifi               IN-USE:SIGNAL lines
+#   show-DEVICE        "device show DEVICE" (KEY:VALUE lines)
+# "monitor" prints a line whenever a file there changes.
+if [ -z "${W95_FAKE_NETWORK:-}" ]; then
+    PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vx "$(dirname "$0")" | paste -sd:)
+    exec nmcli "$@"
+fi
+d=$W95_FAKE_NETWORK
+[ -n "${W95_FAKE_LOG:-}" ] && echo "nmcli $*" >>"$W95_FAKE_LOG"
+last=""
+for a in "$@"; do last=$a; done
+case " $* " in
+    *" monitor "*)
+        before=""
+        while :; do
+            now=$(cat "$d"/* 2>/dev/null | md5sum)
+            [ -n "$before" ] && [ "$now" != "$before" ] && echo "changed"
+            before=$now
+            sleep 0.3
+        done ;;
+    *" general "*|*" general") cat "$d/general" ;;
+    *" wifi list "*) cat "$d/wifi" 2>/dev/null ;;
+    *" device show "*) cat "$d/show-$last" 2>/dev/null || exit 10 ;;
+    *" radio "*) ;;
+    *" device "*|*" device") cat "$d/device" ;;
+    *) exit 0 ;;
+esac

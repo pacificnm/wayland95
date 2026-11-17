@@ -87,11 +87,7 @@ QtObject {
             tipParent: shell.tipArea
             onRunRequested: runDialog.open()
             onShutDownRequested: shutDownDialog.open()
-            onHelpRequested: shellMessage.show("Wayland 95",
-                "Wayland 95\n\nA Windows 95-style desktop for Wayland, built with Qt.\n\n"
-                + "Programs started from the Start menu connect to WAYLAND_DISPLAY=" + ShellSession.socketName
-                + (ShellSession.x11Display ? ", and X11 programs to DISPLAY=" + ShellSession.x11Display : "")
-                + ".", "info", ["OK"])
+            onHelpRequested: shell.showAbout()
         }
     }
 
@@ -325,11 +321,31 @@ QtObject {
     function showIconMenu(entry, x, y) {
         taskbar.closePopups();
         var items = [{ text: "&Open", action: function () { desktopIcons.open(entry); } }];
+        if (entry.kind === "computer") {
+            // (as Win95's: Explore opens the same place; Properties is
+            // Control Panel > System)
+            items.push({ text: "&Explore", action: function () { desktopIcons.open(entry); } });
+            items.push({ separator: true });
+            items.push({ text: "P&roperties", action: function () { Launcher.launch("win95control", ["--applet", "system"]); } });
+            items.push({ separator: true });
+            items.push({ text: "&About Wayland 95", action: shell.showAbout });
+        }
         if (entry.kind === "bin") {
             items.push({ separator: true });
             items.push({ text: "Empty Recycle &Bin", enabled: TrashWatcher.full, action: shell.confirmEmptyTrash });
         }
         windowMenu.popup(x, y, items);
+    }
+    // About Wayland 95 (My Computer's menu, and Start > Help)
+    function showAbout() {
+        console.info("win95shell: About Wayland 95, version", Ui.Wayland95Settings.version);
+        shellMessage.show("About Wayland 95",
+            "Wayland 95\nVersion " + Ui.Wayland95Settings.version
+            + "\n\nA Windows 95-style desktop for Wayland.\n\n"
+            + Ui.Wayland95Settings.osName + "\nQt " + Ui.Wayland95Settings.qtVersion
+            + "\n\nPrograms started from the Start menu connect to WAYLAND_DISPLAY=" + ShellSession.socketName
+            + (ShellSession.x11Display ? ", and X11 programs to DISPLAY=" + ShellSession.x11Display : "") + ".",
+            "info", ["OK"]);
     }
     function confirmEmptyTrash() {
         shellMessage.show("Confirm Delete", "Are you sure you want to permanently delete everything in the Recycle Bin?",

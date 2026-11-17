@@ -868,6 +868,18 @@ suite_shell() {
     expect_pixel "empty, its Empty Recycle Bin does nothing (greyed)" bin-nothing 640 400 008080
     pointer key:Escape wait:0.4
 
+    # My Computer's menu: About Wayland 95 (with the version), Properties
+    local version; version=$(dpkg-parsechangelog -l "$REPO/debian/changelog" -S Version)
+    pointer click:40,35,right wait:0.6 key:a wait:0.8; away; shot about
+    [ "$(pixel about 640 330)" = c0c0c0 ] && shell_said "About Wayland 95, version $version"
+    expect_true $? "My Computer's menu: About Wayland 95 shows the version ($version)" \
+        "the box: $(pixel about 640 330); $(grep "About Wayland" "$WORK/$SUITE-shell.log" | tail -1)"
+    pointer key:Return wait:0.5
+    pointer click:40,35,right wait:0.6 key:r
+    for _ in $(seq 20); do [ "$(windows_of win95control)" -ge 1 ] && break; sleep 0.5; done
+    [ "$(windows_of win95control)" -ge 1 ]; expect_true $? "its Properties opens Control Panel > System" "$(query list | tr '\n' ' ')"
+    query list | sed -n 's/^\([^|]*\)|win95control|.*/\1/p' | while read -r t; do query close "$t"; done; sleep 0.8
+
     start_probe A qt cc0000 || return
     start_probe B qt 0000cc || return
     local n

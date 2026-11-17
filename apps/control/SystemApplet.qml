@@ -42,7 +42,7 @@ PropertySheet {
             spacing: 2
 
             Line { text: "System:" }
-            Line { leftPadding: 16; text: "Wayland 95" }
+            Line { leftPadding: 16; text: "Wayland 95 " + Wayland95Settings.version }
             Line { leftPadding: 16; text: SystemInfo.osName }
             Line { leftPadding: 16; text: SystemInfo.kernel }
             Line { leftPadding: 16; text: "Qt " + SystemInfo.qtVersion }

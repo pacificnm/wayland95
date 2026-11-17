@@ -32,6 +32,11 @@ class Wayland95Settings : public QObject
 
     // Display
     Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor NOTIFY changed)
+    // Wayland 95's version ("0.2.0": the package's), and what it runs on,
+    // for About Wayland 95
+    Q_PROPERTY(QString version READ version CONSTANT)
+    Q_PROPERTY(QString osName READ osName CONSTANT)
+    Q_PROPERTY(QString qtVersion READ qtVersion CONSTANT)
     Q_PROPERTY(QString wallpaper READ wallpaper WRITE setWallpaper NOTIFY changed)
     Q_PROPERTY(QString wallpaperMode READ wallpaperMode WRITE setWallpaperMode NOTIFY changed) // center|tile|stretch
     // Appearance: the window colors, by name (see colorKeys()), plus the
@@ -86,6 +91,9 @@ class Wayland95Settings : public QObject
     Q_PROPERTY(QString soundScheme READ soundScheme NOTIFY changed)
 
 public:
+    QString version() const;
+    QString osName() const;
+    QString qtVersion() const;
     explicit Wayland95Settings(QObject *parent = nullptr);
 
     static Wayland95Settings *instance();

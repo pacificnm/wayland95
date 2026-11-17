@@ -1,4 +1,5 @@
 #include "wayland95settings.h"
+#include <QSysInfo>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -905,4 +906,23 @@ QString Wayland95Settings::toneFile(const QString &tone)
     if (f.open(QIODevice::WriteOnly))
         f.write(wav);
     return path;
+}
+
+#ifndef WAYLAND95_VERSION
+#define WAYLAND95_VERSION "unknown"
+#endif
+
+QString Wayland95Settings::version() const
+{
+    return QStringLiteral(WAYLAND95_VERSION);
+}
+
+QString Wayland95Settings::osName() const
+{
+    return QSysInfo::prettyProductName();
+}
+
+QString Wayland95Settings::qtVersion() const
+{
+    return QString::fromLatin1(qVersion());
 }

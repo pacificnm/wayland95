@@ -267,6 +267,19 @@ Canvas {
             rect(2, 3, 3, 21, "#a0a0a0"); // the bracket
             rect(15, 17, 13, 2, "#c0c0c0");
             break;
+        case "backup":
+            // a tape cartridge with a green arrow going onto it
+            frame(2, 12, 28, 18, "#404040");
+            frame(5, 15, 22, 10, "#c0c0c0");
+            ctx.fillStyle = "#000000";
+            ctx.beginPath(); ctx.arc(11, 20, 3, 0, 2 * Math.PI); ctx.arc(21, 20, 3, 0, 2 * Math.PI); ctx.fill();
+            rect(11, 17, 10, 1, "#000000");
+            rect(13, 26, 6, 3, "#808080");
+            ctx.fillStyle = "#00c000";
+            ctx.beginPath(); ctx.moveTo(12, 1); ctx.lineTo(20, 1); ctx.lineTo(20, 6); ctx.lineTo(24, 6);
+            ctx.lineTo(16, 12); ctx.lineTo(8, 6); ctx.lineTo(12, 6); ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = "#004000"; ctx.lineWidth = 1; ctx.stroke();
+            break;
         case "startup":
             // a monitor with a green "go" arrow on it, and a power button
             monitor("#008080");

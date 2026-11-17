@@ -1,0 +1,6 @@
+#!/bin/sh
+# Stand-in findmnt for tests/backup/run.sh: the drive (UUID test-uuid) is
+# mounted at $W95_FAKE_DRIVE once $W95_FAKE_DRIVE.mounted exists
+echo "findmnt $*" >>"$W95_FAKE_DRIVE.log"
+case "$*" in *"UUID=test-uuid"*) [ -e "$W95_FAKE_DRIVE.mounted" ] && echo "$W95_FAKE_DRIVE" ;; esac
+exit 0

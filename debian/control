@@ -65,7 +65,9 @@ Recommends: network-manager,
             packagekit,
             xdg-desktop-portal-gtk | xdg-desktop-portal-kde,
             xdg-user-dirs,
-            udisks2
+            udisks2,
+            rsync,
+            cron | cron-daemon
 Description: Windows 95-style Wayland desktop
  A complete desktop session in the style of Windows 95: a Wayland
  compositor (wlroots) with Win95 window frames, a taskbar, Start menu and

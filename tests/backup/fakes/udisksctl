@@ -1,0 +1,9 @@
+#!/bin/sh
+# Stand-in udisksctl for tests/backup/run.sh: the drive is plugged in while
+# $W95_FAKE_DRIVE.present exists; mount works unless .nomount exists
+echo "udisksctl $*" >>"$W95_FAKE_DRIVE.log"
+case "$1" in
+    info) [ -e "$W95_FAKE_DRIVE.present" ] ;;
+    mount) [ -e "$W95_FAKE_DRIVE.present" ] && [ ! -e "$W95_FAKE_DRIVE.nomount" ] && mkdir -p "$W95_FAKE_DRIVE" && : >"$W95_FAKE_DRIVE.mounted" ;;
+    *) exit 1 ;;
+esac

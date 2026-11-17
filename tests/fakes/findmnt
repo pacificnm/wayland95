@@ -1,0 +1,9 @@
+#!/bin/sh
+# Stand-in findmnt: a filesystem with UUID uuid-LABEL (tests/fakes/udisks.py)
+# is mounted while $W95_FAKE_MEDIA/LABEL is there. Without W95_FAKE_MEDIA,
+# the real one (it only reads).
+[ -n "${W95_FAKE_MEDIA:-}" ] || exec /usr/bin/findmnt "$@"
+for a in "$@"; do
+    case "$a" in UUID=uuid-*) label=${a#UUID=uuid-}; [ -d "$W95_FAKE_MEDIA/$label" ] && echo "$W95_FAKE_MEDIA/$label" ;; esac
+done
+exit 0

@@ -10,7 +10,7 @@
 
 Q_IMPORT_QML_PLUGIN(Win95UiPlugin)
 
-// usage: win95control [--applet accessibility|bluetooth|datetime|display|fonts|hardware|keyboard|mouse|network|passwords|power|printers|problems|programs|regional|services|sounds|startup|system|taskbar [--tab N] [--check]]
+// usage: win95control [--applet accessibility|backup|bluetooth|datetime|display|fonts|hardware|keyboard|mouse|network|passwords|power|printers|problems|programs|regional|services|sounds|startup|system|taskbar [--tab N] [--check]]
 // With --applet, only that applet's window opens (Start > Settings >
 // Taskbar... uses this), optionally on tab N (0-based), like Win95's
 // "control desk.cpl,,2"; otherwise the Control Panel folder opens.

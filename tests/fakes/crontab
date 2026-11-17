@@ -1,0 +1,10 @@
+#!/bin/sh
+# Stand-in crontab: the crontab is the file $FAKE_CRON. Without it set this
+# refuses (never the real crontab from a test).
+[ -n "${FAKE_CRON:-}" ] || { echo "stand-in crontab: FAKE_CRON isn't set" >&2; exit 1; }
+echo "crontab $*" >>"${W95_FAKE_LOG:-/dev/null}"
+case "${1:-}" in
+    -l) [ -f "$FAKE_CRON" ] && cat "$FAKE_CRON" || { echo "no crontab for $(id -un)" >&2; exit 1; } ;;
+    -) cat >"$FAKE_CRON" ;;
+    *) exit 1 ;;
+esac

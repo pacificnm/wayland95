@@ -62,6 +62,7 @@ def block_props(dev, label, size, drive, system=False):
         "IdType": GLib.Variant("s", "vfat" if not system else "ext4"), "IdUsage": GLib.Variant("s", "filesystem"),
         "Size": GLib.Variant("t", size), "HintIgnore": GLib.Variant("b", False), "HintSystem": GLib.Variant("b", system),
         "HintName": GLib.Variant("s", ""), "Drive": GLib.Variant("o", drive),
+        "IdUUID": GLib.Variant("s", "uuid-" + (label or "internal")),
         "CryptoBackingDevice": GLib.Variant("o", "/"),
     }
 

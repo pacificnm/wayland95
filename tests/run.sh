@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games find repos markdown startup drives monitors screen
+#                                  games find repos markdown startup drives backup monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -828,6 +828,7 @@ exec env HOME='$home' XDG_DATA_HOME='$home/.local/share' XDG_STATE_HOME='$home/.
     XDG_CACHE_HOME='$home/.cache' QT_NO_XDG_DESKTOP_PORTAL=1 DBUS_SESSION_BUS_ADDRESS='$SHELL_BUS' \\
     PATH='$HERE/fakes:$PATH' W95_FAKE_LOG='$FAKE_LOG' WAYLAND95_TEST_AGENTS_ON_SESSION_BUS=1 \\
     W95_FAKE_NETWORK='${FAKE_NETWORK:-}' XDG_CONFIG_DIRS='$WORK/no-config-dirs' \\
+    W95_FAKE_MEDIA='$WORK/media' FAKE_CRON='$WORK/crontab' \\
     WAYLAND95_NO_SYSTEM_AGENTS=1 WAYLAND95_NO_POWER_ACTIONS=1 \\
     WAYLAND95_TEST_POLKIT_HELPER='$HERE/fakes/polkit-agent-helper-1' WAYLAND95_TEST_CHKPWD='$HERE/fakes/unix_chkpwd' \\
     WAYLAND95_TEST_MINUTE_MS='${MINUTE_MS:-}' WAYLAND95_TEST_POWER_SUPPLY='${POWER_SUPPLY:-$WORK/no-power-supply}' \\
@@ -2913,8 +2914,93 @@ suite_drives() {
     shell_said "PHOTOS was removed without ejecting it"; expect_true $? "pulling one out while it's open warns to eject first" "$(grep -i drives "$WORK/$SUITE-shell.log" | tail -3)"
 }
 
+# --- Control Panel > Backup: folders to a USB drive, with cron (all stand-ins) -------------
+# The drive is tests/fakes/udisks.py's STICK (its folder under $WORK/media);
+# crontab is tests/fakes/crontab ($WORK/crontab). The engine is the real
+# session/wayland95-backup.
+start_backup_applet() { # [TAB]
+    BHOME=$WORK/home-$SUITE
+    HOME=$BHOME XDG_CONFIG_HOME=$CONFIG XDG_STATE_HOME=$BHOME/.local/state WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland \
+        DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS WAYLAND95_TEST_AGENTS_ON_SESSION_BUS=1 PATH=$REPO/tests/fakes:$PATH \
+        W95_FAKE_MEDIA=$WORK/media FAKE_CRON=$WORK/crontab W95_FAKE_LOG=$FAKE_LOG \
+        "$BUILD/win95control" --applet backup --tab "${1:-0}" >>"$WORK/$SUITE-control.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95control)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.2
+}
+bsnapshots() { ls -1d "$WORK/media/STICK/Wayland 95 Backups/"*/20*_* 2>/dev/null | grep -v partial; }
+WEEKLY_X=73; WEEKLY_Y=193; NEVER_X=73; NEVER_Y=121 # (Backup > Schedule; Apply is at 479,504)
+suite_backup() {
+    say "backup: Control Panel > Backup to a USB drive (stand-in UDisks2, crontab): Back Up Now, versions, schedule"
+    [ -x "$BUILD/win95control" ] || { bad "win95control" "not built"; return; }
+    fresh
+    local home=$WORK/home-$SUITE
+    rm -rf "$home"; mkdir -p "$home/Documents/letters" "$home/Pictures"
+    echo "dear sam" >"$home/Documents/letters/sam.txt"; echo "notes" >"$home/Documents/notes.txt"; echo "px" >"$home/Pictures/cat.png"
+    printf 'MAILTO=me\n5 4 * * * echo mine\n' >"$WORK/crontab"
+    WITH_UDISKS=1 start_shell || return
+    start_backup_applet 0
+    [ "$(windows_of win95control)" -ge 1 ]; expect_true $? "Control Panel > Backup opens" "$(tail -3 "$WORK/$SUITE-control.log")"
+    away; shot first
+
+    # Back Up Now: the settings are saved (and the schedule: every day at 9 PM),
+    # the drive opened, and a dated folder made on it
+    pointer click:277,463 wait:0.5
+    for _ in $(seq 40); do [ -n "$(bsnapshots)" ] && break; sleep 0.25; done
+    sleep 1
+    local first; first=$(bsnapshots | head -n 1)
+    [ -n "$first" ] && [ "$(cat "$first$home/Documents/letters/sam.txt" 2>/dev/null)" = "dear sam" ] && [ -f "$first$home/Pictures/cat.png" ]
+    expect_true $? "Back Up Now opens the drive and backs the folders up into a dated folder" "$(ls -R "$WORK/media" 2>&1 | head -20)"
+    grep -q "Mount /org/freedesktop/UDisks2/block_devices/stick1" "$FAKE_LOG"; expect_true $? "(it opened the drive first, through UDisks2)" "$(grep udisks "$FAKE_LOG")"
+    grep -qx "DRIVE_UUID=uuid-STICK" "$CONFIG/wayland95/backup.conf" && grep -qx "FOLDER=$home/Documents" "$CONFIG/wayland95/backup.conf"
+    expect_true $? "the settings are saved (backup.conf: the drive by its UUID, the folders)" "$(cat "$CONFIG/wayland95/backup.conf" 2>&1)"
+    grep -q "^0 21 \* \* \* '.*wayland95-backup' --scheduled # wayland95-backup$" "$WORK/crontab" \
+        && grep -qx "5 4 \* \* \* echo mine" "$WORK/crontab" && grep -qx "MAILTO=me" "$WORK/crontab"
+    expect_true $? "cron runs it every day at 9 PM (the rest of your crontab left alone)" "$(cat "$WORK/crontab")"
+    away; shot done
+    [ "$(pixel done 40 350)" != "a00000" ]; true
+
+    # a second one: a new folder, unchanged files shared with the first
+    sleep 1; echo "dear sam, again" >"$home/Documents/letters/sam.txt"
+    pointer click:277,463 wait:0.5
+    for _ in $(seq 40); do [ "$(bsnapshots | wc -l)" -ge 2 ] && break; sleep 0.25; done
+    sleep 1
+    local second; second=$(bsnapshots | tail -n 1)
+    [ "$second" != "$first" ] && [ "$(cat "$second$home/Documents/letters/sam.txt")" = "dear sam, again" ] \
+        && [ "$(stat -c %i "$first$home/Documents/notes.txt")" = "$(stat -c %i "$second$home/Documents/notes.txt")" ]
+    expect_true $? "a second backup: its own folder, unchanged files shared (no extra space)" "$(bsnapshots)"
+
+    # Open Backups: the latest, in the file manager
+    pointer click:368,463 wait:1.5
+    for _ in $(seq 20); do [ "$(windows_of win95files)" -ge 1 ] && break; sleep 0.25; done
+    query list | grep -q "^$(basename "$second")|win95files|"; expect_true $? "Open Backups shows the latest in the file manager" "$(query list | tr '\n' ' ')"
+    query list | sed -n 's/^\([^|]*\)|win95files|.*/\1/p' | while read -r t; do query close "$t"; done
+    query close "Backup Properties"; sleep 0.6
+
+    # Schedule: every week; Apply changes cron's line
+    start_backup_applet 1
+    away; shot schedule
+    [ "$(pixel schedule 600 351)" != ffffff ] || true
+    pointer click:$WEEKLY_X,$WEEKLY_Y wait:0.3 click:479,504 wait:0.6
+    grep -q "^0 21 \* \* 0 '.*wayland95-backup' --scheduled # wayland95-backup$" "$WORK/crontab" && [ "$(grep -c wayland95-backup "$WORK/crontab")" = 1 ]
+    expect_true $? "Every week on Sunday: cron's line changes (one line, not two)" "$(cat "$WORK/crontab")"
+    pointer click:$NEVER_X,$NEVER_Y wait:0.3 click:479,504 wait:0.6
+    ! grep -q wayland95-backup "$WORK/crontab" && grep -qx "5 4 \* \* \* echo mine" "$WORK/crontab"
+    expect_true $? "Never: the line goes (yours stays)" "$(cat "$WORK/crontab")"
+    pointer click:$WEEKLY_X,$WEEKLY_Y wait:0.3 click:479,504 wait:0.6
+    query close "Backup Properties"; sleep 0.6
+
+    # the drive plugged in with a backup due: the desktop backs up
+    local n; n=$(bsnapshots | wc -l)
+    sed -i 's/^last_ok=.*/last_ok=1/' "$home/.local/state/wayland95/backup.status"
+    in_bus gdbus call --session --dest org.freedesktop.UDisks2 --object-path /org/freedesktop/UDisks2 \
+        --method org.wayland95.Test.Plug PHOTOS >/dev/null
+    for _ in $(seq 40); do [ "$(bsnapshots | wc -l)" -gt "$n" ] && break; sleep 0.25; done
+    [ "$(bsnapshots | wc -l)" -gt "$n" ]; expect_true $? "a drive plugged in when a backup is due: it backs up" "$(tail -3 "$home/.local/state/wayland95/backup.log" 2>&1)"
+}
+
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

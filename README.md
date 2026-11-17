@@ -728,6 +728,28 @@ up next to the shell first, then on `$PATH`.
       (`systemd-analyze`), and whether the computer starts to the desktop
       or a text console (`systemctl set-default`, with a warning).
     - Not here (yet): the boot menu (GRUB) and kernel options.
+  - **Backup:** copies chosen folders to a drive you plug in (USB stick or
+    disk), with `rsync`
+    ([session/wayland95-backup](session/wayland95-backup), installed as
+    `wayland95-backup`). The Backup tab has the folders (Add..., Remove),
+    the drive (found by its UUID, wherever it's mounted), how many backups
+    to keep, the last result, Back Up Now (with progress and Stop), Open
+    Backups and View Log. On a Linux drive (ext4...) each backup is a
+    dated folder of its own, `Wayland 95 Backups/USER@HOST/DATE_TIME`, with
+    unchanged files shared with the one before (hard links: each looks
+    complete and costs only what changed), and `Latest` pointing at the
+    newest; the oldest beyond Keep are removed. On FAT/exFAT/NTFS it's one
+    copy, `Mirror`, with what was deleted or replaced since moved to
+    `Deleted/DATE_TIME`. The Schedule tab: never, every hour, every day
+    or every week at a time (one line in your crontab, marked
+    `# wayland95-backup`; the rest is left alone), "also back up when the
+    drive is plugged in, if one is due" (the desktop runs it), and what to
+    leave out. A scheduled backup uses the drive if it's open; one that's
+    only plugged in can't be opened from cron, so it waits for the drive
+    to be plugged in again (or Back Up Now). A failure, and a week without
+    a backup, is a notification. To get files back, Open Backups and copy
+    them out. A drive formatted on Linux may belong to root: the backup
+    then says how to give it to you (`sudo chown`).
   - **Taskbar:** Start menu size (Small is Windows 95's own; Medium, the
     default, and Large are 25% and 50% bigger: rows, icons and text), Show
     Clock and 24-hour clock, and which icons the

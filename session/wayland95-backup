@@ -1,0 +1,199 @@
+#!/bin/sh
+# wayland95-backup: backs up chosen folders to a drive (Control Panel >
+# Backup writes its settings; cron runs it on its schedule; the desktop runs
+# it when the drive is plugged in and a backup is due).
+#
+#   wayland95-backup --now        back up now (Back Up Now)
+#   wayland95-backup --scheduled  from cron
+#   wayland95-backup --due        only if the last good backup is older than
+#                                 the schedule says (the drive plugged in)
+#
+# Settings: ~/.config/wayland95/backup.conf, KEY=VALUE lines:
+#   DRIVE_UUID=  the drive's filesystem (found wherever it's mounted)
+#   DRIVE_NAME=  its name, for messages
+#   DEST_DIR=    the folder on it (default "Wayland 95 Backups/USER@HOST")
+#   KEEP=        how many versions to keep (default 10)
+#   SCHEDULE=    off, hourly, daily or weekly (cron's line says when)
+#   WHEN_PLUGGED= no: don't back up when the drive is plugged in and one's due
+#   FOLDER=      a folder to back up (one line each)
+#   EXCLUDE=     an rsync pattern to leave out (one line each)
+#
+# On a drive that can hold hard links (ext4, btrfs, xfs...) each backup is
+# a folder of its own, DATE_TIME, with unchanged files shared with the one
+# before (rsync --link-dest), so each looks complete and costs only what
+# changed; the oldest beyond KEEP are removed. On FAT, exFAT or NTFS it's
+# one copy, "Mirror", kept like the folders, with what was deleted or
+# replaced since moved to "Deleted/DATE_TIME".
+#
+# What happened goes to ~/.local/state/wayland95/backup.status (KEY=VALUE:
+# time, result ok|failed|skipped, message, files, bytes, folder) and
+# backup.log; a failure (and a backup missed for a week) is a notification.
+set -u
+umask 077
+
+mode=${1:---now}
+conf=${W95_BACKUP_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/wayland95/backup.conf}
+state=${W95_BACKUP_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/wayland95}
+mkdir -p "$state"
+status_file=$state/backup.status
+log_file=$state/backup.log
+# cron's environment has no session bus: the notifications need it
+[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+export LC_ALL=C.UTF-8
+
+log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$log_file"; }
+say() { echo "$*"; log "$*"; } # (the applet shows what's printed)
+value() { sed -n "s/^$1=//p" "$conf" 2>/dev/null | head -n 1; }
+values() { sed -n "s/^$1=//p" "$conf" 2>/dev/null; }
+last() { sed -n "s/^$1=//p" "$status_file" 2>/dev/null | head -n 1; }
+notify() { # SUMMARY BODY [critical]
+    command -v win95notify >/dev/null 2>&1 || return 0
+    if [ "${3:-}" = critical ]; then
+        win95notify -a "Backup" -u critical "$1" "$2" >/dev/null 2>&1 &
+    else
+        win95notify -a "Backup" "$1" "$2" >/dev/null 2>&1 &
+    fi
+}
+# result message files bytes folder: the status file, written whole
+finish() {
+    tmp=$status_file.tmp
+    {
+        echo "time=$(date +%s)"
+        echo "result=$1"
+        echo "message=$2"
+        echo "files=${3:-}"
+        echo "bytes=${4:-}"
+        echo "folder=${5:-}"
+        # the last good one stays known when this one wasn't
+        if [ "$1" = ok ]; then echo "last_ok=$(date +%s)"; echo "last_ok_folder=${5:-}"
+        else echo "last_ok=$(last last_ok)"; echo "last_ok_folder=$(last last_ok_folder)"; fi
+        echo "nagged=$(last nagged)"
+    } >"$tmp" && mv -f "$tmp" "$status_file"
+    log "$1: $2"
+}
+
+[ -f "$conf" ] || { echo "Backup isn't set up (Control Panel > Backup)." >&2; exit 2; }
+uuid=$(value DRIVE_UUID)
+name=$(value DRIVE_NAME); [ -n "$name" ] || name="the backup drive"
+schedule=$(value SCHEDULE)
+keep=$(value KEEP); case "$keep" in ''|*[!0-9]*) keep=10 ;; esac; [ "$keep" -ge 1 ] || keep=1
+dest_dir=$(value DEST_DIR); [ -n "$dest_dir" ] || dest_dir="Wayland 95 Backups/$(id -un)@$(hostname)"
+
+# --due: only when the schedule says one is due (and it's wanted)
+if [ "$mode" = --due ]; then
+    [ "$(value WHEN_PLUGGED)" = no ] && exit 0
+    case "$schedule" in hourly) every=3600 ;; daily) every=86400 ;; weekly) every=604800 ;; *) exit 0 ;; esac
+    ok=$(last last_ok); [ -n "$ok" ] || ok=0
+    if [ $(( $(date +%s) - ok )) -lt $(( every - every / 10 )) ]; then
+        echo "Not due yet."
+        exit 0
+    fi
+fi
+
+# one at a time
+exec 9>"$state/backup.lock"
+if ! flock -n 9; then
+    echo "A backup is running already."
+    exit 0
+fi
+
+[ -n "$uuid" ] || { finish failed "No drive is chosen to back up to."; exit 1; }
+folders=$(values FOLDER)
+[ -n "$folders" ] || { finish failed "No folders are chosen to back up."; exit 1; }
+
+# the drive: wherever it's mounted, or mounted now (as you: allowed from
+# the desktop; a scheduled run may not be, and then it waits for the drive)
+mount_point() { findmnt -rn -o TARGET -S "UUID=$uuid" 2>/dev/null | head -n 1 | sed 's/\\x20/ /g'; }
+mnt=$(mount_point)
+if [ -z "$mnt" ]; then
+    if ! udisksctl info -b "/dev/disk/by-uuid/$uuid" >/dev/null 2>&1; then
+        # (--due: some other drive was plugged in; nothing to say)
+        [ "$mode" = --due ] && exit 0
+        finish skipped "$name isn't plugged in."
+        # a week without a backup (or since it was set up): say so, once a day
+        ok=$(last last_ok); [ -n "$ok" ] || ok=$(stat -c %Y "$conf")
+        today=$(date +%Y-%m-%d)
+        if [ "$mode" = --scheduled ] && [ $(( $(date +%s) - ok )) -gt 604800 ] && [ "$(last nagged)" != "$today" ]; then
+            sed -i "s/^nagged=.*/nagged=$today/" "$status_file"
+            notify "No backup for a week" "Plug in $name to back up your files."
+        fi
+        echo "$name isn't plugged in."
+        exit 3
+    fi
+    udisksctl mount --no-user-interaction -b "/dev/disk/by-uuid/$uuid" >/dev/null 2>&1
+    mnt=$(mount_point)
+    if [ -z "$mnt" ]; then
+        finish skipped "$name is plugged in but isn't open. Open it in My Computer."
+        echo "$name is plugged in but isn't open."
+        exit 3
+    fi
+fi
+
+dest=$mnt/$dest_dir
+if ! mkdir -p "$dest" 2>/dev/null || [ ! -w "$dest" ]; then
+    finish failed "Can't write to $name ($dest). Its owner may need to let you: sudo chown $(id -un) \"$mnt\"."
+    notify "Backup failed" "Can't write to $name." critical
+    exit 1
+fi
+
+# can it hold hard links? (versions) or not (one mirror)
+probe=$dest/.wayland95-probe.$$
+links=no
+# (W95_BACKUP_NO_LINKS: as on FAT, for tests/backup/run.sh)
+if [ -z "${W95_BACKUP_NO_LINKS:-}" ] && : >"$probe" 2>/dev/null && ln "$probe" "$probe.link" 2>/dev/null; then links=yes; fi
+rm -f "$probe" "$probe.link"
+
+stamp=$(date +%Y-%m-%d_%H%M%S)
+excludes=$state/backup.excludes
+values EXCLUDE >"$excludes"
+set -- -r -l -t --modify-window=2 --exclude-from="$excludes" --stats --info=progress2 --no-inc-recursive --relative
+[ "$links" = yes ] && set -- "$@" -p -H
+
+say "Backing up to $name..."
+out=$state/backup.rsync
+if [ "$links" = yes ]; then
+    target=$dest/$stamp.partial
+    rm -rf "$dest"/*.partial
+    [ -L "$dest/Latest" ] && set -- "$@" --link-dest="$dest/$(readlink "$dest/Latest")"
+    folder=$dest/$stamp
+else
+    target=$dest/Mirror
+    set -- "$@" --delete --backup --backup-dir="$dest/Deleted/$stamp"
+    folder=$target
+fi
+mkdir -p "$target"
+
+# the folders, one argument each (they may have spaces)
+oldifs=$IFS; IFS='
+'
+for f in $folders; do
+    [ -d "$f" ] && set -- "$@" "$f" || log "leaving out $f: not a folder"
+done
+IFS=$oldifs
+# progress lines ("1,234,567  45%  ...") go to stdout for the applet; the
+# whole output, with the totals, to $out
+{ rsync "$@" "$target/" 2>"$out.err"; echo $? >"$out.code"; } | tr '\r' '\n' | tee "$out" | grep --line-buffered '%'
+rsync_code=$(cat "$out.code" 2>/dev/null || echo 1)
+[ "$rsync_code" = 24 ] && rsync_code=0 # files that vanished as it ran: fine
+
+files=$(sed -n 's/^Number of regular files transferred: \([0-9,]*\).*/\1/p' "$out" | tr -d ,)
+bytes=$(sed -n 's/^Total transferred file size: \([0-9,]*\).*/\1/p' "$out" | tr -d ,)
+if [ "$rsync_code" -ne 0 ]; then
+    err=$(grep -v vanished "$out.err" | tail -n 1)
+    [ "$links" = yes ] && rm -rf "$target"
+    finish failed "${err:-rsync stopped}" "$files" "$bytes"
+    notify "Backup failed" "${err:-The backup to $name stopped.}" critical
+    say "Backup failed: ${err:-rsync stopped}"
+    exit 1
+fi
+
+if [ "$links" = yes ]; then
+    mv "$target" "$dest/$stamp"
+    ln -sfn "$stamp" "$dest/Latest"
+    # the oldest beyond KEEP
+    ls -1d "$dest"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9] 2>/dev/null | sort | head -n "-$keep" \
+        | while IFS= read -r old; do rm -rf "$old"; log "removed the old backup $old"; done
+fi
+finish ok "Backed up to $name." "$files" "$bytes" "$folder"
+say "Done: ${files:-0} files copied."
+exit 0

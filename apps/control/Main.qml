@@ -23,6 +23,8 @@ Window {
           description: "Changes accessibility options: StickyKeys, FilterKeys, MouseKeys, High Contrast and more." },
         { id: "programs", name: "Add/Remove Programs", file: "SoftwareApplet.qml",
           description: "Installs and removes programs, and keeps them up to date." },
+        { id: "backup", name: "Backup", file: "BackupApplet.qml",
+          description: "Backs up your folders to a drive you plug in, on a schedule or when you click Back Up Now." },
         { id: "bluetooth", name: "Bluetooth", file: "BluetoothApplet.qml",
           description: "Turns Bluetooth on or off, and pairs and connects Bluetooth devices." },
         { id: "datetime", name: "Date/Time", file: "DateTimeApplet.qml",

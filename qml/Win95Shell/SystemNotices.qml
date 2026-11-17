@@ -150,6 +150,8 @@ QtObject {
         Connections {
             target: Ui.Drives
             function onDriveAdded(drive) {
+                // Control Panel > Backup: back up now if this is its drive and one is due
+                Launcher.launch("wayland95-backup", ["--due"]);
                 var n = Notifications.notifyWithActions(
                     "Drives", drive.name + " was plugged in",
                     (drive.encrypted ? "An encrypted disk" : "A removable disk")

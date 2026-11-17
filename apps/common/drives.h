@@ -34,7 +34,7 @@ class Drives : public QObject
     // UDisks2 answered
     Q_PROPERTY(bool available READ available NOTIFY drivesChanged)
     // [{ id (the filesystem's UDisks2 object), name, device, size,
-    //    sizeText, fsType, mounted, mountPath, encrypted, drive (its
+    //    sizeText, fsType, uuid, mounted, mountPath, encrypted, drive (its
     //    drive's object), driveName, canEject }], by name
     Q_PROPERTY(QVariantList drives READ drives NOTIFY drivesChanged)
 

@@ -213,6 +213,7 @@ void Drives::load()
             m[QStringLiteral("size")] = size;
             m[QStringLiteral("sizeText")] = sizeText(size);
             m[QStringLiteral("fsType")] = block.value(QStringLiteral("IdType")).toString();
+            m[QStringLiteral("uuid")] = block.value(QStringLiteral("IdUUID")).toString();
             m[QStringLiteral("mounted")] = !mounts.isEmpty();
             m[QStringLiteral("mountPath")] = mounts.value(0);
             m[QStringLiteral("encrypted")] = crypto && !fs;

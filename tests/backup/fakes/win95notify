@@ -1,0 +1,3 @@
+#!/bin/sh
+# Stand-in win95notify for tests/backup/run.sh: logs the notification
+echo "notify $*" >>"$W95_FAKE_DRIVE.log"

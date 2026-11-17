@@ -1,0 +1,10 @@
+#!/bin/sh
+# Stand-in udisksctl: says a drive tests/fakes/udisks.py has mounted is
+# there; mounts nothing. Without W95_FAKE_MEDIA it refuses (never a real
+# drive from a test).
+[ -n "${W95_FAKE_MEDIA:-}" ] || { echo "stand-in udisksctl: W95_FAKE_MEDIA isn't set" >&2; exit 1; }
+echo "udisksctl $*" >>"${W95_FAKE_LOG:-/dev/null}"
+for a in "$@"; do
+    case "$a" in /dev/disk/by-uuid/uuid-*) label=${a#/dev/disk/by-uuid/uuid-}; [ "$1" = info ] && [ -d "$W95_FAKE_MEDIA/$label" ] && exit 0 ;; esac
+done
+exit 1

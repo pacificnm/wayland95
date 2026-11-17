@@ -14,5 +14,7 @@ computer: its speakers, its volume, its password prompts, its updates.
 | `polkit-agent-helper-1` | polkit's password checker | asks for the password; `right-password` is right, anything else is wrong |
 | `logind.py` | logind and hostname1, on the test's session bus | a laptop that can sleep; the test opens and closes its lid (SetLid); calls are logged |
 | `timedate.py` | systemd-timedated, on the test's session bus | the computer's time zone (America/New_York to start); SetTimezone changes it and says so; calls are logged |
+| `crontab` | `crontab`, for Control Panel > Backup | the crontab is the file `$FAKE_CRON`; refuses without it |
+| `findmnt`, `udisksctl` | the backup engine's look at drives | a filesystem `uuid-LABEL` of `udisks.py`'s is there and mounted while its folder under `$W95_FAKE_MEDIA` is; `udisksctl` mounts nothing and refuses without `W95_FAKE_MEDIA`; `findmnt` is the real one without it |
 | `udisks.py` | UDisks2, on the test's session bus | a USB stick, STICK, that "mounts" as a folder under `$W95_FAKE_MEDIA` and powers off; the computer's own disk (a system one, never listed); Plug(label) and Pull(label) plug one in and pull one out; a file `busy` next to the log makes Unmount fail as it does with files open; calls are logged |
 | `packagekit.py` | PackageKit, on the test's session bus | every check finds two updates: Wayland 95 0.9.9 (a security fix) and one other |

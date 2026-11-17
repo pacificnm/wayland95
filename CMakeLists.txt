@@ -239,6 +239,10 @@ install(FILES session/wayland95.portal DESTINATION ${WAYLAND95_PORTAL_DIR})
 # Control Panel > Services: its root helper, and the polkit action that lets
 # pkexec run it (polkit reads actions only from /usr/share, whatever our prefix)
 install(PROGRAMS session/wayland95-services DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/wayland95)
+# Control Panel > Backup's engine (cron runs it): next to the programs in a
+# build tree too, where the applet and the desktop look first
+install(PROGRAMS session/wayland95-backup DESTINATION ${CMAKE_INSTALL_BINDIR})
+file(CREATE_LINK ${CMAKE_SOURCE_DIR}/session/wayland95-backup ${CMAKE_BINARY_DIR}/wayland95-backup SYMBOLIC)
 set(WAYLAND95_SERVICES_HELPER "${CMAKE_INSTALL_FULL_LIBEXECDIR}/wayland95/wayland95-services")
 configure_file(session/org.wayland95.services.policy.in ${CMAKE_BINARY_DIR}/org.wayland95.services.policy @ONLY)
 set(WAYLAND95_POLKIT_ACTIONS_DIR "/usr/share/polkit-1/actions" CACHE PATH "Where polkit looks for actions")

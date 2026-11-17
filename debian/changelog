@@ -1,3 +1,9 @@
+wayland95 (0.2.0) trixie; urgency=medium
+
+  * The desktop is now wayland95-compositor (wlroots) with win95shell, replacing the Qt compositor: GPU buffer sharing, popups and input as other desktops do them, a real lock screen, two or more displays, and display settings (resolution, refresh rate, scale, orientation, arrangement) in Control Panel > Display. Faster window frames and resizing.
+
+ -- Wayland 95 <wayland95@localhost>  Mon, 16 Nov 2026 19:02:56 -0500
+
 wayland95 (0.1.4) trixie; urgency=medium
 
   * Services: turning SSH on works again. Fixes for clicks not reaching Chromium and other programs (stuck drags and window moves, misplaced sub-surfaces).

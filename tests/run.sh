@@ -846,6 +846,28 @@ suite_shell() {
     query list | sed -n 's/^\([^|]*\)|win95files|.*/\1/p' | while read -r t; do query close "$t"; done; sleep 0.8
     [ "$(windows_of win95files)" -eq 0 ]; expect_true $? "(and it closes from the window list)" "$(query list | tr '\n' ' ')"
 
+    # the Recycle Bin's own menu (right-click): Empty Recycle Bin. (The
+    # test shell's bin: its own home folder's, never yours)
+    local trash=$WORK/home-$SUITE/.local/share/Trash
+    case "$trash" in "$WORK"/*) ;; *) bad "the test's Recycle Bin" "not in the test's folder: $trash"; return ;; esac
+    pointer click:40,195,right wait:0.6; away; shot bin-menu-empty
+    pointer key:Escape wait:0.4
+    mkdir -p "$trash/files/folder" "$trash/info"
+    echo one >"$trash/files/a.txt"; echo two >"$trash/files/folder/b.txt"; echo info >"$trash/info/a.txt.trashinfo"
+    sleep 1
+    pointer click:40,195,right wait:0.6; away; shot bin-menu
+    expect_pixel "right-clicking the Recycle Bin opens its menu" bin-menu 120 205 c0c0c0
+    pointer key:b wait:0.8; away; shot bin-confirm
+    [ -e "$trash/files/a.txt" ] && [ "$(pixel bin-confirm 640 400)" = c0c0c0 ]
+    expect_true $? "Empty Recycle Bin asks first (nothing is deleted yet)" "a.txt: $(ls "$trash/files" | tr '\n' ' '); the box: $(pixel bin-confirm 640 400)"
+    pointer key:Return wait:1.2
+    [ -z "$(ls -A "$trash/files" "$trash/info" 2>/dev/null | grep -v ':$')" ] && grep -q "trash-empty" "$FAKE_LOG"
+    expect_true $? "Yes: the bin is emptied (files, folders and their notes), with its sound" \
+        "left: $(ls -A "$trash/files" "$trash/info" | tr '\n' ' '); $(grep -c trash-empty "$FAKE_LOG") sounds"
+    pointer click:40,195,right wait:0.6 key:b wait:0.6; away; shot bin-nothing
+    expect_pixel "empty, its Empty Recycle Bin does nothing (greyed)" bin-nothing 640 400 008080
+    pointer key:Escape wait:0.4
+
     start_probe A qt cc0000 || return
     start_probe B qt 0000cc || return
     local n

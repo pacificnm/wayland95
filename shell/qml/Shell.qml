@@ -38,10 +38,12 @@ QtObject {
             anchors.fill: parent
         }
         DesktopIcons {
+            id: desktopIcons
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.bottom: parent.bottom
             width: 100
+            onMenuRequested: (entry, x, y) => shell.showIconMenu(entry, x, y)
         }
     }
 
@@ -316,6 +318,27 @@ QtObject {
             height: Screen.height
             TaskSwitcher { id: taskSwitcher }
         }
+    }
+
+    // --- a desktop icon's menu: Open, and the Recycle Bin's Empty --------
+    // (the desktop and the pop-up layer both start at the screen's corner)
+    function showIconMenu(entry, x, y) {
+        taskbar.closePopups();
+        var items = [{ text: "&Open", action: function () { desktopIcons.open(entry); } }];
+        if (entry.kind === "bin") {
+            items.push({ separator: true });
+            items.push({ text: "Empty Recycle &Bin", enabled: TrashWatcher.full, action: shell.confirmEmptyTrash });
+        }
+        windowMenu.popup(x, y, items);
+    }
+    function confirmEmptyTrash() {
+        shellMessage.show("Confirm Delete", "Are you sure you want to permanently delete everything in the Recycle Bin?",
+                          "warning", ["Yes", "No"], function (index) {
+                              if (index === 0) {
+                                  TrashWatcher.empty();
+                                  Ui.Wayland95Settings.playSound("emptyTrash");
+                              }
+                          });
     }
 
     // --- a window's menu (Restore, Move, Size, Minimize, Maximize, Close)

@@ -19,6 +19,9 @@ public:
     explicit TrashWatcher(QObject *parent = nullptr);
 
     bool full() const { return m_full; }
+    // Empty Recycle Bin: everything in it is deleted for good (off the
+    // desktop's thread: there can be a lot)
+    Q_INVOKABLE void empty();
 
 signals:
     void fullChanged();

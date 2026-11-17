@@ -12,6 +12,15 @@ GridView {
     cellHeight: 80
     interactive: false
 
+    // an icon was right-clicked: its entry (label, kind, program, arg), and
+    // where, in this item's coordinates (the desktop shows its menu)
+    signal menuRequested(var entry, real x, real y)
+    function open(entry) {
+        if (entry.program)
+            Launcher.launch(entry.program, entry.program === "win95control" ? ["--applet", entry.arg]
+                                           : entry.arg ? [entry.arg] : []);
+    }
+
     // Draws the generic computer (monitor + case) on a 32x32 grid, at
     // (ox, oy) scaled by s. Shared by the My Computer and Network icons.
     function drawComputer(ctx, ox, oy, s) {
@@ -201,13 +210,20 @@ GridView {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: parent.selected = !parent.selected
-            onDoubleClicked: {
-                if (model.program)
-                    Launcher.launch(model.program, model.program === "win95control" ? ["--applet", model.arg]
-                                                   : model.arg ? [model.arg] : []);
-                else
-                    console.log("double-clicked desktop icon:", model.label, "(not wired up yet)");
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: (mouse) => {
+                if (mouse.button === Qt.RightButton) {
+                    parent.selected = true;
+                    var p = mapToItem(grid, mouse.x, mouse.y);
+                    grid.menuRequested({ label: model.label, kind: model.kind, program: model.program, arg: model.arg },
+                                       p.x, p.y);
+                } else {
+                    parent.selected = !parent.selected;
+                }
+            }
+            onDoubleClicked: (mouse) => {
+                if (mouse.button === Qt.LeftButton)
+                    grid.open({ program: model.program, arg: model.arg });
             }
         }
     }

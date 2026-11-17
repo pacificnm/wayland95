@@ -1,6 +1,9 @@
 #include "trashwatcher.h"
 
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QThreadPool>
 #include <QStandardPaths>
 
 TrashWatcher::TrashWatcher(QObject *parent)
@@ -21,4 +24,23 @@ void TrashWatcher::check()
         m_full = full;
         emit fullChanged();
     }
+}
+
+void TrashWatcher::empty()
+{
+    // the files, and the notes of where each came from (Trash/info)
+    const QString files = m_dir;
+    const QString info = QFileInfo(m_dir).absolutePath() + QStringLiteral("/info");
+    QThreadPool::globalInstance()->start([files, info] {
+        for (const QString &dir : { files, info }) {
+            const QFileInfoList all = QDir(dir).entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
+            for (const QFileInfo &entry : all) {
+                // (a link is removed itself, never what it points to)
+                if (entry.isDir() && !entry.isSymLink())
+                    QDir(entry.absoluteFilePath()).removeRecursively();
+                else
+                    QFile::remove(entry.absoluteFilePath());
+            }
+        }
+    });
 }

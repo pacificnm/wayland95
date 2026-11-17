@@ -235,6 +235,7 @@ int main(int argc, char *argv[])
 	layers_init(&server);
 	input_init(&server);
 	protocols_init(&server);
+	dialog_init(&server);
 	shell_init(&server);
 	xwayland_init(&server);
 

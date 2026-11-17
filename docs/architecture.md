@@ -69,7 +69,8 @@ one file per concern):
 | `main.c` | start-up: backend (DRM/KMS, nested Wayland/X11, or headless for tests), renderer, allocator, scene graph, the protocols, Xwayland, then start `win95shell` |
 | `output.c` | outputs, modes, layouts, frame scheduling, DPMS (`wlr-output-power-management`) |
 | `input.c` | keyboards (xkb layout, repeat), pointers, touchpads (libinput settings), seat, cursor (xcursor + `cursor-shape`) |
-| `view.c` | one window (xdg toplevel or X11): map/unmap, focus, stacking, move/resize/maximize/minimize, foreign-toplevel handle |
+| `view.c` | one window (xdg toplevel or X11): map/unmap, focus, stacking (a window's dialogs stay in front of it), move/resize/maximize/minimize, foreign-toplevel handle |
+| `dialog.c` | `xdg-dialog-v1`: which windows are modal dialogs; bringing forward a window that waits on one gives the dialog the keyboard, as in Windows 95 |
 | `xdg.c` | xdg-shell: toplevels, popups (placed and kept on screen with `wlr_xdg_popup_unconstrain_from_box`) |
 | `xwayland.c` | X11 windows through `wlr_xwayland` (its window manager is part of wlroots) |
 | `decoration.c` | the Win95 frame: title bar (active/inactive gradients, bold title cut short with "..."), minimize/maximize/close buttons, 3-D borders, an invisible 4-pixel grab zone outside the border for resizing; drawn with cairo and pango into one scene buffer behind the program, re-drawn only when its size, title, state or the colour scheme changes |

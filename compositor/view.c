@@ -126,6 +126,15 @@ struct view *view_top(struct server *server)
 	return NULL;
 }
 
+struct view *view_active(struct server *server)
+{
+	struct view *view;
+	wl_list_for_each(view, &server->views, link)
+		if (view->mapped && !view->minimized && view->frame_active)
+			return view;
+	return NULL;
+}
+
 // A full screen window covers the panels too (the taskbar) while it's the
 // one in front: it moves to a layer above them, and back among the windows
 // when another comes forward.
@@ -144,6 +153,44 @@ static void fullscreen_restack(struct server *server)
 
 // ----------------------------------------------------------------- focus
 
+// a window's dialogs: the windows it's the parent of (or theirs)
+static bool view_owns(struct view *owner, struct view *view)
+{
+	if (owner->type != VIEW_XDG || view->type != VIEW_XDG)
+		return false;
+	for (struct wlr_xdg_toplevel *p = view->xdg_toplevel->parent; p; p = p->parent)
+		if (p == owner->xdg_toplevel)
+			return true;
+	return false;
+}
+
+// A window's dialogs stay in front of it, as in Windows 95 (in the order
+// they were in): bringing it forward brings them too.
+static void raise_dialogs(struct view *owner)
+{
+	struct server *server = owner->server;
+	struct view *found[32], *view;
+	int n = 0;
+	wl_list_for_each_reverse(view, &server->views, link) // back to front
+		if (n < 32 && view != owner && view->mapped && !view->minimized && view_owns(owner, view))
+			found[n++] = view;
+	for (int i = 0; i < n; ++i) {
+		wl_list_remove(&found[i]->link);
+		wl_list_insert(&server->views, &found[i]->link);
+		wlr_scene_node_raise_to_top(&found[i]->scene_tree->node);
+	}
+}
+
+// the front one of a window's modal dialogs, if it's waiting on one
+static struct view *modal_dialog(struct view *owner)
+{
+	struct view *view;
+	wl_list_for_each(view, &owner->server->views, link)
+		if (view->modal && view->mapped && !view->minimized && view_owns(owner, view))
+			return view;
+	return NULL;
+}
+
 void view_focus(struct view *view)
 {
 	if (!view || !view->mapped)
@@ -154,17 +201,22 @@ void view_focus(struct view *view)
 	if (view->minimized)
 		view_set_minimized(view, false);
 
-	struct view *other;
-	wl_list_for_each(other, &server->views, link)
-		if (other != view && other->mapped)
-			set_activated(other, false);
-
 	wl_list_remove(&view->link);
 	wl_list_insert(&server->views, &view->link);
 	fullscreen_restack(server); // (before raising: one that leaves its layer lands on top)
 	wlr_scene_node_raise_to_top(&view->scene_tree->node);
 	if (view->type == VIEW_XWAYLAND)
 		wlr_xwayland_surface_restack(view->xsurface, NULL, XCB_STACK_MODE_ABOVE);
+	raise_dialogs(view);
+	// a window waiting on a modal dialog: the dialog takes the keyboard
+	struct view *modal = modal_dialog(view);
+	if (modal)
+		view = modal;
+
+	struct view *other;
+	wl_list_for_each(other, &server->views, link)
+		if (other != view && other->mapped)
+			set_activated(other, false);
 	set_activated(view, true);
 	input_focus_surface(server, view_surface(view));
 }

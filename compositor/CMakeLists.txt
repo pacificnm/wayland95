@@ -33,6 +33,7 @@ server_protocol(${WAYLAND_PROTOCOLS_DIR}/unstable/pointer-constraints/pointer-co
 server_protocol(${WAYLAND_PROTOCOLS_DIR}/staging/tearing-control/tearing-control-v1.xml tearing-control-v1)
 server_protocol(${WAYLAND_PROTOCOLS_DIR}/staging/content-type/content-type-v1.xml content-type-v1)
 server_protocol(${WAYLAND_PROTOCOLS_DIR}/staging/ext-session-lock/ext-session-lock-v1.xml ext-session-lock-v1)
+server_protocol(${WAYLAND_PROTOCOLS_DIR}/staging/xdg-dialog/xdg-dialog-v1.xml xdg-dialog-v1)
 server_protocol(${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-layer-shell-unstable-v1.xml wlr-layer-shell-unstable-v1)
 server_protocol(${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-output-power-management-unstable-v1.xml wlr-output-power-management-unstable-v1)
 # Wayland 95's own: the link to the shell (shell.c), header and code
@@ -48,10 +49,22 @@ add_custom_command(
     COMMAND ${WAYLAND_SCANNER} private-code ${CMAKE_SOURCE_DIR}/protocols/wayland95/wayland95-shell-v1.xml ${GEN}/wayland95-shell-v1-protocol.c
     DEPENDS ${CMAKE_SOURCE_DIR}/protocols/wayland95/wayland95-shell-v1.xml)
 
+# xdg-dialog-v1 (dialog.c) names xdg_toplevel, whose interface wlroots also
+# keeps to itself
+add_custom_command(
+    OUTPUT ${GEN}/xdg-shell-protocol.c
+    COMMAND ${WAYLAND_SCANNER} private-code ${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml ${GEN}/xdg-shell-protocol.c
+    DEPENDS ${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml)
+add_custom_command(
+    OUTPUT ${GEN}/xdg-dialog-v1-protocol.c
+    COMMAND ${WAYLAND_SCANNER} private-code ${WAYLAND_PROTOCOLS_DIR}/staging/xdg-dialog/xdg-dialog-v1.xml ${GEN}/xdg-dialog-v1-protocol.c
+    DEPENDS ${WAYLAND_PROTOCOLS_DIR}/staging/xdg-dialog/xdg-dialog-v1.xml)
+
 set(SOURCES main.c output.c input.c view.c xdg.c xwayland.c layers.c protocols.c
-    decoration.c settings.c shell.c accessibility.c
+    decoration.c settings.c shell.c accessibility.c dialog.c
     displays.c server.h ${PROTOCOL_HEADERS}
-    ${GEN}/wayland95-shell-v1-protocol.c ${GEN}/wlr-foreign-toplevel-management-unstable-v1-protocol.c)
+    ${GEN}/wayland95-shell-v1-protocol.c ${GEN}/wlr-foreign-toplevel-management-unstable-v1-protocol.c
+    ${GEN}/xdg-dialog-v1-protocol.c ${GEN}/xdg-shell-protocol.c)
 set(LIBS PkgConfig::WLROOTS PkgConfig::WL_SERVER PkgConfig::XKB PkgConfig::PIXMAN PkgConfig::XCB
     PkgConfig::CAIRO PkgConfig::PANGOCAIRO PkgConfig::DRM PkgConfig::LIBINPUT PkgConfig::EGL m)
 

@@ -177,6 +177,16 @@ static void toplevel_set_app_id(struct wl_listener *listener, void *data)
 	view_update_title(view);
 }
 
+// the view of an xdg toplevel (its content tree's parent is the view's tree)
+struct view *view_from_xdg_toplevel(struct wlr_xdg_toplevel *toplevel)
+{
+	struct wlr_scene_tree *content = toplevel ? toplevel->base->data : NULL;
+	if (!content || !content->node.parent || !content->node.parent->node.data)
+		return NULL;
+	struct node_tag *tag = content->node.parent->node.data;
+	return tag->kind == NODE_VIEW ? (struct view *)tag : NULL;
+}
+
 static void new_xdg_toplevel(struct wl_listener *listener, void *data)
 {
 	struct server *server = wl_container_of(listener, server, new_xdg_toplevel);

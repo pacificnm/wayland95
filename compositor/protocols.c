@@ -83,11 +83,7 @@ static void request_activate(struct wl_listener *listener, void *data)
 {
 	struct server *server = activation_server;
 	struct wlr_xdg_activation_v1_request_activate_event *event = data;
-	struct wlr_xdg_toplevel *toplevel = wlr_xdg_toplevel_try_from_wlr_surface(event->surface);
-	if (!toplevel || !toplevel->base->data)
-		return;
-	struct wlr_scene_tree *tree = toplevel->base->data;
-	struct view *view = (struct view *)tree->node.data;
+	struct view *view = view_from_xdg_toplevel(wlr_xdg_toplevel_try_from_wlr_surface(event->surface));
 	if (!view || !view->mapped)
 		return;
 	struct wlr_surface *focused = server->seat->keyboard_state.focused_surface;

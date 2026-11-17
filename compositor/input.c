@@ -141,16 +141,16 @@ static bool handle_shortcut(struct server *server, uint32_t modifiers, const xkb
 			return true;
 		}
 		if (sym == XKB_KEY_F4 && !server->switching) {
-			struct view *top = view_top(server);
-			if (top && top->frame_active)
+			struct view *top = view_active(server);
+			if (top)
 				view_close(top);
 			return true;
 		}
 		if (sym == XKB_KEY_space && !server->switching) {
 			// the window menu, at the window's top left corner, under
 			// its title bar
-			struct view *top = view_top(server);
-			if (top && top->frame_active) {
+			struct view *top = view_active(server);
+			if (top) {
 				int left, ftop, right, bottom;
 				view_frame_insets(top, &left, &ftop, &right, &bottom);
 				if (shell_window_menu(top, top->x - left + 3, top->y))

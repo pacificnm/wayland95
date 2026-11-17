@@ -275,6 +275,7 @@ struct view {
 	enum frame_part frame_drawn_pressed;
 	char *frame_title;
 	bool mapped, placed, minimized, maximized, fullscreen;
+	bool modal; // a modal dialog (xdg-dialog-v1): its owner waits on it
 	int x, y;           // layout position of the window geometry's corner
 	struct wlr_box saved; // size and place before maximize/fullscreen
 	// resizing with the mouse: the next size is sent when the program has
@@ -410,6 +411,7 @@ void view_update_title(struct view *view);
 const char *view_title(struct view *view); // never NULL
 void view_begin_interactive(struct view *view, enum cursor_mode mode, uint32_t edges);
 struct view *view_top(struct server *server); // topmost mapped, not minimized
+struct view *view_active(struct server *server); // the active window (its dialogs may be in front)
 void view_arrange_all(struct server *server); // usable area changed
 
 // xdg.c
@@ -425,6 +427,8 @@ void layers_focus(struct server *server); // the keyboard to an exclusive panel,
 
 // protocols.c: everything else (idle, activation, lock, outputs, ...)
 void protocols_init(struct server *server);
+void dialog_init(struct server *server); // xdg-dialog-v1 (dialog.c)
+struct view *view_from_xdg_toplevel(struct wlr_xdg_toplevel *toplevel); // or NULL
 void protocols_finish(struct server *server);
 void shell_init(struct server *server);
 void shell_launch(struct server *server); // --shell: start it (if given)

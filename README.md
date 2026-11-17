@@ -111,7 +111,7 @@ submenus:
   `.desktop` files in `~/.local/share/applications`, Flatpak's exports and
   `XDG_DATA_DIRS`, and the menu updates by itself when programs are
   installed or removed. Wayland 95's own apps go in the same folders
-  (Notepad and the Markdown Editor in Accessories, System Monitor in System Tools, Volume Control
+  (Calculator, Notepad and the Markdown Editor in Accessories, System Monitor in System Tools, Volume Control
   in Multimedia), and File Manager and Terminal sit at the bottom.
   Programs that run in a terminal (htop, vim...) open in Wayland 95's
   Terminal (`win95terminal -e ...`). A folder too long for the screen
@@ -263,6 +263,17 @@ up next to the shell first, then on `$PATH`.
   and saved as UTF-8. A file with Windows (CRLF) line endings keeps them.
   Saves are atomic, so a failed save never leaves a half-written file.
   Usage: `win95notepad [file]`.
+- **Calculator** (`win95calc`, [apps/calc/](apps/calc/)): Start >
+  Programs > Accessories > Calculator. View > Standard: memory (MC, MR,
+  MS, M+), digits, + - * /, sqrt, %, 1/x, +/-, Back, CE and C, worked out
+  left to right as you type; View > Scientific adds sin, cos and tan (Deg,
+  Rad or Grad; Inv for asin..., Hyp for sinh...), x^y, x^2, x^3, ln, log,
+  n!, pi, brackets, and Hex/Dec/Oct/Bin with Mod, And, Or, Xor, Lsh, Not
+  and Int, in the usual order (2 + 3 * 4 = 14). "=" again repeats the last
+  operation. Numbers are long doubles: 16-digit whole numbers come out
+  exact. Every key works from the keyboard (Help > Keyboard), Ctrl+C and
+  Ctrl+V copy and paste (a pasted sum is typed in), and View > Digit
+  Grouping puts commas in. Usage: `win95calc [--scientific]`.
 - **Markdown Editor** (`win95markdown`, [apps/markdown/](apps/markdown/)):
   Start > Programs > Accessories > Markdown Editor, or double-click a `.md`
   file in the file manager. A WordPad-style window for Markdown files: the

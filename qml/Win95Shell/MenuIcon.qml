@@ -223,6 +223,16 @@ Canvas {
             for (var r = 0; r < 5; ++r)
                 frame(8 + r * 4, 1, 2, 6, "#c0c0c0"); // spiral rings
             break;
+        case "calc":
+            // a gray pocket calculator: a display and a grid of keys
+            frame(6, 2, 20, 28, "#c0c0c0");
+            rect(7, 3, 18, 1, "#ffffff");
+            frame(8, 5, 16, 6, "#e8f0e0");
+            rect(16, 7, 6, 2, "#000000");
+            for (var cy = 0; cy < 4; ++cy)
+                for (var cx = 0; cx < 3; ++cx)
+                    frame(8 + cx * 6, 13 + cy * 4, 4, 3, cx === 2 ? "#c00000" : "#ffffff");
+            break;
         case "markdown":
             // a page with a big M and a down arrow (the Markdown mark), a
             // pen across its corner

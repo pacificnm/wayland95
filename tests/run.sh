@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games find repos markdown startup drives backup monitors screen
+#                                  games find repos markdown startup drives backup calc monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -3065,8 +3065,51 @@ suite_backup() {
     away; shot own-folder
 }
 
+# --- Calculator (win95calc): the buttons, the keyboard, Copy/Paste, Scientific -----------
+# Standard's keys: 40 apart from x 28 (MC) and y 115 (the 7 row), inside a
+# window whose inside starts at 43,55.
+cbtn() { echo "$((43 + 28 + 40 * $1)),$((55 + 115 + 33 * $2))"; } # COLUMN ROW
+cshows() { grep "calc: " "$WORK/$SUITE-calc.log" | tail -1 | sed 's/.*calc: //'; }
+suite_calc() {
+    say "calc: Calculator (win95calc): buttons, keyboard, memory, Copy/Paste, Scientific"
+    [ -x "$BUILD/win95calc" ] || { bad "win95calc" "not built"; return; }
+    fresh
+    start_shell || return
+    XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        W95_CALC_DEBUG=1 "$BUILD/win95calc" >>"$WORK/$SUITE-calc.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95calc)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1
+    [ "$(windows_of win95calc)" -ge 1 ]; expect_true $? "Calculator opens" "$(tail -3 "$WORK/$SUITE-calc.log")"
+    away; shot standard
+    pointer click:$(cbtn 1 2) click:$(cbtn 2 2) click:$(cbtn 4 3) click:$(cbtn 3 2) click:$(cbtn 5 3) wait:0.3
+    [ "$(cshows)" = 15 ]; expect_true $? "clicking 1 2 + 3 = shows 15" "it shows $(cshows)"
+    away; shot fifteen
+    pointer key:Escape type:7 key:KP_Multiply type:6 key:Return wait:0.3
+    [ "$(cshows)" = 42 ]; expect_true $? "the keyboard: Esc 7 * 6 Enter shows 42" "it shows $(cshows)"
+    pointer key:ctrl+m key:Escape type:8 key:KP_Add key:ctrl+r key:Return wait:0.3
+    [ "$(cshows)" = 50 ]; expect_true $? "memory: Ctrl+M stores 42, Ctrl+R recalls it: 8 + 42 = 50" "it shows $(cshows)"
+    pointer key:ctrl+c key:Escape key:ctrl+v wait:0.3
+    [ "$(cshows)" = 50 ]; expect_true $? "Ctrl+C, then Esc and Ctrl+V: 50 again" "it shows $(cshows)"
+    pointer type:9 key:KP_Divide type:0 key:Return wait:0.3
+    [ "$(cshows)" = "Cannot divide by zero." ]; expect_true $? "9 / 0 says so" "it shows $(cshows)"
+    away; shot divide-by-zero
+
+    # View > Scientific: a bigger window, the usual order, brackets, Hex
+    pointer click:$((43 + 52)),$((55 + 12)) wait:0.4 key:s wait:0.8
+    away; shot scientific
+    pointer key:Escape type:2 key:KP_Add type:3 key:KP_Multiply type:4 key:Return wait:0.3
+    [ "$(cshows)" = 14 ]; expect_true $? "Scientific: 2 + 3 * 4 = 14 (the usual order)" "it shows $(cshows)"
+    pointer key:shift+9 type:2 key:KP_Add type:3 key:shift+0 key:KP_Multiply type:4 key:Return wait:0.3
+    [ "$(cshows)" = 20 ]; expect_true $? "( 2 + 3 ) * 4 = 20" "it shows $(cshows)"
+    [ "$(pixel scientific 500 200)" = c0c0c0 ]; expect_true $? "(the window grows for Scientific)" "$(pixel scientific 500 200) at 500,200"
+    pointer click:67,94 wait:0.3 key:Escape type:ff key:KP_Add type:1 key:Return wait:0.3
+    [ "$(cshows)" = 100 ]; expect_true $? "Hex: ff + 1 = 100" "it shows $(cshows)"
+    away; shot hex
+}
+
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup calc monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

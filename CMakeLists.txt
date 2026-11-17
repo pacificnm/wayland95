@@ -210,6 +210,7 @@ add_subdirectory(apps/imagewriter) # win95imagewriter (disk images to USB drives
 add_subdirectory(apps/games)    # win95solitaire, win95mines
 add_subdirectory(apps/repos)    # win95repos
 add_subdirectory(apps/markdown) # win95markdown
+add_subdirectory(apps/calc)     # win95calc
 
 pkg_check_modules(VTERM IMPORTED_TARGET vterm)
 if(VTERM_FOUND)

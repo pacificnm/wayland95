@@ -307,6 +307,37 @@ void BackupManager::stop()
     m_process->waitForFinished(3000);
 }
 
+void BackupManager::setUpDrive()
+{
+    const QString folder = m_status.value(QStringLiteral("fix")).toString();
+    // only the folder the backup asked for: a plain path on a drive that's there
+    if (folder.isEmpty() || !QDir::isAbsolutePath(folder) || folder.contains(QLatin1String("/../"))
+        || !QFileInfo(QFileInfo(folder).absolutePath()).isDir()) {
+        emit setUpFinished(false, QStringLiteral("The drive isn't there to set up. Plug it in, and try Back Up Now again."));
+        return;
+    }
+    const QString pkexec = program(QStringLiteral("pkexec"));
+    if (pkexec.isEmpty()) {
+        emit setUpFinished(false, QStringLiteral("pkexec isn't installed (sudo apt install pkexec)."));
+        return;
+    }
+    auto *p = new QProcess(this);
+    connect(p, &QProcess::finished, this, [this, p, folder](int code, QProcess::ExitStatus) {
+        const QString err = QString::fromUtf8(p->readAllStandardError()).trimmed();
+        p->deleteLater();
+        // 126/127: the password box was dismissed or the password wasn't right
+        if (code == 126 || code == 127)
+            emit setUpFinished(false, QStringLiteral("You need an administrator's password to set up the drive."));
+        else if (code != 0)
+            emit setUpFinished(false, err.isEmpty() ? QStringLiteral("The drive couldn't be set up.") : err);
+        else
+            emit setUpFinished(true, folder);
+    });
+    p->start(pkexec, {QStringLiteral("/usr/bin/install"), QStringLiteral("-d"), QStringLiteral("-m"), QStringLiteral("0755"),
+                      QStringLiteral("-o"), QString::number(::getuid()), QStringLiteral("-g"), QString::number(::getgid()),
+                      QStringLiteral("--"), folder});
+}
+
 bool BackupManager::openFolder(const QString &path) const
 {
     const QString files = program(QStringLiteral("win95files"));

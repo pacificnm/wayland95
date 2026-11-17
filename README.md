@@ -748,8 +748,11 @@ up next to the shell first, then on `$PATH`.
     only plugged in can't be opened from cron, so it waits for the drive
     to be plugged in again (or Back Up Now). A failure, and a week without
     a backup, is a notification. To get files back, Open Backups and copy
-    them out. A drive formatted on Linux may belong to root: the backup
-    then says how to give it to you (`sudo chown`).
+    them out. A drive formatted on Linux may belong to root: then the
+    backup can't write to it, and Set Up Drive makes just the backups'
+    folder on it (`Wayland 95 Backups`) yours, with an administrator's
+    password (`pkexec install -d -o YOU`), and backs up; nothing else on
+    the drive changes.
   - **Taskbar:** Start menu size (Small is Windows 95's own; Medium, the
     default, and Large are 25% and 50% bigger: rows, icons and text), Show
     Clock and 24-hour clock, and which icons the

@@ -118,6 +118,12 @@ PropertySheet {
 
     Connections {
         target: Backup
+        function onSetUpFinished(ok, message) {
+            if (ok)
+                sheet.backUpNow(); // and now, the backup it couldn't do
+            else
+                sheet.messageBox.show("Backup", message, "error", ["OK"]);
+        }
         function onFinished(ok, message) {
             if (!ok && message)
                 sheet.messageBox.show("Backup", "The backup didn't finish.\n\n" + message, "error", ["OK"]);
@@ -230,6 +236,20 @@ PropertySheet {
                 visible: !Backup.running
                 text: sheet.statusText
                 color: Backup.status.result === "failed" ? "#a00000" : Theme.text
+            }
+            Button95 {
+                id: setUpButton
+                x: 8
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 8
+                width: 110
+                visible: !Backup.running && Backup.status.result === "failed" && !!Backup.status.fix
+                text: "Set Up <u>D</u>rive..."
+                onClicked: sheet.messageBox.show("Backup",
+                    "The drive belongs to the administrator (root), so your backups can't be saved on it.\n\n"
+                    + "Set Up Drive makes the folder " + Backup.status.fix + " yours (it asks for an "
+                    + "administrator's password). Nothing else on the drive changes.\n\nSet it up now?",
+                    "question", ["Yes", "No"], function (b) { if (b === 0) Backup.setUpDrive(); })
             }
             Column {
                 x: 8

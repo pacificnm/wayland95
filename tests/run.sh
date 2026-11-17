@@ -2929,7 +2929,7 @@ start_backup_applet() { # [TAB]
     sleep 1.2
 }
 bsnapshots() { ls -1d "$WORK/media/STICK/Wayland 95 Backups/"*/20*_* 2>/dev/null | grep -v partial; }
-WEEKLY_X=73; WEEKLY_Y=193; NEVER_X=73; NEVER_Y=121 # (Backup > Schedule; Apply is at 479,504)
+SETUP_X=119; SETUP_Y=421; WEEKLY_X=73; WEEKLY_Y=193; NEVER_X=73; NEVER_Y=121 # (Backup > Schedule; Apply is at 479,504)
 suite_backup() {
     say "backup: Control Panel > Backup to a USB drive (stand-in UDisks2, crontab): Back Up Now, versions, schedule"
     [ -x "$BUILD/win95control" ] || { bad "win95control" "not built"; return; }
@@ -2997,6 +2997,25 @@ suite_backup() {
         --method org.wayland95.Test.Plug PHOTOS >/dev/null
     for _ in $(seq 40); do [ "$(bsnapshots | wc -l)" -gt "$n" ] && break; sleep 0.25; done
     [ "$(bsnapshots | wc -l)" -gt "$n" ]; expect_true $? "a drive plugged in when a backup is due: it backs up" "$(tail -3 "$home/.local/state/wayland95/backup.log" 2>&1)"
+
+    # a drive that belongs to root (formatted on Linux): it can't write, and
+    # Set Up Drive makes just its backups folder yours (pkexec), then backs up
+    rm -rf "$WORK/media/STICK/Wayland 95 Backups"; chmod 555 "$WORK/media/STICK"
+    start_backup_applet 0
+    pointer click:277,463 wait:2
+    away; shot not-writable
+    grep -q "^fix=$WORK/media/STICK/Wayland 95 Backups$" "$home/.local/state/wayland95/backup.status"
+    expect_true $? "a drive it can't write to: failed, naming the one folder to set up" "$(cat "$home/.local/state/wayland95/backup.status")"
+    pointer key:Return wait:0.5
+    away; shot set-up-button
+    pointer click:$SETUP_X,$SETUP_Y wait:0.6 key:Return wait:2.5
+    grep -q "pkexec /usr/bin/install -d -m 0755 -o $(id -u) -g $(id -g) -- $WORK/media/STICK/Wayland 95 Backups" "$FAKE_LOG"
+    expect_true $? "Set Up Drive: pkexec makes only that folder, yours" "$(grep pkexec "$FAKE_LOG")"
+    [ "$(stat -c %u "$WORK/media/STICK/Wayland 95 Backups")" = "$(id -u)" ] && [ -n "$(bsnapshots)" ] \
+        && grep -q "^result=ok" "$home/.local/state/wayland95/backup.status"
+    expect_true $? "and then backs up" "$(cat "$home/.local/state/wayland95/backup.status")"
+    chmod 755 "$WORK/media/STICK"
+    away; shot set-up-done
 }
 
 # --- run -------------------------------------------------------------------

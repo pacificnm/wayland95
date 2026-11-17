@@ -52,6 +52,10 @@ public:
     Q_INVOKABLE void reload();
     Q_INVOKABLE void backUpNow();
     Q_INVOKABLE void stop();
+    // the drive belongs to root: make the backups' own folder on it (the
+    // status's "fix") yours, with an administrator's password (pkexec);
+    // nothing else on the drive changes. Ends with setUpFinished.
+    Q_INVOKABLE void setUpDrive();
     // the crontab line the settings make ("" when off), for the applet
     Q_INVOKABLE QString cronLine(const QVariantMap &settings) const;
     Q_INVOKABLE QString logPath() const;
@@ -67,6 +71,7 @@ signals:
     void progressChanged();
     // a Back Up Now ended: ok, and what it said last
     void finished(bool ok, const QString &message);
+    void setUpFinished(bool ok, const QString &message);
 
 private:
     QString confPath() const;

@@ -26,7 +26,8 @@
 # replaced since moved to "Deleted/DATE_TIME".
 #
 # What happened goes to ~/.local/state/wayland95/backup.status (KEY=VALUE:
-# time, result ok|failed|skipped, message, files, bytes, folder) and
+# time, result ok|failed|skipped, message, files, bytes, folder, fix: a
+# folder to make yours when the drive isn't writable) and
 # backup.log; a failure (and a backup missed for a week) is a notification.
 set -u
 umask 077
@@ -64,6 +65,8 @@ finish() {
         echo "files=${3:-}"
         echo "bytes=${4:-}"
         echo "folder=${5:-}"
+        # a folder that, made yours, would let it back up (Set Up Drive)
+        echo "fix=${6:-}"
         # the last good one stays known when this one wasn't
         if [ "$1" = ok ]; then echo "last_ok=$(date +%s)"; echo "last_ok_folder=${5:-}"
         else echo "last_ok=$(last last_ok)"; echo "last_ok_folder=$(last last_ok_folder)"; fi
@@ -131,7 +134,11 @@ fi
 
 dest=$mnt/$dest_dir
 if ! mkdir -p "$dest" 2>/dev/null || [ ! -w "$dest" ]; then
-    finish failed "Can't write to $name ($dest). Its owner may need to let you: sudo chown $(id -un) \"$mnt\"."
+    # the drive (formatted on Linux) belongs to root: the backups' own folder
+    # on it, made yours, is all it needs (Control Panel > Backup's Set Up
+    # Drive, or this command); nothing else on the drive changes
+    top=$mnt/${dest_dir%%/*}
+    finish failed "Can't write to $name: it belongs to the administrator. Click Set Up Drive (or run: sudo install -d -o $(id -un) -g $(id -gn) \"$top\")." "" "" "" "$top"
     notify "Backup failed" "Can't write to $name." critical
     exit 1
 fi

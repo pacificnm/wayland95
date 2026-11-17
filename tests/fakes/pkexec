@@ -1,0 +1,10 @@
+#!/bin/sh
+# Stand-in pkexec: logs what it was asked to run, then runs it as you (no
+# root) with the folder it makes's parent writable, as root could. Refuses
+# without W95_FAKE_MEDIA (never a real pkexec from a test).
+[ -n "${W95_FAKE_MEDIA:-}" ] || { echo "stand-in pkexec: W95_FAKE_MEDIA isn't set" >&2; exit 127; }
+echo "pkexec $*" >>"${W95_FAKE_LOG:-/dev/null}"
+[ -e "$(dirname "$W95_FAKE_LOG")/pkexec-deny" ] && exit 126
+for last; do :; done
+chmod u+w "$(dirname "$last")" 2>/dev/null
+exec "$@"

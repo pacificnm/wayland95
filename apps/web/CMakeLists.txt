@@ -24,10 +24,14 @@ qt_add_qml_module(win95web
     QML_FILES
         Main.qml
         Profile.qml
+        WebProfile.qml
+        PrivateProfile.qml
         WebTab.qml
         WebIcon.qml
         BrowserDialogs.qml
         DownloadsWindow.qml
+    RESOURCES
+        passwords.js
     RESOURCE_PREFIX /qt/qml
 )
 

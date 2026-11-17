@@ -3247,7 +3247,10 @@ web_setup() {
     WEB_PORT=$((21000 + $$ % 20000))
     python3 -I "$HERE/fakes/webserver.py" "$WEBDIR" $WEB_PORT &
     PIDS+=($!)
-    for _ in $(seq 50); do grep -q "web: ready" "$WEBDIR/log" 2>/dev/null && break; sleep 0.1; done
+    # (and the keyring's stand-in, for saved passwords)
+    DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS python3 -I "$HERE/fakes/secrets.py" "$WEBDIR/secrets.log" "$WEBDIR/keyring.json" &
+    PIDS+=($!)
+    for _ in $(seq 50); do grep -q "web: ready" "$WEBDIR/log" 2>/dev/null && grep -q "secrets: ready" "$WEBDIR/secrets.log" 2>/dev/null && break; sleep 0.1; done
     HOME_URL=http://127.0.0.1:$WEB_PORT/
     mkdir -p "$CONFIG/wayland95" "$WORK/home-$SUITE"
     cat >"$CONFIG/wayland95/web.json" <<JSON
@@ -3416,6 +3419,115 @@ suite_web() {
     sleep 1
     ! grep -qs visited "$STORE/Cookies" && ! grep -q '"forgetCookies"' "$CONFIG/wayland95/web.json"
     expect_true $? "started again: the cookies are gone" "$(ls "$STORE" 2>&1 | tr '\n' ' '); $(cat "$CONFIG/wayland95/web.json")"
+
+    web_passwords
+    web_private
+}
+# typing a web address (w95input types letters, digits and spaces only)
+wtype_url() {
+    local s=$1 out=() c i
+    for ((i = 0; i < ${#s}; i++)); do
+        c=${s:i:1}
+        case $c in
+        [a-z0-9]) out+=("type:$c") ;;
+        .) out+=(key:period) ;; :) out+=(key:shift+semicolon) ;; /) out+=(key:slash) ;;
+        \?) out+=(key:shift+slash) ;; =) out+=(key:equal) ;; -) out+=(key:minus) ;;
+        esac
+    done
+    pointer key:ctrl+l "${out[@]}" key:Return wait:1.5
+}
+# (the login page's fields, in wclick's terms: the page's top is 56 below PY)
+LOGIN_USER="120 91"; LOGIN_PASS="120 141"; LOGIN_SIGNIN="120 191"
+OFFER_SAVE=733,273; OFFER_NEVER=839,273; OFFER_LATER=945,273
+web_passwords() {
+    local origin=http://127.0.0.1:$WEB_PORT n
+    # a login sent: offered for saving; Save keeps it in the keyring
+    start_web "${HOME_URL}login.html"
+    wwait "loaded ${HOME_URL}login.html Sign In"; sleep 1
+    ! wsaid "title Sign In (browser visible)"; expect_true $? "(the page's own scripts can't see the password script or its way to the browser)" "$(wlast "title Sign")"
+    wclick $LOGIN_USER 0.4; pointer type:tester key:Tab type:opensesame key:Return wait:1.5
+    wwait "login sent $origin tester new" && slog "POST /login tester ok"
+    expect_true $? "a login sent: Save the password? is offered" "$(wlast "login sent"); $(tail -1 "$WEBDIR/log")"
+    away; shot save-offer
+    pointer click:$OFFER_SAVE wait:0.8
+    for _ in $(seq 20); do grep -q opensesame "$WEBDIR/keyring.json" && break; sleep 0.25; done
+    grep -q '"secret": "opensesame"' "$WEBDIR/keyring.json" && grep -q "\"origin\": \"$origin\"" "$WEBDIR/keyring.json" \
+        && grep -q '"application": "wayland95-web"' "$WEBDIR/keyring.json"
+    expect_true $? "Save: the password is in the keyring, for this site and user name" "$(cat "$WEBDIR/keyring.json")"
+    LOGINS=$WORK/data-$SUITE/wayland95/web-logins.json
+    grep -q "$origin" "$LOGINS" && grep -q '"tester"' "$LOGINS" && ! grep -rq opensesame "$WORK/data-$SUITE/wayland95" "$CONFIG/wayland95"
+    expect_true $? "(the browser's own files have the site and user name, never the password)" "$(cat "$LOGINS" 2>&1)"
+
+    # back on the page: clicking the user name fills both in
+    start_web "${HOME_URL}login.html"
+    wwait "tabs 2"; sleep 1.5
+    wclick $LOGIN_USER 1
+    wwait "filled $origin tester"; expect_true $? "clicking the login field fills in the saved login" "$(wlast filled)"
+    away; shot filled
+    wclick $LOGIN_SIGNIN 1.5
+    [ "$(grep -c "POST /login tester ok" "$WEBDIR/log")" = 2 ] && wwait "login sent $origin tester same"
+    expect_true $? "and it signs in (not offered again: it's the same)" "$(tail -2 "$WEBDIR/log"); $(wlast "login sent")"
+
+    # another site (localhost is not 127.0.0.1): nothing filled; Never for This Site
+    wtype_url "localhost:$WEB_PORT/login.html"
+    wwait "loaded http://localhost:$WEB_PORT/login.html Sign In"; sleep 0.5
+    n=$(grep -c "web: filled" "$WORK/$SUITE-web.log")
+    wclick $LOGIN_USER 1.2
+    [ "$(grep -c "web: filled" "$WORK/$SUITE-web.log")" = "$n" ]; expect_true $? "another site's login field: nothing filled (logins stay with their site)" "$(wlast filled)"
+    pointer type:tester key:Tab type:other key:Return wait:1.5
+    wwait "login sent http://localhost:$WEB_PORT tester new"; expect_true $? "(its login is offered)" "$(wlast "login sent")"
+    pointer click:$OFFER_NEVER wait:0.6
+    grep -q "\"http://localhost:$WEB_PORT\"" "$CONFIG/wayland95/web.json" && ! grep -q '"secret": "other"' "$WEBDIR/keyring.json"
+    expect_true $? "Never for This Site: not saved, and remembered" "$(cat "$CONFIG/wayland95/web.json")"
+    pointer key:alt+Left wait:1.5
+    wclick $LOGIN_USER 0.4; pointer type:tester key:Tab type:other key:Return wait:1.5
+    [ "$(grep -c "login sent http://localhost" "$WORK/$SUITE-web.log")" = 1 ]; expect_true $? "(so it isn't offered again)" "$(grep "login sent" "$WORK/$SUITE-web.log")"
+
+    # Tools > Saved Passwords: listed; Show; Delete
+    pointer click:255,65 wait:0.5 key:p wait:0.8
+    away; shot saved-passwords
+    pointer click:$PW_SHOW wait:0.8
+    away; shot saved-shown
+    pointer click:$PW_DELETE wait:0.8
+    for _ in $(seq 20); do grep -q opensesame "$WEBDIR/keyring.json" || break; sleep 0.25; done
+    ! grep -q opensesame "$WEBDIR/keyring.json" && ! grep -q tester "$LOGINS"
+    expect_true $? "Saved Passwords: Delete takes it out of the keyring and the list" "$(cat "$WEBDIR/keyring.json"); $(cat "$LOGINS")"
+    pointer key:Escape wait:0.4
+}
+PW_SHOW=709,315; PW_DELETE=709,373
+web_private() {
+    local origin=http://127.0.0.1:$WEB_PORT
+    # a normal window's cookie first
+    wtype_url "127.0.0.1:$WEB_PORT/cookies"
+    wtype_url "127.0.0.1:$WEB_PORT/cookies"
+    wwait "title cookies: seen=yes"; expect_true $? "(a normal window keeps a site's cookie)" "$(wlast "title cookies")"
+    # Ctrl+Shift+N: a private window
+    pointer key:ctrl+shift+n wait:2
+    for _ in $(seq 20); do query list | grep -q "Web Browser (Private)|win95web|" && break; sleep 0.25; done
+    query list | grep -q "^Test Home - Web Browser (Private)|win95web|" && wsaid "ready private"
+    expect_true $? "Ctrl+Shift+N opens a private window (it says so)" "$(query list | tr '\n' ' ')"
+    away; shot private
+    wtype_url "127.0.0.1:$WEB_PORT/cookies?private"
+    wwait "title cookies: visited=yes"; expect_true $? "a private window has cookies of its own (not the normal window's)" "$(wlast "title cookies")"
+    ! grep -q "private" "$WORK/data-$SUITE/wayland95/web-history.json"; expect_true $? "and what it visits isn't in History" "$(head -c 300 "$WORK/data-$SUITE/wayland95/web-history.json")"
+    # a login sent in a private window: not offered for saving
+    n=$(grep -c "login sent" "$WORK/$SUITE-web.log"); m=$(grep -c "POST /login tester ok" "$WEBDIR/log")
+    wtype_url "127.0.0.1:$WEB_PORT/login.html"
+    # (the private window is cascaded 30,30 from the first)
+    PX=$((PX + 30)) PY=$((PY + 30)) wclick $LOGIN_USER 0.4
+    pointer type:tester key:Tab type:opensesame key:Return wait:1.5
+    [ "$(grep -c "POST /login tester ok" "$WEBDIR/log")" = $((m + 1)) ] && [ "$(grep -c "login sent" "$WORK/$SUITE-web.log")" = "$n" ] \
+        && ! grep -q opensesame "$WEBDIR/keyring.json"
+    expect_true $? "a login in a private window isn't offered for saving" "$(grep "login sent" "$WORK/$SUITE-web.log" | tail -2)"
+    # closed, and opened again: a new session (its cookies gone)
+    pointer key:alt+F4 wait:1.5
+    for _ in $(seq 20); do [ "$(windows_of win95web)" = 1 ] && break; sleep 0.25; done
+    pointer key:ctrl+shift+n wait:2
+    wtype_url "127.0.0.1:$WEB_PORT/cookies?again"
+    wwait "title cookies: visited=yes" && [ "$(grep -c "title cookies: visited=yes" "$WORK/$SUITE-web.log")" = 2 ]
+    # (the private home page set visited=yes again, but seen=yes from before is gone)
+    ! wsaid "title cookies: visited=yes; seen=yes"
+    expect_true $? "closed and opened again: its cookies from before are gone" "$(grep "title cookies" "$WORK/$SUITE-web.log")"
 }
 CLEAR_COOKIES=378,436; CLEAR_BUTTON=561,460
 

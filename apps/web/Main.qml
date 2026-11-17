@@ -13,6 +13,9 @@ Window {
     id: window
 
     property var urls: []
+    // a private window: pages in an in-memory profile, nothing kept
+    property bool privateMode: false
+    property var webProfile: Profile
     property var tabs: []
     property int current: -1
     readonly property var tab: current >= 0 && current < tabs.length ? tabs[current] : null
@@ -28,17 +31,21 @@ Window {
     minimumHeight: 320
     visible: true
     color: Theme.face
-    title: (tab && tab.title ? tab.title : "Web Browser") + (tab && tab.title ? " - Web Browser" : "")
+    title: (tab && tab.title ? tab.title + " - " : "") + "Web Browser" + (privateMode ? " (Private)" : "")
 
     function log(msg) { if (webDebug) console.log("web: " + msg); }
     function refreshTabs() { tabsVersion++; }
 
+    Component { id: privateProfileComponent; PrivateProfile {} }
     Component.onCompleted: {
+        if (privateMode)
+            webProfile = Browser.privateWindowOpened(function () { return privateProfileComponent.createObject(null); });
         var list = urls.length ? urls : [Browser.homePage];
         for (var i = 0; i < list.length; ++i)
             newTab(Browser.urlFor(list[i]) || list[i], i === 0);
-        Browser.lastWindow = window;
-        log("ready");
+        if (!privateMode)
+            Browser.lastWindow = window;
+        log("ready" + (privateMode ? " private" : ""));
     }
     Connections {
         target: Browser
@@ -53,7 +60,7 @@ Window {
         }
     }
     Connections {
-        target: Profile
+        target: window.webProfile
         function onDownloadStarted(download) {
             window.log("download " + download.downloadFileName);
             if (window.active)
@@ -65,7 +72,7 @@ Window {
     Component { id: tabComponent; WebTab {} }
 
     function newTab(url, makeCurrent) {
-        var t = tabComponent.createObject(pages, { browser: window });
+        var t = tabComponent.createObject(pages, { browser: window, profile: window.webProfile });
         t.visible = false;
         t.anchors.fill = pages;
         if (url)
@@ -118,10 +125,10 @@ Window {
         tab.forceActiveFocus();
         log("go " + url);
     }
-    function newWindow(urls) { Browser.newWindow(urls || []); }
+    function newWindow(urls, privateWindow) { Browser.newWindow(urls || [], !!privateWindow); }
 
     // where `win95web URL` opens: the window used last
-    onActiveChanged: if (active) Browser.lastWindow = window
+    onActiveChanged: if (active && !privateMode) Browser.lastWindow = window
     onClosing: {
         // (the window stays, hidden: its pages go, so nothing plays on)
         for (var k = 0; k < tabs.length; ++k)
@@ -130,6 +137,8 @@ Window {
         current = -1;
         if (Browser.lastWindow === window)
             Browser.lastWindow = null;
+        if (privateMode)
+            Browser.privateWindowClosed();
         log("window closed");
     }
 
@@ -148,7 +157,9 @@ Window {
             var link = r.linkUrl.toString();
             items.push({ text: "&Open Link", action: function () { view.url = link; } });
             items.push({ text: "Open Link in New &Tab", action: function () { window.newTab(link, false); window.log("link in new tab " + link); } });
-            items.push({ text: "Open Link in New &Window", action: function () { window.newWindow([link]); } });
+            items.push({ text: "Open Link in New &Window", action: function () { window.newWindow([link], window.privateMode); } });
+            if (!window.privateMode)
+                items.push({ text: "Open Link in &Private Window", action: function () { window.newWindow([link], true); } });
             items.push({ text: "Save Link &As...", action: function () { view.triggerWebAction(WebEngineView.DownloadLinkToDisk); } });
             items.push({ text: "&Copy Link Address", action: function () { view.triggerWebAction(WebEngineView.CopyLinkToClipboard); } });
             items.push({ separator: true });
@@ -254,6 +265,55 @@ Window {
         fileDialog.openAt(Browser.homePath(), "");
     }
 
+    // ---------------------------------------------------- saved passwords
+    // a page sending a login (passwords.js): offer to save it, unless it's
+    // saved already, the site is never to be, or this is a private window
+    function offerToSave(view, username, password) {
+        var origin = Browser.originOf(view.url);
+        if (!origin || !password || window.privateMode || Browser.neverSaves(origin))
+            return;
+        Browser.compareLogin(origin, username, password, function (state) {
+            log("login sent " + origin + " " + username + " " + state);
+            if (state !== "same")
+                view.loginOffer = { origin: origin, username: username, password: password, update: state === "changed" };
+        });
+    }
+    function answerOffer(how) {
+        var t = window.tab;
+        var o = t ? t.loginOffer : null;
+        if (!o)
+            return;
+        t.loginOffer = null;
+        log("login offer " + how + " " + o.origin + " " + o.username);
+        if (how === "never")
+            Browser.neverSaveFor(o.origin);
+        else if (how === "save")
+            Browser.saveLogin(o.origin, o.username, o.password, function (ok, error) {
+                if (!ok)
+                    msgBox.show("Web Browser", "The password couldn't be saved.\n\n" + error, "error", ["OK"]);
+            });
+        t.forceActiveFocus();
+    }
+    // a login field clicked: this site's saved login (the one with the
+    // user name typed, or the newest), if it has one
+    function fillLogin(view, username, bridge) {
+        var origin = Browser.originOf(view.url);
+        var list = origin ? Browser.loginsFor(origin) : [];
+        if (!list.length)
+            return;
+        var login = list[0];
+        for (var i = 0; i < list.length; ++i)
+            if (username && list[i].username === username)
+                login = list[i];
+        Browser.revealLogin(origin, login.username, function (found, password) {
+            // (still that site?)
+            if (!found || Browser.originOf(view.url) !== origin)
+                return;
+            bridge.loginReady(login.username, password);
+            log("filled " + origin + " " + login.username);
+        });
+    }
+
     // ------------------------------------------------------------ actions
     function addFavorite() {
         if (!tab)
@@ -285,6 +345,7 @@ Window {
         return [
             { text: "New &Tab", shortcut: "Ctrl+T", action: function () { window.newTab("about:blank", true); address.focusIt(); } },
             { text: "&New Window", shortcut: "Ctrl+N", action: function () { window.newWindow([]); } },
+            { text: "New P&rivate Window", shortcut: "Ctrl+Shift+N", action: function () { window.newWindow([], true); } },
             { text: "&Open File...", shortcut: "Ctrl+O", action: function () { openDialog.openAt(Browser.homePath(), ""); } },
             { separator: true },
             { text: "Save as &PDF...", enabled: !!tab, action: function () {
@@ -343,6 +404,7 @@ Window {
     function toolsMenu() {
         return [
             { text: "&Downloads", shortcut: "Ctrl+J", action: function () { downloadsDialog.show(); } },
+            { text: "Saved &Passwords...", action: function () { passwordsDialog.open(); } },
             { text: "&Clear Browsing Data...", action: function () { clearDialog.open(); } },
             { separator: true },
             { text: "Internet &Options...", action: function () { optionsDialog.open(); } },
@@ -368,6 +430,7 @@ Window {
 
     Shortcut { sequence: "Ctrl+T"; onActivated: { window.newTab("about:blank", true); address.focusIt(); } }
     Shortcut { sequence: "Ctrl+N"; onActivated: window.newWindow([]) }
+    Shortcut { sequence: "Ctrl+Shift+N"; onActivated: window.newWindow([], true) }
     Shortcut { sequence: "Ctrl+W"; onActivated: window.closeTab(window.tab) }
     Shortcut { sequence: "Ctrl+Shift+T"; onActivated: window.reopenTab() }
     Shortcut { sequences: ["Ctrl+L", "Alt+D", "F6"]; onActivated: address.focusIt() }
@@ -627,6 +690,76 @@ Window {
         }
     }
 
+    // a private window says so, at the right of its menu bar
+    Row {
+        visible: window.privateMode && !window.fullScreenPage
+        anchors.right: parent.right
+        anchors.rightMargin: 8
+        y: 3
+        spacing: 4
+        WebIcon { size: 16; kind: "private" }
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Private window"
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize
+            font.bold: true
+        }
+    }
+
+    // "Save the password?": at the top right of the page, for the tab that
+    // sent a login
+    Bevel {
+        id: saveBubble
+        objectName: "saveBubble"
+        readonly property var offer: window.tab ? window.tab.loginOffer : null
+        visible: !!offer && !window.fullScreenPage
+        x: pageFrame.width - width - 12
+        y: pageFrame.y + 8
+        z: 40
+        width: 380
+        height: 104
+        style: "raised"
+        WebIcon { x: 12; y: 12; size: 32; kind: "key" }
+        Text {
+            x: 54; y: 10
+            width: parent.width - 64
+            wrapMode: Text.Wrap
+            text: !saveBubble.offer ? "" : (saveBubble.offer.update ? "Update the saved password for " : "Save the password for ")
+                  + saveBubble.offer.origin.replace(/^https?:\/\//, "")
+                  + (saveBubble.offer.username ? " (" + saveBubble.offer.username + ")" : "") + "?"
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize
+        }
+        Text {
+            x: 54; y: 44
+            width: parent.width - 64
+            wrapMode: Text.Wrap
+            text: "It's kept in your keyring, and filled in when you click this site's login."
+            color: "#404040"
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize - 1
+        }
+        Row {
+            anchors.right: parent.right
+            anchors.rightMargin: 10
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 8
+            spacing: 6
+            Button95 {
+                width: 70; isDefault: true
+                text: saveBubble.offer && saveBubble.offer.update ? "<u>U</u>pdate" : "<u>S</u>ave"
+                onClicked: window.answerOffer("save")
+            }
+            Button95 {
+                width: 130; visible: !(saveBubble.offer && saveBubble.offer.update)
+                text: "<u>N</u>ever for This Site"
+                onClicked: window.answerOffer("never")
+            }
+            Button95 { width: 70; text: "Not N<u>o</u>w"; onClicked: window.answerOffer("later") }
+        }
+    }
+
     // the address bar's suggestions (history and favorites)
     Bevel {
         id: suggestions
@@ -783,6 +916,7 @@ Window {
     readonly property alias historyDialog: dialogs.history
     readonly property alias clearDialog: dialogs.clear
     readonly property alias optionsDialog: dialogs.options
+    readonly property alias passwordsDialog: dialogs.passwords
 
     DownloadsWindow { id: downloadsDialog }
 

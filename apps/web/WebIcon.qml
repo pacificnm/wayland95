@@ -3,7 +3,7 @@ import QtQuick
 // Web Browser's icons, drawn on a 32x32 grid and scaled to `size` (24 for
 // the toolbar, 16 for tabs and lists). Generic drawings of our own.
 // kind: back forward stop refresh home favorites history downloads page
-// loading lock globe file star
+// loading lock globe file star private key
 Canvas {
     id: icon
 
@@ -114,6 +114,24 @@ Canvas {
             ctx.beginPath(); ctx.arc(16, 13, 7, Math.PI, 0); ctx.lineTo(23, 16); ctx.moveTo(9, 16); ctx.lineTo(9, 13); ctx.stroke();
             frame(5, 15, 22, 15, c("#e0b020"));
             rect(15, 19, 2, 6, ink);
+            break;
+        case "private":
+            // a hat and dark glasses
+            poly([3, 15, 29, 15, 29, 18, 3, 18], c("#404040"));
+            poly([8, 15, 10, 5, 22, 5, 24, 15], c("#404040"));
+            rect(9, 11, 14, 2, c("#a0a0a0"));
+            ctx.fillStyle = ink;
+            ctx.beginPath(); ctx.arc(10, 23, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(22, 23, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = ink; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(14, 22); ctx.lineTo(18, 22); ctx.stroke();
+            break;
+        case "key":
+            ctx.beginPath(); ctx.arc(10, 12, 7, 0, Math.PI * 2);
+            ctx.fillStyle = c("#e0b020"); ctx.fill();
+            ctx.strokeStyle = ink; ctx.lineWidth = 1.5; ctx.stroke();
+            ctx.beginPath(); ctx.arc(8, 10, 2, 0, Math.PI * 2); ctx.fillStyle = c("#ffffff"); ctx.fill(); ctx.stroke();
+            poly([14, 16, 17, 13, 29, 25, 29, 29, 25, 29, 24, 27, 22, 27, 22, 25, 20, 25, 20, 23, 18, 21], c("#e0b020"));
             break;
         case "file":
             page(6, 3);

@@ -1,6 +1,9 @@
 #include "browser.h"
 
+#include <QClipboard>
 #include <QCoreApplication>
+#include <QGuiApplication>
+#include <QTimer>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
@@ -23,6 +26,8 @@
 
 #include <unistd.h>
 
+#include "secrets.h"
+
 namespace {
 
 constexpr int kMaxHistory = 5000;
@@ -30,6 +35,23 @@ constexpr int kMaxHistory = 5000;
 QString configFile()
 {
     return qEnvironmentVariable("XDG_CONFIG_HOME", QDir::homePath() + QStringLiteral("/.config")) + QStringLiteral("/wayland95/web.json");
+}
+
+QString loginsFile()
+{
+    return qEnvironmentVariable("XDG_DATA_HOME", QDir::homePath() + QStringLiteral("/.local/share")) + QStringLiteral("/wayland95/web-logins.json");
+}
+
+Secrets::Attributes loginAttributes(const QString &origin, const QString &username)
+{
+    return {{QStringLiteral("application"), QStringLiteral("wayland95-web")},
+            {QStringLiteral("origin"), origin}, {QStringLiteral("username"), username}};
+}
+
+void callBack(QJSValue done, const QJSValueList &args)
+{
+    if (done.isCallable())
+        done.call(args);
 }
 
 QString historyFile()
@@ -134,7 +156,7 @@ bool Browser::becomeTheBrowser(const QStringList &urls)
                 if (m_lastWindow && !list.isEmpty())
                     emit openRequested(list);
                 else
-                    emit windowWanted(list);
+                    emit windowWanted(list, false);
             });
         }
     });
@@ -157,6 +179,142 @@ void Browser::load()
     QFile h(historyFile());
     if (h.open(QIODevice::ReadOnly))
         m_history = QJsonDocument::fromJson(h.readAll()).array().toVariantList();
+    QFile l(loginsFile());
+    if (l.open(QIODevice::ReadOnly))
+        m_logins = QJsonDocument::fromJson(l.readAll()).array().toVariantList();
+}
+
+void Browser::saveLogins()
+{
+    writePrivate(loginsFile(), QJsonDocument(QJsonArray::fromVariantList(m_logins)).toJson());
+}
+
+QObject *Browser::privateWindowOpened(const QJSValue &make)
+{
+    ++m_privateWindows;
+    if (!m_privateProfile && make.isCallable()) {
+        QObject *p = QJSValue(make).call().toQObject();
+        if (p) {
+            QJSEngine::setObjectOwnership(p, QJSEngine::CppOwnership);
+            m_privateProfile = p;
+            emit privateProfileChanged();
+        }
+    }
+    return m_privateProfile;
+}
+
+void Browser::privateWindowClosed()
+{
+    if (--m_privateWindows > 0 || !m_privateProfile)
+        return;
+    // the last private window: its profile (cookies, cache: all in memory)
+    // goes, once the pages are gone
+    QObject *p = m_privateProfile;
+    m_privateProfile = nullptr;
+    emit privateProfileChanged();
+    QTimer::singleShot(1000, p, &QObject::deleteLater);
+}
+
+QString Browser::originOf(const QUrl &url) const
+{
+    if (url.scheme() != QLatin1String("http") && url.scheme() != QLatin1String("https"))
+        return QString();
+    QString o = url.scheme() + QStringLiteral("://") + url.host().toLower();
+    if (url.port() != -1)
+        o += QLatin1Char(':') + QString::number(url.port());
+    return o;
+}
+
+QVariantList Browser::loginsFor(const QString &origin) const
+{
+    QVariantList out;
+    for (const QVariant &v : m_logins)
+        if (v.toMap().value(QStringLiteral("origin")).toString() == origin)
+            out << v;
+    return out;
+}
+
+void Browser::compareLogin(const QString &origin, const QString &username, const QString &password, const QJSValue &done)
+{
+    bool known = false;
+    for (const QVariant &v : loginsFor(origin))
+        known = known || v.toMap().value(QStringLiteral("username")).toString() == username;
+    if (!known) {
+        callBack(done, {QStringLiteral("new")});
+        return;
+    }
+    Secrets::lookup(loginAttributes(origin, username), [done, password](bool found, const QString &saved) {
+        callBack(done, {!found ? QStringLiteral("new") : saved == password ? QStringLiteral("same") : QStringLiteral("changed")});
+    });
+}
+
+void Browser::saveLogin(const QString &origin, const QString &username, const QString &password, const QJSValue &done)
+{
+    if (origin.isEmpty() || password.isEmpty()) {
+        callBack(done, {false, QStringLiteral("Nothing to save.")});
+        return;
+    }
+    if (!Secrets::available()) {
+        callBack(done, {false, QStringLiteral("There's no keyring (the Secret Service) to keep passwords in.")});
+        return;
+    }
+    const QString label = QStringLiteral("Web Browser: %1 (%2)").arg(origin, username.isEmpty() ? QStringLiteral("no user name") : username);
+    Secrets::store(loginAttributes(origin, username), label, password, [this, done, origin, username](bool ok, const QString &error) {
+        if (ok) {
+            QVariantList list;
+            list << QVariantMap{{QStringLiteral("origin"), origin}, {QStringLiteral("username"), username},
+                                {QStringLiteral("time"), QDateTime::currentMSecsSinceEpoch()}};
+            for (const QVariant &v : std::as_const(m_logins)) {
+                const QVariantMap m = v.toMap();
+                if (m.value(QStringLiteral("origin")) != origin || m.value(QStringLiteral("username")) != username)
+                    list << v;
+            }
+            m_logins = list;
+            saveLogins();
+            emit loginsChanged();
+        }
+        callBack(done, {ok, error});
+    });
+}
+
+void Browser::revealLogin(const QString &origin, const QString &username, const QJSValue &done)
+{
+    Secrets::lookup(loginAttributes(origin, username), [done](bool found, const QString &password) {
+        callBack(done, {found, password});
+    });
+}
+
+void Browser::removeLogin(const QString &origin, const QString &username)
+{
+    Secrets::remove(loginAttributes(origin, username));
+    QVariantList list;
+    for (const QVariant &v : std::as_const(m_logins)) {
+        const QVariantMap m = v.toMap();
+        if (m.value(QStringLiteral("origin")) != origin || m.value(QStringLiteral("username")) != username)
+            list << v;
+    }
+    m_logins = list;
+    saveLogins();
+    emit loginsChanged();
+}
+
+bool Browser::neverSaves(const QString &origin) const
+{
+    return m_settings.value(QStringLiteral("neverSavePasswords")).toStringList().contains(origin);
+}
+
+void Browser::neverSaveFor(const QString &origin)
+{
+    QStringList list = m_settings.value(QStringLiteral("neverSavePasswords")).toStringList();
+    if (!list.contains(origin))
+        list << origin;
+    m_settings[QStringLiteral("neverSavePasswords")] = list;
+    saveSettings();
+}
+
+void Browser::copyText(const QString &text) const
+{
+    QGuiApplication::clipboard()->setText(text);
 }
 
 void Browser::saveSettings()

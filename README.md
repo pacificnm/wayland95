@@ -309,8 +309,26 @@ up next to the shell first, then on `$PATH`.
   favorites are `~/.config/wayland95/web.json`, history
   `~/.local/share/wayland95/web-history.json`; cookies and the cache are
   WebEngine's, under `~/.local/share/win95-wayland` and
-  `~/.cache/win95-wayland`. Not yet: saved passwords, extensions, sync,
-  and a private (incognito) window.
+  `~/.cache/win95-wayland`.
+
+  Saved passwords: when a site's login is sent, the browser offers to save
+  it (Save, Never for This Site, Not Now; Update when the password
+  changed). Passwords are kept in the desktop's keyring (the Secret
+  Service), never in the browser's files; `~/.local/share/wayland95/web-logins.json`
+  lists only which sites and user names have one. Clicking or tabbing
+  into that site's login field fills it in; a login is only ever filled
+  on the exact site it was saved for (scheme, name and port), only into
+  visible fields, and only after you click or type. Tools > Saved
+  Passwords shows, copies and deletes them. The script that does this runs
+  in a world of its own, out of reach of the page's scripts. Logins inside
+  frames aren't seen.
+
+  Private windows (File > New Private Window, Ctrl+Shift+N, or a link's
+  menu) keep cookies, the cache and site permissions in memory only, apart
+  from the normal windows', and add nothing to History or saved
+  passwords; it all goes when the last private window closes. Downloads
+  still go to Downloads. Not yet: extensions (Qt WebEngine has them from
+  Qt 6.10; Debian 13 has 6.8) and sync.
 - **Calculator** (`win95calc`, [apps/calc/](apps/calc/)): Start >
   Programs > Accessories > Calculator. View > Standard: memory (MC, MR,
   MS, M+), digits, + - * /, sqrt, %, 1/x, +/-, Back, CE and C, worked out

@@ -18,8 +18,10 @@ Item {
     readonly property alias history: historyDialog
     readonly property alias clear: clearDialog
     readonly property alias options: optionsDialog
+    readonly property alias passwords: passwordsDialog
     readonly property bool anyOpen: promptDialog.visible || authDialog.visible || favoriteDialog.visible
         || organizeDialog.visible || historyDialog.visible || clearDialog.visible || optionsDialog.visible
+        || passwordsDialog.visible
 
     component Label: Text {
         height: 21
@@ -506,6 +508,125 @@ Item {
         Buttons {
             Button95 { width: 75; text: "OK"; isDefault: true; onClicked: optionsDialog.save() }
             Button95 { width: 75; text: "Cancel"; onClicked: optionsDialog.close() }
+        }
+    }
+
+    // --------------------------------------------------- Saved Passwords
+    Dialog95 {
+        id: passwordsDialog
+        title: "Saved Passwords"
+        dialogWidth: 500
+        dialogHeight: 300
+        property int chosen: -1
+        // the one being shown: { origin, username, password }
+        property var shown: null
+        readonly property var login: chosen >= 0 && chosen < Browser.logins.length ? Browser.logins[chosen] : null
+        function open() {
+            chosen = Browser.logins.length ? 0 : -1;
+            shown = null;
+            show();
+        }
+        function isShown(l) { return !!shown && !!l && shown.origin === l.origin && shown.username === l.username; }
+        onClosed: { shown = null; root.refocus(); }
+        Text {
+            x: 10; y: 8
+            width: parent.width - 20
+            text: "Passwords Web Browser has saved, kept in your keyring:"
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize
+        }
+        Bevel {
+            x: 10; y: 28
+            width: parent.width - 130
+            height: parent.height - 38
+            style: "sunken"
+            face: Theme.window
+            ListView {
+                x: 2; y: 2
+                width: parent.width - 4
+                height: parent.height - 4
+                clip: true
+                model: Browser.logins
+                delegate: Rectangle {
+                    id: lrow
+                    required property var modelData
+                    required property int index
+                    readonly property bool sel: passwordsDialog.chosen === index
+                    width: ListView.view.width
+                    height: 34
+                    color: sel ? Theme.selection : "transparent"
+                    WebIcon { x: 6; y: 9; kind: "key" }
+                    Text {
+                        x: 28; y: 2
+                        width: parent.width - 32
+                        elide: Text.ElideRight
+                        text: lrow.modelData.origin.replace(/^https?:\/\//, "") + (lrow.modelData.origin.indexOf("http:") === 0 ? "  (not secure: http)" : "")
+                        color: lrow.sel ? Theme.selectionText : Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
+                        font.bold: true
+                    }
+                    Text {
+                        x: 28; y: 18
+                        width: parent.width - 32
+                        elide: Text.ElideRight
+                        text: (lrow.modelData.username || "(no user name)") + "    "
+                              + (passwordsDialog.isShown(lrow.modelData) ? passwordsDialog.shown.password : "••••••••")
+                        color: lrow.sel ? Theme.selectionText : Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
+                    }
+                    MouseArea { anchors.fill: parent; onClicked: passwordsDialog.chosen = lrow.index }
+                }
+            }
+            Text {
+                anchors.centerIn: parent
+                visible: Browser.logins.length === 0
+                text: "No passwords are saved."
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize
+            }
+        }
+        Column {
+            anchors.right: parent.right
+            anchors.rightMargin: 10
+            y: 28
+            spacing: 6
+            Button95 {
+                width: 100; enabled: !!passwordsDialog.login
+                text: passwordsDialog.isShown(passwordsDialog.login) ? "<u>H</u>ide" : "<u>S</u>how"
+                onClicked: {
+                    var l = passwordsDialog.login;
+                    if (passwordsDialog.isShown(l)) { passwordsDialog.shown = null; return; }
+                    Browser.revealLogin(l.origin, l.username, function (found, password) {
+                        if (found) passwordsDialog.shown = { origin: l.origin, username: l.username, password: password };
+                    });
+                }
+            }
+            Button95 {
+                width: 100; text: "Copy <u>P</u>assword"; enabled: !!passwordsDialog.login
+                onClicked: {
+                    var l = passwordsDialog.login;
+                    Browser.revealLogin(l.origin, l.username, function (found, password) {
+                        if (found) Browser.copyText(password);
+                    });
+                }
+            }
+            Button95 {
+                width: 100; text: "<u>D</u>elete"; enabled: !!passwordsDialog.login
+                onClicked: {
+                    var l = passwordsDialog.login;
+                    root.browser.log("login removed " + l.origin + " " + l.username);
+                    Browser.removeLogin(l.origin, l.username);
+                    passwordsDialog.shown = null;
+                    passwordsDialog.chosen = Math.min(passwordsDialog.chosen, Browser.logins.length - 1);
+                }
+            }
+        }
+        Button95 {
+            anchors.right: parent.right; anchors.rightMargin: 10
+            anchors.bottom: parent.bottom; anchors.bottomMargin: 10
+            width: 100; text: "Close"; onClicked: passwordsDialog.close()
         }
     }
 }

@@ -1,5 +1,6 @@
 import QtQuick
 import QtWebEngine
+import QtWebChannel
 import Win95Web
 
 // One tab's page: a WebEngineView on the shared Profile, whose requests
@@ -16,7 +17,23 @@ WebEngineView {
     property int matchCount: 0
     property int matchIndex: 0
 
+    // a login offered for saving: { origin, username, password, update }
+    property var loginOffer: null
+
+    // (a private window's tabs are made with its in-memory profile instead)
     profile: Profile
+
+    // the saved-password script's way in (passwords.js): in its own world,
+    // out of the page's reach
+    webChannel: WebChannel { registeredObjects: [passwords] }
+    webChannelWorld: WebEngineScript.ApplicationWorld
+    QtObject {
+        id: passwords
+        WebChannel.id: "w95passwords"
+        signal loginReady(string username, string password)
+        function submitted(username, password) { view.browser.offerToSave(view, String(username), String(password)); }
+        function fill(username) { view.browser.fillLogin(view, String(username), passwords); }
+    }
     settings.fullScreenSupportEnabled: true
     settings.pdfViewerEnabled: true
     settings.javascriptCanOpenWindows: true
@@ -33,7 +50,8 @@ WebEngineView {
         }
         pending = "";
         if (info.status === WebEngineView.LoadSucceededStatus) {
-            Browser.visited(view.url.toString(), view.title);
+            if (!browser.privateMode)
+                Browser.visited(view.url.toString(), view.title);
             browser.log("loaded " + view.url + " " + view.title);
         } else if (info.status === WebEngineView.LoadFailedStatus) {
             browser.log("failed " + view.url + " " + info.errorString);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QLocalServer>
+#include <QJSValue>
 #include <QObject>
 #include <QPointer>
 #include <QVariantList>
@@ -34,6 +35,12 @@ class Browser : public QObject
     Q_PROPERTY(QString downloadsDir READ downloadsDir CONSTANT)
     // the browser window used last: where another `win95web URL` opens
     Q_PROPERTY(QObject *lastWindow READ lastWindow WRITE setLastWindow NOTIFY lastWindowChanged)
+    // the private windows' profile (an off-the-record WebEngineProfile):
+    // made with the first private window, gone with the last
+    Q_PROPERTY(QObject *privateProfile READ privateProfile NOTIFY privateProfileChanged)
+    // saved passwords: [{ origin, username, time (ms) }], newest first (the
+    // passwords themselves are in the keyring)
+    Q_PROPERTY(QVariantList logins READ logins NOTIFY loginsChanged)
 
 public:
     // (one, shared by main.cpp and QML: its constructor is private, so QML
@@ -56,7 +63,29 @@ public:
     void setLastWindow(QObject *w);
 
     // a new browser window, with these pages (none: the home page)
-    Q_INVOKABLE void newWindow(const QStringList &urls) { emit windowWanted(urls); }
+    Q_INVOKABLE void newWindow(const QStringList &urls, bool privateWindow = false) { emit windowWanted(urls, privateWindow); }
+
+    QObject *privateProfile() const { return m_privateProfile; }
+    // a private window opened (with a new profile if it's the first: made
+    // by `make`, a QML function) and closed
+    Q_INVOKABLE QObject *privateWindowOpened(const QJSValue &make);
+    Q_INVOKABLE void privateWindowClosed();
+
+    // --- saved passwords
+    QVariantList logins() const { return m_logins; }
+    // scheme://host[:port] (http and https only; else "")
+    Q_INVOKABLE QString originOf(const QUrl &url) const;
+    Q_INVOKABLE QVariantList loginsFor(const QString &origin) const;
+    // done("new" | "same" | "changed"): what saving this would be
+    Q_INVOKABLE void compareLogin(const QString &origin, const QString &username, const QString &password, const QJSValue &done);
+    // done(ok, error)
+    Q_INVOKABLE void saveLogin(const QString &origin, const QString &username, const QString &password, const QJSValue &done);
+    // done(found, password)
+    Q_INVOKABLE void revealLogin(const QString &origin, const QString &username, const QJSValue &done);
+    Q_INVOKABLE void removeLogin(const QString &origin, const QString &username);
+    Q_INVOKABLE bool neverSaves(const QString &origin) const;
+    Q_INVOKABLE void neverSaveFor(const QString &origin);
+    Q_INVOKABLE void copyText(const QString &text) const;
 
     // what's typed in the address bar: a web address as it is, a name like
     // "example.com" made https://, anything else a search
@@ -93,7 +122,9 @@ signals:
     void openRequested(const QStringList &urls);
     void lastWindowChanged();
     // (main.cpp makes it)
-    void windowWanted(const QStringList &urls);
+    void windowWanted(const QStringList &urls, bool privateWindow);
+    void privateProfileChanged();
+    void loginsChanged();
 
 private:
     explicit Browser(QObject *parent = nullptr);
@@ -106,4 +137,8 @@ private:
     QVariantList m_history;
     QLocalServer *m_server = nullptr;
     QPointer<QObject> m_lastWindow;
+    QPointer<QObject> m_privateProfile;
+    int m_privateWindows = 0;
+    QVariantList m_logins;
+    void saveLogins();
 };

@@ -12,8 +12,6 @@ qt_add_executable(win95email
     src/imap.cpp
     src/smtp.h
     src/smtp.cpp
-    src/secrets.h
-    src/secrets.cpp
     src/mailstore.h
     src/mailstore.cpp
 )

@@ -42,14 +42,9 @@ const QString ServicePath = QStringLiteral("/org/freedesktop/secrets");
 const QString ServiceIface = QStringLiteral("org.freedesktop.Secret.Service");
 const QString DefaultCollection = QStringLiteral("/org/freedesktop/secrets/aliases/default");
 
-using StringMap = QMap<QString, QString>;
+using StringMap = Secrets::Attributes;
 
 QDBusConnection bus() { return QDBusConnection::sessionBus(); }
-
-StringMap attributes(const QString &account)
-{
-    return {{QStringLiteral("application"), QStringLiteral("wayland95-email")}, {QStringLiteral("account"), account}};
-}
 
 void registerTypes()
 {
@@ -134,9 +129,9 @@ QList<QDBusObjectPath> paths(const QVariant &v)
 }
 
 // the items for an account, unlocked (the keyring asked for if need be)
-void find(const QString &account, const std::function<void(const QList<QDBusObjectPath> &items)> &done)
+void find(const StringMap &attributes, const std::function<void(const QList<QDBusObjectPath> &items)> &done)
 {
-    call(ServicePath, ServiceIface, QStringLiteral("SearchItems"), {QVariant::fromValue(attributes(account))},
+    call(ServicePath, ServiceIface, QStringLiteral("SearchItems"), {QVariant::fromValue(attributes)},
          [done](const QDBusMessage &reply) {
         if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().size() < 2) {
             done({});
@@ -172,7 +167,7 @@ bool available()
     return i && (i->isServiceRegistered(Service) || i->activatableServiceNames().value().contains(Service));
 }
 
-void store(const QString &account, const QString &label, const QString &password,
+void store(const Attributes &attributes, const QString &label, const QString &password,
            const std::function<void(bool ok, const QString &error)> &done)
 {
     openSession([=](bool ok, const QDBusObjectPath &session) {
@@ -182,7 +177,7 @@ void store(const QString &account, const QString &label, const QString &password
         }
         QVariantMap props;
         props.insert(QStringLiteral("org.freedesktop.Secret.Item.Label"), label);
-        props.insert(QStringLiteral("org.freedesktop.Secret.Item.Attributes"), QVariant::fromValue(attributes(account)));
+        props.insert(QStringLiteral("org.freedesktop.Secret.Item.Attributes"), QVariant::fromValue(attributes));
         Secret s{session, QByteArray(), password.toUtf8(), QStringLiteral("text/plain; charset=utf8")};
         call(DefaultCollection, QStringLiteral("org.freedesktop.Secret.Collection"), QStringLiteral("CreateItem"),
              {QVariant::fromValue(props), QVariant::fromValue(s), true}, [=](const QDBusMessage &reply) {
@@ -203,7 +198,7 @@ void store(const QString &account, const QString &label, const QString &password
     });
 }
 
-void lookup(const QString &account, const std::function<void(bool found, const QString &password)> &done)
+void lookup(const Attributes &attributes, const std::function<void(bool found, const QString &password)> &done)
 {
     if (!available()) {
         done(false, QString());
@@ -214,7 +209,7 @@ void lookup(const QString &account, const std::function<void(bool found, const Q
             done(false, QString());
             return;
         }
-        find(account, [=](const QList<QDBusObjectPath> &items) {
+        find(attributes, [=](const QList<QDBusObjectPath> &items) {
             if (items.isEmpty()) {
                 done(false, QString());
                 return;
@@ -248,11 +243,11 @@ void lookup(const QString &account, const std::function<void(bool found, const Q
     });
 }
 
-void remove(const QString &account)
+void remove(const Attributes &attributes)
 {
     if (!available())
         return;
-    find(account, [](const QList<QDBusObjectPath> &items) {
+    find(attributes, [](const QList<QDBusObjectPath> &items) {
         for (const QDBusObjectPath &p : items)
             call(p.path(), QStringLiteral("org.freedesktop.Secret.Item"), QStringLiteral("Delete"), {}, [](const QDBusMessage &) {});
     });

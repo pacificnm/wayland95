@@ -19,7 +19,8 @@ Window {
     visible: false
 
     property int chosen: -1
-    readonly property var list: Profile.downloads.slice().reverse()
+    // (this time's, private windows' too)
+    readonly property var list: Profile.downloads.concat(Browser.privateProfile ? Browser.privateProfile.downloads : []).reverse()
     readonly property var item: chosen >= 0 && chosen < list.length ? list[chosen] : null
 
     function show() {

@@ -33,12 +33,12 @@ int main(int argc, char *argv[])
     QQmlApplicationEngine engine;
     engine.addImportPath(QStringLiteral("qrc:/qt/qml"));
     engine.rootContext()->setContextProperty(QStringLiteral("webDebug"), qEnvironmentVariableIsSet("W95_WEB_DEBUG"));
-    auto openWindow = [&engine](const QStringList &list) {
-        engine.setInitialProperties({{QStringLiteral("urls"), list}});
+    auto openWindow = [&engine](const QStringList &list, bool privateWindow) {
+        engine.setInitialProperties({{QStringLiteral("urls"), list}, {QStringLiteral("privateMode"), privateWindow}});
         engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Win95Web/Main.qml")));
     };
     QObject::connect(Browser::instance(), &Browser::windowWanted, &app, openWindow);
-    openWindow(urls);
+    openWindow(urls, false);
     if (engine.rootObjects().isEmpty())
         return -1;
     return app.exec();

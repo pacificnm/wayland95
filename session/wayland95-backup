@@ -32,6 +32,12 @@
 set -u
 umask 077
 
+# a process group of its own (when cron or the desktop started it), so
+# Control Panel > Backup's Stop can stop it, and rsync under it, together
+if [ "$(ps -o pgid= $$ | tr -d ' ')" != "$$" ] && command -v setsid >/dev/null 2>&1; then
+    exec setsid -w "$0" "$@"
+fi
+
 mode=${1:---now}
 conf=${W95_BACKUP_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/wayland95/backup.conf}
 state=${W95_BACKUP_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/wayland95}
@@ -71,8 +77,10 @@ finish() {
         if [ "$1" = ok ]; then echo "last_ok=$(date +%s)"; echo "last_ok_folder=${5:-}"
         else echo "last_ok=$(last last_ok)"; echo "last_ok_folder=$(last last_ok_folder)"; fi
         echo "nagged=$(last nagged)"
+        # running: who, and since when (Control Panel > Backup shows it)
+        if [ "$1" = running ]; then echo "pid=$$"; echo "started=$(date +%s)"; fi
     } >"$tmp" && mv -f "$tmp" "$status_file"
-    log "$1: $2"
+    [ "$1" = running ] || log "$1: $2"
 }
 
 [ -f "$conf" ] || { echo "Backup isn't set up (Control Panel > Backup)." >&2; exit 2; }
@@ -157,6 +165,12 @@ set -- -r -l -t --modify-window=2 --exclude-from="$excludes" --stats --info=prog
 [ "$links" = yes ] && set -- "$@" -p -H
 
 say "Backing up to $name..."
+finish running "Backing up to $name..."
+# stopped (Control Panel > Backup's Stop): said so, and the half-made backup goes
+trap 'finish failed "Stopped before it finished."; [ "$links" = yes ] && [ -n "${target:-}" ] && rm -rf "$target"; exit 1' TERM INT HUP
+if [ "$mode" = --due ]; then
+    notify "Backing up to $name" "The drive was plugged in and a backup was due. Control Panel > Backup shows how far it's got."
+fi
 out=$state/backup.rsync
 if [ "$links" = yes ]; then
     target=$dest/$stamp.partial
@@ -202,5 +216,6 @@ if [ "$links" = yes ]; then
         | while IFS= read -r old; do rm -rf "$old"; log "removed the old backup $old"; done
 fi
 finish ok "Backed up to $name." "$files" "$bytes" "$folder"
+[ "$mode" = --due ] && notify "Backup finished" "${files:-0} files copied to $name."
 say "Done: ${files:-0} files copied."
 exit 0

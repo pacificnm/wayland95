@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHostInfo>
+#include <QLocale>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
@@ -40,6 +41,11 @@ BackupManager::BackupManager(QObject *parent)
     QDir().mkpath(stateDir());
     m_watcher.addPath(stateDir());
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &BackupManager::loadStatus);
+    m_poll.setInterval(1000);
+    connect(&m_poll, &QTimer::timeout, this, [this] {
+        loadStatus(); // (it may have ended without the folder telling)
+        readProgress();
+    });
     reload();
 }
 
@@ -162,6 +168,55 @@ void BackupManager::loadStatus()
     if (st != m_status) {
         m_status = st;
         emit statusChanged();
+    }
+    // running, started by cron or the desktop (not Back Up Now here)?
+    qint64 pid = 0;
+    if (!m_process && st.value(QStringLiteral("result")) == QLatin1String("running")) {
+        pid = st.value(QStringLiteral("pid")).toLongLong();
+        if (pid <= 0 || !QFileInfo::exists(QStringLiteral("/proc/%1").arg(pid)))
+            pid = 0; // it died without saying (killed outright)
+    }
+    if (pid != m_backgroundPid) {
+        m_backgroundPid = pid;
+        if (pid) {
+            m_percent = 0;
+            const QDateTime started = QDateTime::fromSecsSinceEpoch(st.value(QStringLiteral("started")).toLongLong());
+            m_progressText = QStringLiteral("Backing up (started %1)...").arg(QLocale::system().toString(started.time(), QLocale::ShortFormat));
+            m_poll.start();
+            readProgress();
+        } else {
+            m_poll.stop();
+            m_percent = -1;
+            m_progressText.clear();
+        }
+        emit runningChanged();
+        emit progressChanged();
+    }
+}
+
+void BackupManager::readProgress()
+{
+    // the last progress line rsync wrote (the engine keeps its output)
+    QFile f(stateDir() + QStringLiteral("/backup.rsync"));
+    if (!f.open(QIODevice::ReadOnly))
+        return;
+    if (f.size() > 4096)
+        f.seek(f.size() - 4096);
+    const QStringList lines = QString::fromUtf8(f.readAll()).split(QLatin1Char('\n'));
+    static const QRegularExpression progress(QStringLiteral("^\\s*([0-9,]+)\\s+(\\d+)%"));
+    for (int i = lines.size() - 1; i >= 0; --i) {
+        const QRegularExpressionMatch m = progress.match(lines.at(i));
+        if (!m.hasMatch())
+            continue;
+        const int percent = m.captured(2).toInt();
+        if (percent != m_percent) {
+            m_percent = percent;
+            const QDateTime started = QDateTime::fromSecsSinceEpoch(m_status.value(QStringLiteral("started")).toLongLong());
+            m_progressText = QStringLiteral("Backing up (started %1)... %2%")
+                                 .arg(QLocale::system().toString(started.time(), QLocale::ShortFormat)).arg(percent);
+            emit progressChanged();
+        }
+        return;
     }
 }
 
@@ -299,6 +354,19 @@ void BackupManager::backUpNow()
 
 void BackupManager::stop()
 {
+    if (!m_process && m_backgroundPid > 0) {
+        // one cron or the desktop started: its process group, if it leads
+        // one (the engine makes its own), else just it
+        QFile stat(QStringLiteral("/proc/%1/stat").arg(m_backgroundPid));
+        qint64 group = 0;
+        if (stat.open(QIODevice::ReadOnly)) {
+            const QString s = QString::fromUtf8(stat.readAll());
+            const QStringList fields = s.mid(s.lastIndexOf(QLatin1Char(')')) + 2).split(QLatin1Char(' '));
+            group = fields.value(2).toLongLong(); // state ppid pgrp
+        }
+        ::kill(group == m_backgroundPid ? -m_backgroundPid : m_backgroundPid, SIGTERM);
+        return;
+    }
     if (!m_process)
         return;
     const qint64 pid = m_process->processId();

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Stand-in rsync for tests/backup/run.sh: a backup that takes a while (to
+# be seen running, and stopped)
+echo "         123  1%    0.00kB/s    0:00:00 (xfr#1, to-chk=9/10)"
+sleep 30

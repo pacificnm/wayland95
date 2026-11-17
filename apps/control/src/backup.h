@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QProcess>
+#include <QTimer>
 #include <QVariantMap>
 #include <QtQmlIntegration/qqmlintegration.h>
 
@@ -41,7 +42,8 @@ public:
 
     QVariantMap settings() const { return m_settings; }
     QVariantMap status() const { return m_status; }
-    bool running() const { return m_process != nullptr; }
+    // a backup of ours (Back Up Now) or one cron or the desktop started
+    bool running() const { return m_process != nullptr || m_backgroundPid > 0; }
     int percent() const { return m_percent; }
     QString progressText() const { return m_progressText; }
     QString engine() const;
@@ -86,4 +88,9 @@ private:
     int m_percent = -1;
     QString m_progressText;
     QFileSystemWatcher m_watcher;
+    // a backup running that something else started (the status's pid):
+    // its progress is read from rsync's output every second
+    qint64 m_backgroundPid = 0;
+    QTimer m_poll;
+    void readProgress();
 };

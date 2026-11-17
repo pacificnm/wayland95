@@ -13,7 +13,7 @@ PropertySheet {
     title: "Backup Properties"
     titles: ["Backup", "Schedule"]
     width: 480
-    height: 470
+    height: 500
 
     // the settings being edited (Apply/OK saves them)
     property var s: ({})
@@ -24,6 +24,7 @@ PropertySheet {
         s = JSON.parse(JSON.stringify(Backup.settings));
         // (the text boxes edit s from here on)
         timeField.text = s.time || "21:00";
+        destField.text = s.destDir || Backup.defaultDestDir;
         excludeField.text = (s.excludes || []).join("; ");
         // the first time: the drive plugged in, if there's just one
         if (!s.driveUuid && removable.length === 1)
@@ -196,13 +197,49 @@ PropertySheet {
             }
             onActivated: (i) => { if (i < sheet.removable.length) sheet.setDrive(sheet.removable[i]); }
         }
+        // where on the drive: a folder on it (made if it isn't there)
+        Label { y: driveBox.y + driveBox.height + 10; text: "Folder:" }
+        TextField95 {
+            id: destField
+            objectName: "destField"
+            x: 40
+            y: driveBox.y + driveBox.height + 6
+            width: parent.width - 40 - 86
+            onTextChanged: {
+                var t = text.replace(/^\/+|\/+$/g, "");
+                if (t && t !== sheet.s.destDir)
+                    sheet.change("destDir", t);
+            }
+        }
+        Button95 {
+            anchors.right: parent.right
+            y: destField.y - 1
+            width: 80
+            text: "<u>B</u>rowse..."
+            enabled: !!sheet.chosenDrive
+            onClicked: {
+                var d = sheet.chosenDrive;
+                var open = function (mnt) {
+                    destDialog.root = mnt;
+                    destDialog.mode = "folder";
+                    destDialog.openAt(mnt, "");
+                };
+                if (d.mounted)
+                    open(d.mountPath);
+                else
+                    Drives.mount(d.id, function (ok, result) {
+                        if (ok) open(result);
+                        else sheet.messageBox.show("Backup", result, "error", ["OK"]);
+                    });
+            }
+        }
         Label {
             id: whereLabel
             x: 40
-            y: driveBox.y + driveBox.height + 4
+            y: destField.y + destField.height + 3
             width: parent.width - 40
             color: Theme.shadow
-            text: "In the folder " + (sheet.s.destDir || Backup.defaultDestDir) + " on it."
+            text: "on the drive (made if it isn't there)."
         }
         Label { y: whereLabel.y + whereLabel.height + 12; text: "Keep up to" }
         SpinBox95 {
@@ -390,7 +427,28 @@ PropertySheet {
         }
     }
 
-    extras: FileDialog95 {
+    extras: [
+    // a folder on the drive to back up to (kept as a path on the drive, so
+    // it's found wherever the drive is mounted)
+    FileDialog95 {
+        id: destDialog
+        property string root: ""
+        messageBox: sheet.messageBox
+        popupMenu: sheet.popupMenu
+        acceptLabel: "Choose"
+        onAccepted: (path) => {
+            if (path !== root && path.indexOf(root + "/") !== 0) {
+                sheet.messageBox.show("Backup", "Choose a folder on " + (sheet.chosenDrive ? sheet.chosenDrive.name : "the drive") + ".",
+                                      "info", ["OK"]);
+                return;
+            }
+            destField.text = path === root ? "" : path.slice(root.length + 1);
+            if (path === root)
+                sheet.messageBox.show("Backup", "Backups need a folder of their own on the drive: choose or make one in it.", "info", ["OK"]);
+        }
+    },
+
+    FileDialog95 {
         id: folderDialog
         messageBox: sheet.messageBox
         popupMenu: sheet.popupMenu
@@ -401,4 +459,5 @@ PropertySheet {
             sheet.change("folders", list);
         }
     }
+    ]
 }

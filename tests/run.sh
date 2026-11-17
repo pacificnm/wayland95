@@ -2929,7 +2929,7 @@ start_backup_applet() { # [TAB]
     sleep 1.2
 }
 bsnapshots() { ls -1d "$WORK/media/STICK/Wayland 95 Backups/"*/20*_* 2>/dev/null | grep -v partial; }
-SETUP_X=119; SETUP_Y=421; WEEKLY_X=73; WEEKLY_Y=193; NEVER_X=73; NEVER_Y=121 # (Backup > Schedule; Apply is at 479,504)
+SETUP_X=119; SETUP_Y=451; DEST_Y=304; WEEKLY_X=73; WEEKLY_Y=193; NEVER_X=73; NEVER_Y=121 # (Backup > Schedule; Apply is at 479,504)
 suite_backup() {
     say "backup: Control Panel > Backup to a USB drive (stand-in UDisks2, crontab): Back Up Now, versions, schedule"
     [ -x "$BUILD/win95control" ] || { bad "win95control" "not built"; return; }
@@ -2945,7 +2945,7 @@ suite_backup() {
 
     # Back Up Now: the settings are saved (and the schedule: every day at 9 PM),
     # the drive opened, and a dated folder made on it
-    pointer click:277,463 wait:0.5
+    pointer click:277,493 wait:0.5
     for _ in $(seq 40); do [ -n "$(bsnapshots)" ] && break; sleep 0.25; done
     sleep 1
     local first; first=$(bsnapshots | head -n 1)
@@ -2962,7 +2962,7 @@ suite_backup() {
 
     # a second one: a new folder, unchanged files shared with the first
     sleep 1; echo "dear sam, again" >"$home/Documents/letters/sam.txt"
-    pointer click:277,463 wait:0.5
+    pointer click:277,493 wait:0.5
     for _ in $(seq 40); do [ "$(bsnapshots | wc -l)" -ge 2 ] && break; sleep 0.25; done
     sleep 1
     local second; second=$(bsnapshots | tail -n 1)
@@ -2971,7 +2971,7 @@ suite_backup() {
     expect_true $? "a second backup: its own folder, unchanged files shared (no extra space)" "$(bsnapshots)"
 
     # Open Backups: the latest, in the file manager
-    pointer click:368,463 wait:1.5
+    pointer click:368,493 wait:1.5
     for _ in $(seq 20); do [ "$(windows_of win95files)" -ge 1 ] && break; sleep 0.25; done
     query list | grep -q "^$(basename "$second")|win95files|"; expect_true $? "Open Backups shows the latest in the file manager" "$(query list | tr '\n' ' ')"
     query list | sed -n 's/^\([^|]*\)|win95files|.*/\1/p' | while read -r t; do query close "$t"; done
@@ -2981,13 +2981,13 @@ suite_backup() {
     start_backup_applet 1
     away; shot schedule
     [ "$(pixel schedule 600 351)" != ffffff ] || true
-    pointer click:$WEEKLY_X,$WEEKLY_Y wait:0.3 click:479,504 wait:0.6
+    pointer click:$WEEKLY_X,$WEEKLY_Y wait:0.3 click:479,534 wait:0.6
     grep -q "^0 21 \* \* 0 '.*wayland95-backup' --scheduled # wayland95-backup$" "$WORK/crontab" && [ "$(grep -c wayland95-backup "$WORK/crontab")" = 1 ]
     expect_true $? "Every week on Sunday: cron's line changes (one line, not two)" "$(cat "$WORK/crontab")"
-    pointer click:$NEVER_X,$NEVER_Y wait:0.3 click:479,504 wait:0.6
+    pointer click:$NEVER_X,$NEVER_Y wait:0.3 click:479,534 wait:0.6
     ! grep -q wayland95-backup "$WORK/crontab" && grep -qx "5 4 \* \* \* echo mine" "$WORK/crontab"
     expect_true $? "Never: the line goes (yours stays)" "$(cat "$WORK/crontab")"
-    pointer click:$WEEKLY_X,$WEEKLY_Y wait:0.3 click:479,504 wait:0.6
+    pointer click:$WEEKLY_X,$WEEKLY_Y wait:0.3 click:479,534 wait:0.6
     query close "Backup Properties"; sleep 0.6
 
     # the drive plugged in with a backup due: the desktop backs up
@@ -3002,7 +3002,7 @@ suite_backup() {
     # Set Up Drive makes just its backups folder yours (pkexec), then backs up
     rm -rf "$WORK/media/STICK/Wayland 95 Backups"; chmod 555 "$WORK/media/STICK"
     start_backup_applet 0
-    pointer click:277,463 wait:2
+    pointer click:277,493 wait:2
     away; shot not-writable
     grep -q "^fix=$WORK/media/STICK/Wayland 95 Backups$" "$home/.local/state/wayland95/backup.status"
     expect_true $? "a drive it can't write to: failed, naming the one folder to set up" "$(cat "$home/.local/state/wayland95/backup.status")"
@@ -3016,6 +3016,28 @@ suite_backup() {
     expect_true $? "and then backs up" "$(cat "$home/.local/state/wayland95/backup.status")"
     chmod 755 "$WORK/media/STICK"
     away; shot set-up-done
+    query close "Backup Properties"; sleep 0.6
+
+    # a backup cron or the desktop started (a slow one): the applet shows it
+    # running, and Stop stops it
+    sed -i 's/^last_ok=.*/last_ok=1/' "$home/.local/state/wayland95/backup.status"
+    HOME=$home XDG_CONFIG_HOME=$CONFIG XDG_STATE_HOME=$home/.local/state PATH=$REPO/tests/backup/slow:$REPO/tests/fakes:$PATH \
+        W95_FAKE_MEDIA=$WORK/media W95_FAKE_LOG=$FAKE_LOG DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        "$REPO/session/wayland95-backup" --due >/dev/null 2>&1 &
+    for _ in $(seq 50); do grep -q "^result=running" "$home/.local/state/wayland95/backup.status" && break; sleep 0.1; done
+    start_backup_applet 0
+    away; shot background
+    pointer click:277,493 wait:1.5
+    grep -q "^message=Stopped before it finished.$" "$home/.local/state/wayland95/backup.status"
+    expect_true $? "a backup started elsewhere shows running here, and Stop stops it" "$(cat "$home/.local/state/wayland95/backup.status")"
+    away; shot stopped
+
+    # a folder of your own choosing on the drive
+    pointer click:200,$DEST_Y key:ctrl+a "type:my backups" wait:0.3 click:277,493 wait:0.5
+    for _ in $(seq 40); do ls -d "$WORK/media/STICK/my backups/"20*_* >/dev/null 2>&1 && break; sleep 0.25; done
+    ls -d "$WORK/media/STICK/my backups/"20*_* >/dev/null 2>&1 && grep -qx "DEST_DIR=my backups" "$CONFIG/wayland95/backup.conf"
+    expect_true $? "Folder: backs up into the folder typed (made on the drive)" "$(ls "$WORK/media/STICK"); $(grep DEST "$CONFIG/wayland95/backup.conf")"
+    away; shot own-folder
 }
 
 # --- run -------------------------------------------------------------------

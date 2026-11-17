@@ -114,6 +114,24 @@ out=$(backup --now 2>&1)
 flock -u 8; exec 8>&-
 [ "$out" = "A backup is running already." ]; expect $? "two at once: the second leaves it to the first" "$out"
 
+# running: the status says so (with its process, for Control Panel > Backup);
+# stopped (the applet's Stop: TERM to its process group), it says that
+rm -f "$W95_FAKE_DRIVE.log"
+sh -c 'PATH="'"$HERE"'/slow:$PATH" exec "$0" --due' "$REPO/session/wayland95-backup" >/dev/null 2>&1 &
+sed -i 's/^last_ok=.*/last_ok=1/' "$STATE/backup.status"
+for _ in $(seq 50); do [ "$(st result)" = running ] && break; sleep 0.1; done
+pid=$(st pid)
+[ "$(st result)" = running ] && [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+expect $? "while it runs, the status says running, with its process" "$(cat "$STATE/backup.status")"
+[ "$(ps -o pgid= "$pid" | tr -d ' ')" = "$pid" ]; expect $? "(in a process group of its own: Stop stops rsync too)" "$(ps -o pid,pgid,args -g "$pid" 2>&1)"
+grep -q "^notify -a Backup Backing up to Test Drive" "$W95_FAKE_DRIVE.log"; expect $? "started because the drive was plugged in: a notification says so" "$(cat "$W95_FAKE_DRIVE.log")"
+kill -TERM -- "-$pid"
+for _ in $(seq 50); do [ "$(st result)" != running ] && break; sleep 0.1; done
+[ "$(st result)" = failed ] && [ "$(st message)" = "Stopped before it finished." ] && [ -z "$(ls -d "$DEST"/*.partial 2>/dev/null)" ]
+expect $? "stopped: it says so, and the half-made backup is gone" "$(cat "$STATE/backup.status"); $(ls "$DEST")"
+sleep 1; backup --due >/dev/null 2>&1
+grep -q "^notify -a Backup Backup finished" "$W95_FAKE_DRIVE.log"; expect $? "(and a plugged-in backup that finishes says so)" "$(cat "$W95_FAKE_DRIVE.log")"
+
 # a drive without hard links (FAT): one mirror, what's replaced kept aside
 rm -rf "$DEST"
 W95_BACKUP_NO_LINKS=1 backup --now >/dev/null 2>&1

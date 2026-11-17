@@ -732,9 +732,13 @@ up next to the shell first, then on `$PATH`.
     disk), with `rsync`
     ([session/wayland95-backup](session/wayland95-backup), installed as
     `wayland95-backup`). The Backup tab has the folders (Add..., Remove),
-    the drive (found by its UUID, wherever it's mounted), how many backups
-    to keep, the last result, Back Up Now (with progress and Stop), Open
-    Backups and View Log. On a Linux drive (ext4...) each backup is a
+    the drive (found by its UUID, wherever it's mounted), the folder on it
+    (typed, or Browse...; made if it isn't there), how many backups to
+    keep, the last result, Back Up Now (with progress and Stop), Open
+    Backups and View Log. A backup cron or the desktop started shows there
+    too, with its progress, and Stop stops it; one the desktop starts
+    because the drive was plugged in says so in a notification, and again
+    when it's done. On a Linux drive (ext4...) each backup is a
     dated folder of its own, `Wayland 95 Backups/USER@HOST/DATE_TIME`, with
     unchanged files shared with the one before (hard links: each looks
     complete and costs only what changed), and `Latest` pointing at the

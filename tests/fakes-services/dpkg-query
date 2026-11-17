@@ -1,0 +1,7 @@
+#!/bin/sh
+# Stand-in dpkg-query -W: the packages in $W95_FAKE_SERVICES/installed are installed
+f=${W95_FAKE_SERVICES:?}
+shift 2 # -W -f=...
+for p; do
+    if grep -qx "$p" "$f/installed" 2>/dev/null; then printf '%s\tii \n' "$p"; else printf '%s\tun \n' "$p"; fi
+done

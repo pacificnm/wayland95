@@ -95,6 +95,20 @@ public:
     // remote (bool); empty if it isn't installed
     Q_INVOKABLE QVariantMap postgresConfig() const;
 
+    // MySQL (MariaDB): version, port, listen ("localhost"/"all"),
+    // max_connections, as the server reads its option files; empty if it
+    // isn't installed
+    Q_INVOKABLE QVariantMap mysqlConfig() const;
+
+    // SQLite: the database files in a folder: [{ path, name, size, modified }]
+    Q_INVOKABLE QVariantList sqliteFiles(const QString &folder) const;
+    // what's in one (opened read-only): { tables: [{ name, type, rows }], error }
+    Q_INVOKABLE QVariantMap sqliteInfo(const QString &path) const;
+    // a new, empty database: "" or what went wrong
+    Q_INVOKABLE QString sqliteCreate(const QString &path);
+    // to the Recycle Bin (the desktop's trash)
+    Q_INVOKABLE bool moveToTrash(const QString &path);
+
 signals:
     void servicesChanged();
     void taskChanged();

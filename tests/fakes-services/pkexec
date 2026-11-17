@@ -1,0 +1,14 @@
+#!/bin/sh
+# Stand-in pkexec for the Services windows' test: records what the helper
+# was asked (its arguments and stdin) and plays its part, without running
+# it: never root, never this computer's settings. Refuses without
+# W95_FAKE_SERVICES.
+f=${W95_FAKE_SERVICES:?stand-in pkexec needs W95_FAKE_SERVICES}
+shift # (the helper's path)
+input=$(cat)
+{ echo "helper $*"; [ -z "$input" ] || printf '%s\n' "$input" | sed 's/^/  < /'; } >>"$f/log"
+case "$1" in
+    my-role) : >"$f/my-account"; mkdir -p "$f/dbs"; : >"$f/dbs/$2" ;;
+    my-config) printf '%s\n' "$input" >"$f/my-config" ;;
+esac
+exit 0

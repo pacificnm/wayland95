@@ -14,12 +14,17 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QSysInfo>
+#include <QUrl>
 
 #include <memory>
+#include <sqlite3.h>
 #include <unistd.h>
 #include <pwd.h>
 
 namespace {
+
+// W95_SERVICES_DEBUG: what's found, logged (for the tests)
+bool debug() { return qEnvironmentVariableIsSet("W95_SERVICES_DEBUG"); }
 
 // PackageKit's enums (pk-enum.h)
 constexpr quint64 FilterInstalled = 1 << 2;
@@ -172,6 +177,11 @@ ServiceManager::ServiceManager(QObject *parent)
                          "their data in its databases."),
           QStringLiteral("postgresql"), QStringLiteral("PostgresSettings.qml"),
           { QStringLiteral("postgresql") }, {}, {} },
+        { QStringLiteral("mysql"), QStringLiteral("MySQL (MariaDB)"), QStringLiteral("server"),
+          QStringLiteral("A MySQL database server (MariaDB, Debian's MySQL: the same mysql commands and "
+                         "connections). Programs here, or on others if you allow it, keep their data in it."),
+          QStringLiteral("mariadb"), QStringLiteral("MysqlSettings.qml"),
+          { QStringLiteral("mariadb-server") }, {}, {} },
         { QStringLiteral("wireguard"), QStringLiteral("WireGuard VPN"), QStringLiteral("server"),
           QStringLiteral("Private, encrypted tunnels to other computers and networks (a VPN). Each tunnel has "
                          "its own keys and peers; Settings shows the ones this computer has."),
@@ -190,6 +200,13 @@ ServiceManager::ServiceManager(QObject *parent)
           { QStringLiteral("nodejs") },
           { QStringLiteral("nodejs"), QStringLiteral("npm") },
           { QStringLiteral("/usr/bin/node"), QStringLiteral("--version") } },
+        { QStringLiteral("sqlite"), QStringLiteral("SQLite"), QStringLiteral("tool"),
+          QStringLiteral("A database kept in a single file, with no server to run. Installs the sqlite3 command; "
+                         "Settings lists your database files and what's in them."),
+          QString(), QStringLiteral("SqliteSettings.qml"),
+          { QStringLiteral("sqlite3") },
+          { QStringLiteral("sqlite3"), QStringLiteral("sqlitebrowser") },
+          { QStringLiteral("/usr/bin/sqlite3"), QStringLiteral("--version") } },
     };
     refresh();
 }
@@ -260,10 +277,10 @@ void ServiceManager::refresh()
             const QString id = d.id;
             connect(p, &QProcess::finished, this, [this, p, id] {
                 QString v = QString::fromUtf8(p->readAllStandardOutput() + p->readAllStandardError()).trimmed();
-                v = v.section(QLatin1Char('\n'), 0, 0);
-                if (v.startsWith(QLatin1Char('v')))
-                    v = v.mid(1);
-                v = v.section(QLatin1Char(' '), -1); // "Python 3.13.5" -> "3.13.5"
+                // the first version number: "Python 3.13.5", "v22.1.0",
+                // "3.46.1 2024-08-13 ..." -> 3.13.5, 22.1.0, 3.46.1
+                static const QRegularExpression number(QStringLiteral("\\d+(?:\\.\\d+)+"));
+                v = number.match(v.section(QLatin1Char('\n'), 0, 0)).captured(0);
                 m_versions.insert(id, v);
                 p->deleteLater();
                 --m_loading;
@@ -351,7 +368,8 @@ void ServiceManager::publish()
                 some = some || m_installed.contains(p);
             status = installed ? QStringLiteral("Installed") : some ? QStringLiteral("Partly installed") : QStringLiteral("Not installed");
         }
-        const bool available = d.version.isEmpty() ? installed : QFileInfo::exists(d.version.first());
+        // (a tool's settings work without it: SQLite's look at files)
+        const bool available = d.kind == QLatin1String("tool") || (d.version.isEmpty() ? installed : QFileInfo::exists(d.version.first()));
         const QString version = available ? m_versions.value(d.id) : QString();
         if (installed && !version.isEmpty())
             status = QStringLiteral("Version ") + version;
@@ -373,6 +391,10 @@ void ServiceManager::publish()
         };
     }
     m_services = list;
+    if (debug())
+        for (const QVariant &v : std::as_const(list))
+            qInfo("services: %s %s", qPrintable(v.toMap().value(QStringLiteral("id")).toString()),
+                  qPrintable(v.toMap().value(QStringLiteral("status")).toString()));
     emit servicesChanged();
 }
 
@@ -641,6 +663,8 @@ void ServiceManager::admin(const QStringList &args, const QString &input, const 
             out = QStringLiteral("You need an administrator's password to change this.");
         cb.call({ ok, out });
     });
+    if (debug())
+        qInfo("services: admin %s (%s)", qPrintable(args.join(QLatin1Char(' '))), qPrintable(pkexec));
     p->start(pkexec, QStringList{ helperPath() } + args);
     QByteArray data = input.toUtf8();
     if (!data.isEmpty() && !data.endsWith('\n'))
@@ -880,4 +904,180 @@ QVariantMap ServiceManager::postgresConfig() const
         { QStringLiteral("max_connections"), maxConnections },
         { QStringLiteral("remote"), remote && !local },
     };
+}
+
+// ---------------------------------------------------------------------------
+// MySQL (MariaDB)
+
+QVariantMap ServiceManager::mysqlConfig() const
+{
+    if (QStandardPaths::findExecutable(QStringLiteral("mariadb")).isEmpty())
+        return {};
+    // the server's options as it reads them: my.cnf, then the folders it
+    // includes, each in name order; the last value wins
+    QStringList files{ QStringLiteral("/etc/mysql/my.cnf") };
+    for (const QString &dir : { QStringLiteral("/etc/mysql/conf.d"), QStringLiteral("/etc/mysql/mariadb.conf.d") })
+        files << globFiles(dir + QStringLiteral("/*.cnf"));
+    QString bind = QStringLiteral("127.0.0.1"), port = QStringLiteral("3306"), maxConnections = QStringLiteral("151");
+    for (const QString &file : std::as_const(files)) {
+        QFile in(file);
+        if (!in.open(QIODevice::ReadOnly | QIODevice::Text))
+            continue;
+        bool server = false;
+        while (!in.atEnd()) {
+            const QString line = QString::fromUtf8(in.readLine()).trimmed();
+            if (line.startsWith(QLatin1Char('['))) {
+                static const QSet<QString> sections{ QStringLiteral("[mysqld]"), QStringLiteral("[mariadb]"), QStringLiteral("[server]"),
+                                                     QStringLiteral("[mariadbd]") };
+                server = sections.contains(line.toLower());
+                continue;
+            }
+            if (!server || line.startsWith(QLatin1Char('#')) || line.startsWith(QLatin1Char(';')) || !line.contains(QLatin1Char('=')))
+                continue;
+            const QString key = line.section(QLatin1Char('='), 0, 0).trimmed().replace(QLatin1Char('_'), QLatin1Char('-'));
+            const QString value = unquote(line.section(QLatin1Char('='), 1));
+            if (key == QLatin1String("bind-address"))
+                bind = value;
+            else if (key == QLatin1String("port"))
+                port = value;
+            else if (key == QLatin1String("max-connections"))
+                maxConnections = value;
+        }
+    }
+    QString version;
+    QProcess p;
+    p.start(QStringLiteral("mariadb"), { QStringLiteral("--version") });
+    if (p.waitForFinished(5000)) {
+        static const QRegularExpression v(QStringLiteral("(\\d+\\.\\d+\\.\\d+)-MariaDB"));
+        version = v.match(QString::fromUtf8(p.readAllStandardOutput())).captured(1);
+    }
+    const bool local = bind.isEmpty() || bind == QLatin1String("127.0.0.1") || bind == QLatin1String("localhost")
+            || bind == QLatin1String("::1");
+    return {
+        { QStringLiteral("version"), version },
+        { QStringLiteral("port"), port.toInt() > 0 ? port.toInt() : 3306 },
+        { QStringLiteral("listen"), local ? QStringLiteral("localhost") : QStringLiteral("all") },
+        { QStringLiteral("max_connections"), maxConnections.toInt() > 0 ? maxConnections.toInt() : 151 },
+    };
+}
+
+// ---------------------------------------------------------------------------
+// SQLite: database files (looked at read-only, with SQLite's own library)
+
+namespace {
+bool isSqliteFile(const QString &path)
+{
+    QFile f(path);
+    return f.open(QIODevice::ReadOnly) && f.read(16) == QByteArray("SQLite format 3\0", 16);
+}
+}
+
+QVariantList ServiceManager::sqliteFiles(const QString &folder) const
+{
+    QVariantList out;
+    const QFileInfoList entries = QDir(folder).entryInfoList(QDir::Files | QDir::Readable, QDir::Name | QDir::IgnoreCase);
+    for (const QFileInfo &fi : entries) {
+        if (fi.size() > 0 && !isSqliteFile(fi.filePath()))
+            continue;
+        // (an empty file is a database too, if it's named like one)
+        static const QStringList exts{ QStringLiteral("db"), QStringLiteral("sqlite"), QStringLiteral("sqlite3"), QStringLiteral("db3") };
+        if (fi.size() == 0 && !exts.contains(fi.suffix().toLower()))
+            continue;
+        out << QVariantMap{
+            { QStringLiteral("path"), fi.filePath() },
+            { QStringLiteral("name"), fi.fileName() },
+            { QStringLiteral("size"), fi.size() },
+            { QStringLiteral("modified"), fi.lastModified() },
+        };
+    }
+    if (debug()) {
+        QStringList names;
+        for (const QVariant &v : std::as_const(out))
+            names << v.toMap().value(QStringLiteral("name")).toString();
+        qInfo("services: sqlite files %s", qPrintable(names.join(QLatin1Char(' '))));
+    }
+    return out;
+}
+
+QVariantMap ServiceManager::sqliteInfo(const QString &path) const
+{
+    sqlite3 *db = nullptr;
+    // read-only: looking never changes it (nor makes a journal)
+    const QByteArray uri = QUrl::fromLocalFile(path).toEncoded() + "?mode=ro";
+    if (sqlite3_open_v2(uri.constData(), &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nullptr) != SQLITE_OK) {
+        const QString e = QString::fromUtf8(db ? sqlite3_errmsg(db) : "can't open it");
+        sqlite3_close(db);
+        return { { QStringLiteral("error"), e } };
+    }
+    sqlite3_busy_timeout(db, 1000);
+    QVariantList tables;
+    QString error;
+    sqlite3_stmt *st = nullptr;
+    if (sqlite3_prepare_v2(db, "SELECT name, type FROM sqlite_schema WHERE type IN ('table','view') "
+                               "AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY type, name", -1, &st, nullptr) == SQLITE_OK) {
+        while (sqlite3_step(st) == SQLITE_ROW) {
+            const QString name = QString::fromUtf8(reinterpret_cast<const char *>(sqlite3_column_text(st, 0)));
+            const QString type = QString::fromUtf8(reinterpret_cast<const char *>(sqlite3_column_text(st, 1)));
+            qint64 rows = -1;
+            if (type == QLatin1String("table")) {
+                QString quoted = name;
+                quoted.replace(QLatin1Char('"'), QStringLiteral("\"\""));
+                const QByteArray q = QStringLiteral("SELECT count(*) FROM \"%1\"").arg(quoted).toUtf8();
+                sqlite3_stmt *c = nullptr;
+                if (sqlite3_prepare_v2(db, q.constData(), -1, &c, nullptr) == SQLITE_OK && sqlite3_step(c) == SQLITE_ROW)
+                    rows = sqlite3_column_int64(c, 0);
+                sqlite3_finalize(c);
+            }
+            tables << QVariantMap{ { QStringLiteral("name"), name }, { QStringLiteral("type"), type },
+                                   { QStringLiteral("rows"), rows } };
+        }
+    } else {
+        error = QString::fromUtf8(sqlite3_errmsg(db));
+    }
+    sqlite3_finalize(st);
+    sqlite3_close(db);
+    QVariantMap out{ { QStringLiteral("tables"), tables } };
+    if (!error.isEmpty())
+        out.insert(QStringLiteral("error"), error);
+    if (debug()) {
+        QStringList t;
+        for (const QVariant &v : std::as_const(tables)) {
+            const QVariantMap m = v.toMap();
+            t << m.value(QStringLiteral("name")).toString() + QLatin1Char('=')
+                 + (m.value(QStringLiteral("type")) == QLatin1String("view") ? QStringLiteral("view") : m.value(QStringLiteral("rows")).toString());
+        }
+        qInfo("services: sqlite info %s %s%s", qPrintable(QFileInfo(path).fileName()), qPrintable(t.join(QLatin1Char(' '))),
+              qPrintable(error.isEmpty() ? QString() : QStringLiteral(" error ") + error));
+    }
+    return out;
+}
+
+QString ServiceManager::sqliteCreate(const QString &path)
+{
+    if (QFileInfo::exists(path))
+        return QStringLiteral("There's already a file called %1.").arg(QFileInfo(path).fileName());
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    sqlite3 *db = nullptr;
+    if (sqlite3_open_v2(QFile::encodeName(path).constData(), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr) != SQLITE_OK) {
+        const QString e = QString::fromUtf8(db ? sqlite3_errmsg(db) : "can't make it");
+        sqlite3_close(db);
+        return e;
+    }
+    // (VACUUM writes its first page: a database file others recognise)
+    char *msg = nullptr;
+    QString error;
+    if (sqlite3_exec(db, "VACUUM", nullptr, nullptr, &msg) != SQLITE_OK)
+        error = QString::fromUtf8(msg ? msg : "it couldn't be written");
+    sqlite3_free(msg);
+    sqlite3_close(db);
+    return error;
+}
+
+bool ServiceManager::moveToTrash(const QString &path)
+{
+    // (Qt won't make the Recycle Bin's folders when they aren't there yet)
+    const QString trash = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/Trash");
+    QDir().mkpath(trash + QStringLiteral("/files"));
+    QDir().mkpath(trash + QStringLiteral("/info"));
+    return QFile::moveToTrash(path);
 }

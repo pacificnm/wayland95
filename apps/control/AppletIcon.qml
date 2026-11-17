@@ -328,6 +328,40 @@ Canvas {
             frame(14, 26, 10, 3, "#ffd800");
             rect(15, 28, 2, 3, "#ffd800"); rect(19, 28, 2, 3, "#ffd800");
             break;
+        case "sqlite":
+            // a page with a small database drum on it: a database in a file
+            frame(5, 1, 20, 28, "#ffffff");
+            rect(8, 5, 12, 1, "#808080"); rect(8, 8, 14, 1, "#808080"); rect(8, 11, 10, 1, "#808080");
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1;
+            ctx.fillStyle = "#3c8c64";
+            ctx.beginPath();
+            ctx.moveTo(13, 19); ctx.lineTo(13, 27);
+            ctx.bezierCurveTo(13, 31, 30, 31, 30, 27);
+            ctx.lineTo(30, 19);
+            ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "#8fd8b0";
+            ctx.beginPath(); ctx.ellipse(13, 15, 17, 7); ctx.fill(); ctx.stroke();
+            break;
+        case "mysql":
+            // a database drum in orange, with a server's lights
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1;
+            for (var mz = 2; mz >= 0; --mz) {
+                var my = 7 + mz * 7;
+                ctx.fillStyle = "#d07818";
+                ctx.beginPath();
+                ctx.moveTo(5, my); ctx.lineTo(5, my + 7);
+                ctx.bezierCurveTo(5, my + 11, 27, my + 11, 27, my + 7);
+                ctx.lineTo(27, my);
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+            }
+            ctx.fillStyle = "#f8c070";
+            ctx.beginPath(); ctx.ellipse(5, 3, 22, 8); ctx.fill(); ctx.stroke();
+            rect(20, 13, 2, 2, "#00ff00");
+            rect(20, 20, 2, 2, "#00ff00");
+            rect(20, 27, 2, 2, "#00ff00");
+            break;
         case "postgresql":
         case "database":
             // a stack of disks: the usual database drum

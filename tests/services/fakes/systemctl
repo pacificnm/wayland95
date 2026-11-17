@@ -16,6 +16,9 @@ start() {
         [ -f "$root/etc/wireguard/$name.conf" ] || { echo "no such tunnel" >&2; return 1; }
         if grep -q "MTU = 9999" "$root/etc/wireguard/$name.conf"; then echo "wg-quick: RTNETLINK answers: Invalid argument" >&2; return 1; fi
         mkdir -p "$root/sys/class/net/$name" ;;
+    mariadb.service)
+        # (port 2: the test's way of a server that won't start)
+        if grep -qs "^port = 2$" "$root/etc/mysql/mariadb.conf.d/99-wayland95.cnf"; then echo "mariadbd: can't bind" >&2; return 1; fi ;;
     esac
     : >"$root/active/$1"
 }

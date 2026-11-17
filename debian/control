@@ -23,6 +23,7 @@ Build-Depends: debhelper-compat (= 13),
                libvterm-dev,
                libxcb1-dev,
                libfontconfig-dev,
+               libsqlite3-dev,
                zlib1g-dev
 Standards-Version: 4.7.0
 Rules-Requires-Root: no

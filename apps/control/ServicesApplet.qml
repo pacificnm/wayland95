@@ -2,8 +2,8 @@ import QtQuick
 import Win95Ui
 import Win95Control
 
-// Services: servers (SSH, PostgreSQL) and programming languages (Python,
-// Node.js) turned on and off with a check box, like Windows Setup's list
+// Services: servers (SSH, PostgreSQL, MySQL, WireGuard), programming
+// languages (Python, Node.js) and tools (SQLite) turned on and off with a check box, like Windows Setup's list
 // of components. Turning one on installs it first if it isn't there;
 // Settings... opens its own property sheet.
 PropertySheet {
@@ -12,6 +12,7 @@ PropertySheet {
     title: "Services Properties"
     titles: ["Services"]
     canApply: false
+    height: 472
 
     readonly property var items: Services.services.map(function (s) {
         return Object.assign({ key: s.id }, s);
@@ -71,15 +72,19 @@ PropertySheet {
         } else if (item.kind === "server") {
             messageBox.show("Services",
                             "Turn off " + item.name + "?\n\nIt stops now and won't start with the computer. "
-                            + "It stays installed, with its settings" + (item.id === "postgresql" ? " and databases" : "") + ".",
+                            + "It stays installed, with its settings" + (item.id === "postgresql" || item.id === "mysql" ? " and databases" : "") + ".",
                             "question", ["Yes", "No"], function (b) {
                 if (b === 0)
                     { startedHere = true; Services.turnOff(item.id); }
             });
         } else {
             messageBox.show("Services",
-                            "Remove " + item.name + " from this computer?\n\nPrograms you've written are kept, "
-                            + "but anything that needs " + item.name + " stops working until you turn it on again.",
+                            "Remove " + item.name + " from this computer?\n\n"
+                            + (item.kind === "tool"
+                               ? "Your database files are kept, and programs that use SQLite's library keep working; "
+                                 + "the sqlite3 command (and DB Browser) go."
+                               : "Programs you've written are kept, but anything that needs " + item.name
+                                 + " stops working until you turn it on again."),
                             "warning", ["Yes", "No"], function (b) {
                 if (b === 0)
                     { startedHere = true; Services.turnOff(item.id); }
@@ -125,7 +130,7 @@ PropertySheet {
             id: list
             y: 62
             width: parent.width
-            height: 108
+            height: 148
             model: sheet.items
             checkable: true
             checked: sheet.checkedMap

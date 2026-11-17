@@ -53,7 +53,7 @@ sudo apt-get install qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-w
     qml6-module-qt-labs-folderlistmodel \
     libwlroots-0.18-dev libcairo2-dev libpango1.0-dev libdrm-dev libpixman-1-dev \
     libinput-dev libxkbcommon-dev libvterm-dev libxcb1-dev libwayland-dev wayland-protocols \
-    zlib1g-dev libfontconfig-dev pkg-config cmake build-essential xwayland
+    zlib1g-dev libfontconfig-dev libsqlite3-dev pkg-config cmake build-essential xwayland
 
 cmake -B build
 cmake --build build -j$(nproc)
@@ -730,9 +730,9 @@ up next to the shell first, then on `$PATH`.
       and the list marks the ones they can't use yet. The live system has
       27 common ones. **Use for the whole computer...** makes a region the
       system's default through systemd-localed (it asks for a password).
-  - **Services:** servers and programming languages, each turned on and
-    off with a check box: **SSH Server**, **PostgreSQL**, **WireGuard VPN**,
-    **Python** and **Node.js**. Checking one that isn't installed installs it first
+  - **Services:** servers, programming languages and tools, each turned
+    on and off with a check box: **SSH Server**, **PostgreSQL**, **MySQL
+    (MariaDB)**, **WireGuard VPN**, **Python**, **Node.js** and **SQLite**. Checking one that isn't installed installs it first
     (PackageKit), then starts it and has it start with the computer.
     Unchecking a server stops it but keeps it, with its settings and data;
     unchecking a language removes it. **Settings...** opens each one's own
@@ -746,6 +746,23 @@ up next to the shell first, then on `$PATH`.
       **Databases** makes you a PostgreSQL account (optionally a
       superuser), then lists, creates and deletes your databases, opens one
       in `psql`, and sets the password used over the network.
+    - **MySQL (MariaDB):** Debian's MySQL is MariaDB, which takes the same
+      `mysql` commands, connections and client libraries. This computer
+      only or the network too, the port and the connection limit
+      (`mariadb.conf.d/99-wayland95.cnf`; settings it won't start with are
+      put back). **Databases** makes you an account that logs on as you
+      through MySQL's socket, with no password (optionally an
+      administrator of every database); others get your own database and
+      ones named `YOU_...`. It lists, creates and deletes them, opens one
+      in `mariadb`, and sets a separate password for logons from other
+      computers (empty: none).
+    - **SQLite:** a database in a single file, with no server. Turning it
+      on installs the `sqlite3` command; **DB Browser for SQLite** is an
+      extra. **Databases** lists the SQLite files in `~/Databases` (or a
+      folder you choose) with what's in each, its tables and their rows
+      (read through SQLite's own library, opened read-only), makes a new
+      one, opens one in `sqlite3` or DB Browser, and moves one to the
+      Recycle Bin. Turning it off removes the commands; your files stay.
     - **WireGuard VPN:** this computer's tunnels (the standard
       `/etc/wireguard/NAME.conf`, run by `wg-quick@NAME`, so ones set up
       before or by hand are there too). **Tunnels:** connect, disconnect,
@@ -771,7 +788,9 @@ up next to the shell first, then on `$PATH`.
       `postgresql`, writes `/etc/ssh/sshd_config.d/50-wayland95.conf`
       (checked with `sshd -t` first, put back if it fails), PostgreSQL's
       `conf.d/50-wayland95.conf` and a marked block in `pg_hba.conf`, and
-      creates your PostgreSQL account, and reads, writes and removes
+      creates your PostgreSQL account, writes MariaDB's
+      `99-wayland95.cnf` and creates your MySQL account and network
+      password (sent as hex for the server to quote), and reads, writes and removes
       WireGuard's tunnel files and starts and stops `wg-quick@NAME`
       (`wg-quick strip` checks a file first; one a connected tunnel can't
       start with is put back). It checks every value it's given

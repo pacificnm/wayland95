@@ -165,6 +165,71 @@ out=$(helper wg-delete work 2>&1)
 expect $? "wg-delete: disconnected, no longer started, its file gone" "$out"
 out=$(helper wg-delete '../home' 2>&1); [ $? -ne 0 ] && [ -e "$WG/home.conf" ]; expect $? "refused: removing by a path" "$out"
 
+echo
+echo "== wayland95-services: MySQL (MariaDB)"
+MYLOG=$ROOT/mariadb.log
+CNF=$ROOT/etc/mysql/mariadb.conf.d/99-wayland95.cnf
+out=$(printf 'listen=all\n' | helper my-config 2>&1); [ $? -ne 0 ]; expect $? "not installed: my-config refuses" "$out"
+out=$(helper unit enable mysql 2>&1); [ $? -ne 0 ]; expect $? "not installed: unit enable mysql refuses" "$out"
+mkdir -p "$ROOT/etc/mysql" "$ROOT/units" "$ROOT/my"
+: >"$ROOT/units/mariadb.service"
+out=$(helper unit enable mysql 2>&1)
+[ $? -eq 0 ] && [ -e "$ROOT/enabled/mariadb.service" ] && [ -e "$ROOT/active/mariadb.service" ]
+expect $? "unit enable mysql: mariadb.service started, and at boot" "$out"
+
+out=$(printf 'listen=all\nport=3307\nmax_connections=300\n' | helper my-config 2>&1)
+[ $? -eq 0 ] && grep -qx "bind-address = 0.0.0.0" "$CNF" && grep -qx "port = 3307" "$CNF" && grep -qx "max_connections = 300" "$CNF" \
+    && grep -qx "\[mysqld\]" "$CNF" && grep -q "systemctl restart mariadb.service" "$ROOT/log"
+expect $? "my-config: listen everywhere, port, connections (99-wayland95.cnf, after the package's), restarted" "$out $(cat "$CNF")"
+printf 'listen=localhost\n' | helper my-config >/dev/null 2>&1
+grep -qx "bind-address = 127.0.0.1" "$CNF"; expect $? "my-config listen=localhost: this computer only" "$(cat "$CNF")"
+for bad in 'listen=everywhere' 'port=70000' 'port=33a' 'max_connections=0' 'bind-address=0.0.0.0' 'port=3306
+skip-grant-tables=1'; do
+    out=$(printf '%s\n' "$bad" | helper my-config 2>&1); [ $? -ne 0 ] && grep -qx "bind-address = 127.0.0.1" "$CNF"
+    expect $? "my-config refuses: $(echo "$bad" | tr '\n' ' ')(and the file stays)" "$out"
+done
+printf 'listen=localhost\nport=3306\n' | helper my-config >/dev/null 2>&1
+out=$(printf 'listen=all\nport=2\n' | helper my-config 2>&1)
+[ $? -ne 0 ] && grep -qx "port = 3306" "$CNF" && [ -e "$ROOT/active/mariadb.service" ] && ! ls "$CNF".* >/dev/null 2>&1
+expect $? "settings it won't start with: put back, and it's started again" "$out: $(cat "$CNF")"
+
+: >"$MYLOG"
+out=$(helper my-role my_user 2>&1)
+[ $? -eq 0 ] && grep -qF "CREATE USER IF NOT EXISTS 'my_user'@'localhost' IDENTIFIED VIA unix_socket;" "$MYLOG" \
+    && grep -qF 'GRANT ALL PRIVILEGES ON `my\_user`.* TO '"'my_user'@'localhost';" "$MYLOG" \
+    && grep -qF 'GRANT ALL PRIVILEGES ON `my\_user\_%`.* TO '"'my_user'@'localhost';" "$MYLOG" \
+    && grep -qF 'CREATE DATABASE IF NOT EXISTS `my_user`;' "$MYLOG" && ! grep -q "ON \*\.\*" "$MYLOG" \
+    && grep -qF -- "-- mariadb --protocol=socket -u root" "$MYLOG"
+expect $? "my-role: an account that logs on as the user (socket), with its own database and NAME_... (_ escaped)" "$out $(cat "$MYLOG")"
+: >"$MYLOG"
+helper my-role jo admin >/dev/null 2>&1
+grep -qF "GRANT ALL PRIVILEGES ON *.* TO 'jo'@'localhost' WITH GRANT OPTION;" "$MYLOG"; expect $? "my-role NAME admin: everything" "$(cat "$MYLOG")"
+for bad in "x';DROP DATABASE y;--" 'a b' '-u' "it's" 'a`b' "$(printf 'x%.0s' $(seq 40))"; do
+    : >"$MYLOG"
+    out=$(helper my-role "$bad" 2>&1); [ $? -ne 0 ] && [ ! -s "$MYLOG" ]
+    expect $? "my-role refuses the name: $bad" "$out"
+done
+
+: >"$MYLOG"
+out=$(printf 'secret\n' | helper my-password jo 2>&1); [ $? -ne 0 ] && ! grep -q "CREATE OR REPLACE" "$MYLOG"
+expect $? "my-password without an account: refused" "$out"
+: >"$ROOT/my/account"
+pw="it's \"q\" \\ ;DROP USER x;-- é"
+: >"$MYLOG"
+out=$(printf '%s\n' "$pw" | helper my-password jo 2>&1); rc=$?
+hex=$(printf '%s' "$pw" | od -An -v -tx1 | tr -d ' \n')
+[ $rc -eq 0 ] && grep -qF "SET @pw = CONVERT(0x$hex USING utf8mb4);" "$MYLOG" && grep -qF "QUOTE(@pw)" "$MYLOG" \
+    && ! grep -qF "DROP USER x" "$MYLOG" && ! grep -qF "secret" "$MYLOG" && ! grep -q "$hex" "$ROOT/log" \
+    && grep -qF "TO 'jo'@'%';" "$MYLOG" && ! grep -q "ON \*\.\*" "$MYLOG"
+expect $? "my-password: the network account, its password as hex quoted by the server (never in the SQL text, nor an argument)" "$out $(cat "$MYLOG")"
+: >"$ROOT/my/admin"; : >"$MYLOG"
+printf 'pw\n' | helper my-password jo >/dev/null 2>&1
+grep -qF "GRANT ALL PRIVILEGES ON *.* TO 'jo'@'%' WITH GRANT OPTION;" "$MYLOG"; expect $? "(an administrator's network account is one too)" "$(cat "$MYLOG")"
+: >"$MYLOG"
+out=$(printf '' | helper my-password jo 2>&1)
+[ $? -eq 0 ] && grep -qF "DROP USER IF EXISTS 'jo'@'%';" "$MYLOG"; expect $? "my-password with none: no network logons" "$out $(cat "$MYLOG")"
+out=$(printf '%0201d\n' 0 | helper my-password jo 2>&1); [ $? -ne 0 ]; expect $? "my-password refuses one that's too long" "$out"
+
 # --- the other services still work ------------------------------------------------------
 out=$(helper unit start nosuch 2>&1); [ $? -ne 0 ]; expect $? "(an unknown service is still refused)" "$out"
 

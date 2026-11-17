@@ -8,6 +8,11 @@
 #   ssh-config            < Port= PasswordAuthentication= PermitRootLogin= ...
 #   pg-config             < listen= port= max_connections= remote=
 #   pg-role NAME [superuser]
+#   unit ... mysql        MariaDB (Debian's MySQL)
+#   my-config             < listen= port= max_connections=
+#   my-role NAME [admin]  a MySQL account for NAME, logging on as that user
+#   my-password NAME      < a password for NAME's logons over the network
+#                           (none: no network logons)
 #   update-source         Wayland 95's update repository, for apt
 #   unit ... wireguard | wireguard:NAME   every tunnel, or one (wg-quick@NAME)
 #   wg-list               the tunnels (/etc/wireguard/NAME.conf): NAME enabled active
@@ -58,6 +63,28 @@ pg_cluster() { # newest cluster: "VERSION NAME PORT ..."
     c=$(pg_lsclusters -h | sort -V | tail -n 1)
     [ -n "$c" ] || die "PostgreSQL has no database cluster (see pg_createcluster)."
     echo "$c"
+}
+
+# ------------------------------------------------------------ MySQL
+my_installed() {
+    [ -d /etc/mysql ] && command -v mariadb >/dev/null || die "MySQL (MariaDB) isn't installed."
+}
+# a user name that's safe in SQL quotes and as a database name
+my_name() {
+    case "$1" in ''|-*|*[!A-Za-z0-9_-]*) die "Not a usable MySQL account name: $1 (letters, digits, - and _)";; esac
+    [ ${#1} -le 32 ] || die "The name is too long."
+}
+# root's own way in: its socket, as root (Debian's root@localhost)
+my_sql() { mariadb --protocol=socket -u root -N -B "$@"; }
+# what NAME's grants are for: its own database and NAME_..., or all
+# (admin); _ is a wildcard in grants, so it's escaped
+my_grants() { # NAME HOST ADMIN
+    esc=$(printf '%s' "$1" | sed 's/_/\\_/g')
+    printf '%s\n' \
+        "GRANT ALL PRIVILEGES ON \`$esc\`.* TO '$1'@'$2';" \
+        "GRANT ALL PRIVILEGES ON \`$esc\\_%\`.* TO '$1'@'$2';"
+    [ "$3" = yes ] && echo "GRANT ALL PRIVILEGES ON *.* TO '$1'@'$2' WITH GRANT OPTION;"
+    return 0
 }
 
 # ------------------------------------------------------------ WireGuard
@@ -269,6 +296,7 @@ unit)
     case "$2" in
         ssh) units=$(ssh_units) ;;
         postgresql) units=postgresql.service ;;
+        mysql) units=""; systemctl cat mariadb.service >/dev/null 2>&1 && units=mariadb.service ;;
         wireguard|wireguard:*)
             command -v wg-quick >/dev/null || die "WireGuard isn't installed."
             if [ "$2" = wireguard ]; then names=$(wg_names); else names=${2#wireguard:}; wg_name "$names"; fi
@@ -402,6 +430,84 @@ SELECT format('CREATE DATABASE %I OWNER %I', :'role', :'role')
 SQL
     ;;
 
+my-config)
+    my_installed
+    listen=localhost port="" max=""
+    while IFS='=' read -r key value; do
+        case "$key" in
+            '') continue ;;
+            listen) case "$value" in localhost|all) listen=$value ;; *) die "listen: localhost or all";; esac ;;
+            port) number port "$value" 1 65535; port=$value ;;
+            max_connections) number max_connections "$value" 1 100000; max=$value ;;
+            *) die "Unknown MySQL setting: $key" ;;
+        esac
+    done
+    # last in name order, so these win over the package's 50-server.cnf
+    dir=/etc/mysql/mariadb.conf.d
+    conf=$dir/99-wayland95.cnf
+    mkdir -p "$dir"
+    backup=""
+    if [ -e "$conf" ]; then
+        backup=$(mktemp "$conf.old.XXXXXX")
+        cp -p "$conf" "$backup"
+    fi
+    {
+        echo "# Written by the Wayland 95 Services control panel; changes here are overwritten."
+        echo "[mysqld]"
+        if [ "$listen" = all ]; then echo "bind-address = 0.0.0.0"; else echo "bind-address = 127.0.0.1"; fi
+        [ -z "$port" ] || echo "port = $port"
+        [ -z "$max" ] || echo "max_connections = $max"
+    } | put "$conf"
+    if systemctl is-active -q mariadb.service 2>/dev/null; then
+        if ! systemctl restart mariadb.service; then
+            if [ -n "$backup" ]; then mv -f "$backup" "$conf"; else rm -f "$conf"; fi
+            systemctl restart mariadb.service || true
+            die "MySQL didn't start with these settings, so they were put back. $(systemctl status mariadb.service 2>&1 | tail -n 3 | tr '\n' ' ')"
+        fi
+    fi
+    [ -z "$backup" ] || rm -f "$backup"
+    ;;
+
+my-role)
+    [ $# -ge 1 ] || die "usage: my-role NAME [admin]"
+    my_installed
+    my_name "$1"
+    admin=no
+    [ "${2:-}" = admin ] && admin=yes
+    {
+        echo "CREATE USER IF NOT EXISTS '$1'@'localhost' IDENTIFIED VIA unix_socket;"
+        my_grants "$1" localhost "$admin"
+        echo "CREATE DATABASE IF NOT EXISTS \`$1\`;"
+    } | my_sql || die "MySQL didn't make the account (is it running?)."
+    ;;
+
+my-password)
+    [ $# -eq 1 ] || die "usage: my-password NAME"
+    my_installed
+    my_name "$1"
+    pw=""
+    IFS= read -r pw || true
+    [ ${#pw} -le 200 ] || die "The password is too long."
+    there=$(echo "SELECT COUNT(*) FROM mysql.user WHERE User = '$1' AND Host = 'localhost';" | my_sql) \
+        || die "MySQL didn't answer (is it running?)."
+    [ "$there" = 1 ] || die "Make your MySQL account first."
+    if [ -z "$pw" ]; then
+        echo "DROP USER IF EXISTS '$1'@'%';" | my_sql || die "MySQL didn't take that."
+        exit 0
+    fi
+    admin=$(echo "SELECT COUNT(*) FROM information_schema.USER_PRIVILEGES WHERE GRANTEE = '''$1''@''localhost''' AND PRIVILEGE_TYPE = 'CREATE USER';" | my_sql)
+    if [ "$admin" = 0 ]; then admin=no; else admin=yes; fi
+    # the password goes in as hex, quoted by the server itself (QUOTE):
+    # nothing in it can end the statement; and it's never an argument
+    hex=$(printf '%s' "$pw" | od -An -v -tx1 | tr -d ' \n')
+    {
+        echo "SET @pw = CONVERT(0x$hex USING utf8mb4);"
+        echo "SET @s = CONCAT('CREATE OR REPLACE USER ''$1''@''%'' IDENTIFIED BY ', QUOTE(@pw));"
+        echo "PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s; SET @pw = NULL, @s = NULL;"
+        my_grants "$1" % "$admin"
+    } | my_sql || die "MySQL didn't take the password."
+    ;;
+
 wg-list)
     for n in $(wg_names); do
         e=no a=no
@@ -477,6 +583,6 @@ update-source)
     ;;
 
 *)
-    die "usage: wayland95-services unit|ssh-config|pg-config|pg-role|wg-list|wg-show|wg-save|wg-import|wg-delete|update-source ..."
+    die "usage: wayland95-services unit|ssh-config|pg-config|pg-role|my-config|my-role|my-password|wg-list|wg-show|wg-save|wg-import|wg-delete|update-source ..."
     ;;
 esac

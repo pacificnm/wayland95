@@ -1,0 +1,15 @@
+#!/bin/sh
+# Stand-in mariadb client for tests/services/run.sh: logs its arguments and
+# the SQL it's given ($W95_FAKE_ROOT/mariadb.log) and answers the helper's
+# questions from $W95_FAKE_ROOT/my/ (account: the user's account exists;
+# admin: it may make users).
+root=${W95_FAKE_ROOT:?}
+[ "${1:-}" = --version ] && { echo "mariadb from 11.8.6-MariaDB, client 15.2 for debian-linux-gnu (x86_64)"; exit 0; }
+[ -e "$root/my/down" ] && { echo "ERROR 2002 (HY000): Can't connect to local server through socket '/run/mysqld/mysqld.sock' (2)" >&2; exit 1; }
+sql=$(cat)
+{ echo "-- mariadb $*"; printf '%s\n' "$sql"; } >>"$root/mariadb.log"
+case "$sql" in
+    *"FROM mysql.user"*) [ -e "$root/my/account" ] && echo 1 || echo 0 ;;
+    *USER_PRIVILEGES*) [ -e "$root/my/admin" ] && echo 1 || echo 0 ;;
+esac
+exit 0

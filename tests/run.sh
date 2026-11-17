@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games find repos markdown startup drives backup calc email web monitors screen
+#                                  games find repos markdown startup drives backup calc email web dbservices monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -3531,7 +3531,103 @@ web_private() {
 }
 CLEAR_COOKIES=378,436; CLEAR_BUTTON=561,460
 
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup calc email web monitors screen classic vscode)
+# --- Control Panel > Services: MySQL (MariaDB) and SQLite ------------------------------
+# Stand-ins (tests/fakes-services): dpkg-query says what's installed,
+# systemctl what runs, pkexec records what the root helper would be asked
+# (and never runs it: tests/services/run.sh tests the helper itself), and
+# mariadb plays the server for the user's own queries. SQLite's files are
+# real, in the test's home.
+start_services_applet() {
+    FS=$WORK/services-$SUITE; rm -rf "$FS"; mkdir -p "$FS"
+    printf '%s\n' mariadb-server sqlite3 >"$FS/installed"; echo mariadb.service >"$FS/active"
+    PATH=$HERE/fakes-services:$PATH W95_FAKE_SERVICES=$FS HOME=$WORK/home-$SUITE XDG_DATA_HOME=$WORK/data-$SUITE \
+        XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        W95_SERVICES_DEBUG=1 "$BUILD/win95control" --applet services >>"$WORK/$SUITE-control.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95control)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+}
+svsaid() { grep -qF -- "services: $1" "$WORK/$SUITE-control.log"; }
+svwait() { local i; for i in $(seq 40); do svsaid "$1" && return 0; sleep 0.25; done; return 1; }
+fslog() { grep -qF -- "$1" "$FS/log"; }
+# (the property sheets open at 73,85; their tabs, buttons and lists)
+SV_ROW_MYSQL=150,206; SV_ROW_SQLITE=150,286; SV_TAB2=170,103; SV_APPLY=433,496; SV_CANCEL=352,496
+MY_ALL=111,234; MY_CREATE=217,237; MY_ROW2=200,174; MY_NEW=228,342; MY_DELETE=309,342; MY_PASSWORD=167,374
+SQ_ROW1=200,162; SQ_ROW2=200,182; SQ_NEW=194,357; SQ_TRASH=403,357
+suite_dbservices() {
+    say "dbservices: Control Panel > Services: MySQL (MariaDB) and SQLite, with stand-ins"
+    local me shopsum db=$WORK/home-$SUITE/Databases
+    me=$(id -un)
+    fresh
+    start_shell || return
+    mkdir -p "$db"
+    python3 -I "$HERE/fakes-services/make-shop-db.py" "$db/shop.db"
+    : >"$db/empty.db"; echo hello >"$db/notes.txt"
+    shopsum=$(md5sum <"$db/shop.db")
+    start_services_applet
+    svwait "mysql Running" && svwait "sqlite Installed"
+    expect_true $? "Services lists MySQL (MariaDB) and SQLite (installed, running)" "$(grep services: "$WORK/$SUITE-control.log" | tail -7)"
+    away; shot list
+
+    # MySQL: General
+    pointer click:$SV_ROW_MYSQL wait:0.4 key:Return wait:2
+    query list | grep -q "^MySQL Properties|win95control|"; expect_true $? "its Settings: MySQL Properties" "$(query list | tr '\n' ' ')"
+    away; shot mysql-general
+    pointer click:$MY_ALL wait:0.3 click:$SV_APPLY wait:1
+    fslog "helper my-config" && fslog "< listen=all" && fslog "< port=3306" && fslog "< max_connections=151"
+    expect_true $? "other computers allowed, Apply: the helper's my-config (as an administrator)" "$(cat "$FS/log")"
+
+    # MySQL: Databases (no account; Create My Account; new; delete; password)
+    pointer click:$SV_TAB2 wait:1.5
+    away; shot mysql-no-account
+    pointer click:$MY_CREATE wait:1.5
+    fslog "helper my-role $me" && ! fslog "helper my-role $me admin"
+    expect_true $? "no account yet: Create My Account asks the helper (my-role, not an administrator)" "$(cat "$FS/log")"
+    away; shot mysql-databases
+    pointer click:$MY_NEW wait:0.8
+    away; shot mysql-new
+    pointer type:shop key:Return wait:1.2
+    [ -e "$FS/dbs/${me}_shop" ] && grep -qF "CREATE DATABASE \`${me}_shop\`;" "$FS/mariadb.log"
+    expect_true $? "New: named ${me}_... to begin with; CREATE DATABASE as the user" "$(ls "$FS/dbs"); $(tail -3 "$FS/mariadb.log")"
+    pointer click:$MY_ROW2 wait:0.3 click:$MY_DELETE wait:0.6
+    away; shot mysql-delete
+    pointer key:Return wait:1.2
+    [ ! -e "$FS/dbs/${me}_shop" ] && grep -qF "DROP DATABASE \`${me}_shop\`;" "$FS/mariadb.log"
+    expect_true $? "Delete, Yes: DROP DATABASE" "$(ls "$FS/dbs"); $(tail -2 "$FS/mariadb.log")"
+    pointer click:$MY_PASSWORD wait:0.8 type:sesame key:Return type:sesame wait:0.3
+    away; shot mysql-password
+    pointer key:Return wait:1.2
+    fslog "helper my-password $me" && grep -A1 "helper my-password" "$FS/log" | grep -qx "  < sesame"
+    expect_true $? "Set Network Password: the helper gets it on its standard input (not an argument)" "$(cat "$FS/log")"
+    pointer key:Return wait:0.4 click:$SV_CANCEL wait:1
+
+    # SQLite: the files in ~/Databases, what's in them; New; Recycle Bin
+    pointer click:$SV_ROW_SQLITE wait:0.4 key:Return wait:2
+    query list | grep -q "^SQLite Properties|win95control|"; expect_true $? "SQLite's Settings: SQLite Properties" "$(query list | tr '\n' ' ')"
+    away; shot sqlite-general
+    pointer click:$SV_TAB2 wait:1
+    svwait "sqlite files empty.db shop.db"; expect_true $? "Databases: the SQLite files in ~/Databases (not other files)" "$(grep "sqlite files" "$WORK/$SUITE-control.log" | tail -1)"
+    pointer click:$SQ_ROW2 wait:0.8
+    svwait "sqlite info shop.db customers=3 orders=2 recent=view"; expect_true $? "what's in one: its tables with their rows, and views" "$(grep "sqlite info" "$WORK/$SUITE-control.log" | tail -1)"
+    away; shot sqlite-databases
+    [ "$(md5sum <"$db/shop.db")" = "$shopsum" ] && [ ! -e "$db/shop.db-journal" ]
+    expect_true $? "(looking doesn't change it: opened read-only)" "$(ls "$db")"
+    pointer click:$SQ_NEW wait:0.8 type:inventory wait:0.3
+    away; shot sqlite-new
+    pointer key:Return wait:1
+    head -c 15 "$db/inventory.db" 2>/dev/null | grep -q "SQLite format 3" && svwait "sqlite files empty.db inventory.db shop.db"
+    expect_true $? "New: inventory.db, a real (empty) SQLite database, listed" "$(ls -la "$db")"
+    svwait "sqlite info inventory.db"
+    pointer click:$SQ_TRASH wait:0.6
+    away; shot sqlite-trash
+    pointer key:Return wait:1
+    away; shot sqlite-trashed
+    [ ! -e "$db/inventory.db" ] && [ -e "$WORK/data-$SUITE/Trash/files/inventory.db" ] \
+        && grep -q "^Path=$db/inventory.db$" "$WORK/data-$SUITE/Trash/info/inventory.db.trashinfo"
+    expect_true $? "Move to Recycle Bin: it's in the Recycle Bin (to be put back from), not deleted" "$(find "$WORK/data-$SUITE" 2>&1)"
+}
+
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup calc email web dbservices monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

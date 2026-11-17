@@ -18,7 +18,7 @@ qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-temp
 qml6-module-qtquick-layouts qml6-module-qtqml qml6-module-qt-labs-folderlistmodel
 qt6-qpa-plugins qt6-wayland libwlroots-0.18-dev libcairo2-dev libpango1.0-dev
 libdrm-dev libpixman-1-dev libinput-dev libxkbcommon-dev libvterm-dev libxcb1-dev
-libwayland-dev wayland-protocols zlib1g-dev libfontconfig-dev pkg-config cmake
+libwayland-dev wayland-protocols zlib1g-dev libfontconfig-dev libsqlite3-dev pkg-config cmake
 build-essential xwayland pkexec"
 if command -v dpkg >/dev/null 2>&1; then
     missing=""

@@ -9,6 +9,7 @@ find_package(Qt6 REQUIRED COMPONENTS Network)
 # Fonts reads the font list from fontconfig
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FONTCONFIG REQUIRED IMPORTED_TARGET fontconfig)
+pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
 
 qt_add_executable(win95control
     src/main.cpp
@@ -99,6 +100,8 @@ qt_add_qml_module(win95control
         StartupApplet.qml
         BackupApplet.qml
         UnitPage.qml
+        MysqlSettings.qml
+        SqliteSettings.qml
     RESOURCE_PREFIX /qt/qml
 )
 
@@ -111,6 +114,7 @@ target_link_libraries(win95control PRIVATE
     Qt6::Network
     ZLIB::ZLIB
     PkgConfig::FONTCONFIG
+    PkgConfig::SQLITE3
     win95uiplugin
 )
 

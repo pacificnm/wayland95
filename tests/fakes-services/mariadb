@@ -1,0 +1,25 @@
+#!/bin/sh
+# Stand-in mariadb client, as the user, for the Services windows' test: no
+# account until $W95_FAKE_SERVICES/my-account exists; then the databases in
+# $W95_FAKE_SERVICES/dbs/ (CREATE and DROP DATABASE change them)
+f=${W95_FAKE_SERVICES:?}
+[ "${1:-}" = --version ] && { echo "mariadb from 11.8.6-MariaDB, client 15.2 for debian-linux-gnu (x86_64)"; exit 0; }
+sql=$(cat)
+printf 'mariadb %s\n%s\n' "$*" "$sql" | sed 's/^/  /' >>"$f/mariadb.log"
+if [ ! -e "$f/my-account" ]; then
+    echo "ERROR 1698 (28000): Access denied for user '$(id -un)'@'localhost'" >&2
+    exit 1
+fi
+mkdir -p "$f/dbs"
+case "$sql" in
+    "CREATE DATABASE \`"*)
+        n=${sql#CREATE DATABASE \`}; n=${n%%\`*}
+        [ -e "$f/dbs/$n" ] && { echo "ERROR 1007 (HY000) at line 1: Can't create database '$n'; database exists" >&2; exit 1; }
+        : >"$f/dbs/$n" ;;
+    "DROP DATABASE \`"*)
+        n=${sql#DROP DATABASE \`}; n=${n%%\`*}; rm -f "$f/dbs/$n" ;;
+    *USER_PRIVILEGES*)
+        echo 0
+        for d in "$f"/dbs/*; do [ -e "$d" ] && printf '%s\t%s\n' "${d##*/}" "$(cat "$d" 2>/dev/null || echo 0)"; done ;;
+esac
+exit 0

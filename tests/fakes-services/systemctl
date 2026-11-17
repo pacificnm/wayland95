@@ -1,0 +1,14 @@
+#!/bin/sh
+# Stand-in systemctl for the Services windows' test: `show` reports the
+# units in $W95_FAKE_SERVICES/active as running and enabled
+f=${W95_FAKE_SERVICES:?}
+echo "systemctl $*" >>"$f/log"
+[ "$1" = show ] || exit 0
+for u; do
+    case "$u" in -*|show|Id,*) continue ;; esac
+    if grep -qx "$u" "$f/active" 2>/dev/null; then
+        printf 'Id=%s\nLoadState=loaded\nActiveState=active\nUnitFileState=enabled\n\n' "$u"
+    else
+        printf 'Id=%s\nLoadState=not-found\nActiveState=inactive\nUnitFileState=\n\n' "$u"
+    fi
+done

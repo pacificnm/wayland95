@@ -60,6 +60,7 @@ Item {
                 id: button
                 height: taskbar.height - 6
                 text: model.title
+                appId: model.appId || ""
                 active: model.active && !model.minimized
                 onClicked: WindowManager.toggleFromTaskbar(index)
                 onMenuRequested: (mx, my) => {

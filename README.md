@@ -92,6 +92,9 @@ compositor's; that one is built only with `cmake -B build
   whole screen straight away
   ([ScreenCapture.qml](qml/Win95Shell/ScreenCapture.qml),
   [src/screengrab.cpp](src/screengrab.cpp)).
+- **Taskbar buttons** show each window's program icon and title: the icon
+  its `.desktop` file names (found by its Wayland app id or X11 class),
+  Wayland 95's own drawn icons for its programs, or a plain window icon.
 - **Right-click a taskbar button** for the window's menu: Restore, Minimize,
   Maximize, Close (asks the program) and End Task (ends it at once, even if
   it's frozen, after asking you).

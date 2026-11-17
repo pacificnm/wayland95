@@ -892,6 +892,11 @@ suite_shell() {
     # (a button's top left corner: white sticking out, grey pressed in)
     expect_pixel "a button for each window: the other's sticks out" buttons $(($(task_button 0) - 74)) 769 ffffff
     expect_pixel "the active window's button is pressed in" buttons $(($(task_button 1) - 74)) 769 808080
+    # each button starts with its program's icon (here the plain window: the
+    # probes have no .desktop file), its navy title bar at the left
+    local navy; navy=$(magick "$WORK/$SUITE-buttons.png" -crop 18x18+$(($(task_button 0) - 72))+774 +repage txt:- 2>/dev/null \
+        | awk -F'[,: ()]+' 'NR > 1 { if ($5 > 90 && $3 < 40 && $4 < 40) n++ } END { print n + 0 }')
+    [ "$navy" -ge 4 ]; expect_true $? "a window's button shows its program's icon" "$navy navy pixels where the icon goes"
 
     pointer click:$(task_button 0),$TASKBAR_Y wait:0.4
     expect_active "clicking a window's button activates it" A

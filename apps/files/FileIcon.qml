@@ -5,7 +5,7 @@ import QtQuick
 Item {
     id: icon
 
-    property string kind: "file" // folder home drive file text image audio video archive pdf exec
+    property string kind: "file" // folder home drive removable file text image audio video archive pdf exec
     property bool symlink: false
     property bool selected: false
     property int size: 32
@@ -48,6 +48,19 @@ Item {
             Rectangle { x: 2; y: 12; width: 28; height: 1; color: "#ffffff" }
             Rectangle { x: 4; y: 19; width: 16; height: 2; color: "#808080" }
             Rectangle { x: 25; y: 18; width: 3; height: 3; color: "#00e000"; border.color: "#006000" }
+        }
+
+        // --- removable: a USB stick ------------------------------------------
+        Item {
+            visible: icon.kind === "removable"
+            anchors.fill: parent
+            Rectangle { x: 22; y: 12; width: 8; height: 8; color: "#c0c0c0"; border.color: "#000000" }
+            Rectangle { x: 25; y: 14; width: 2; height: 1; color: "#000000" }
+            Rectangle { x: 25; y: 17; width: 2; height: 1; color: "#000000" }
+            Rectangle { x: 2; y: 9; width: 21; height: 14; radius: 2; color: "#2050b0"; border.color: "#000000" }
+            Rectangle { x: 4; y: 11; width: 17; height: 2; color: "#5080e0" }
+            Rectangle { x: 5; y: 16; width: 10; height: 3; color: "#ffffff"; border.color: "#000040" }
+            Rectangle { x: 18; y: 16; width: 2; height: 2; color: "#00e000" }
         }
 
         // --- executable: a little application window -------------------------

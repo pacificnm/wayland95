@@ -201,8 +201,19 @@ up next to the shell first, then on `$PATH`.
   can Restore or Empty them; Shift+Delete deletes permanently. It also has
   rename in place (F2), New Folder (Ctrl+Shift+N), type-to-jump, Show
   Hidden Files (Ctrl+H), Properties and Open Terminal Here. Double-clicking
-  a file opens it with `xdg-open`. Usage:
+  a file opens it with `xdg-open`. The Menu key (or Shift+F10) opens the
+  right-click menu. Usage:
   `win95files [--details] [--select NAME] [folder | computer: | trash:]`.
+  - **Drives you plug in** (USB sticks and disks, memory cards): listed in
+    My Computer and the Go menu whether they're opened yet or not, through
+    UDisks2 ([apps/common/drives.cpp](apps/common/drives.cpp)).
+    Double-clicking one mounts it (as you: no password for a removable
+    drive) and opens it. Right-click > Eject unmounts it and powers it off,
+    then says it's safe to pull out; if something still has files open on
+    it, it says so and leaves it. Plugging one in pops up a notice; click
+    it to open the drive. Pulling one out while it's open warns to eject
+    first next time. Not yet: encrypted (LUKS) drives, which need their
+    passphrase.
   - **Find: All Files** (Start > Find > Files or Folders..., or
     `win95files --find [folder]`): Named (several names with `;` between
     them, `*` and `?` as wildcards; a name without them is found anywhere

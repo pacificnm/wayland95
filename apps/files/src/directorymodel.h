@@ -15,7 +15,8 @@
 // and the Recycle Bin (the freedesktop.org trash).
 //
 // Besides real directories, `path` can be one of two virtual locations:
-//   "computer:"  My Computer - home folder plus mounted drives
+//   "computer:"  My Computer - home folder, the computer's disks, and the
+//                drives plugged in (Drives: UDisks2), opened or not
 //   "trash:"     the Recycle Bin (~/.local/share/Trash/files)
 class DirectoryModel : public QAbstractListModel
 {
@@ -129,6 +130,13 @@ public:
     Q_INVOKABLE void openTerminalHere();
     Q_INVOKABLE QString propertiesText() const;
 
+    // drives you plug in (My Computer): open one (it's mounted first), and
+    // Eject (unmounted and powered off, then safe to pull out)
+    Q_INVOKABLE void openDrive(const QString &id);
+    Q_INVOKABLE bool selectedIsDrive() const;
+    Q_INVOKABLE void ejectSelected();
+    Q_INVOKABLE void ejectDrive(const QString &id);
+
 signals:
     void pathChanged();
     void historyChanged();
@@ -143,6 +151,8 @@ signals:
     void error(const QString &title, const QString &message);
     // the view should make `row` current (e.g. after New Folder / paste)
     void rowFocusRequested(int row);
+    // something worked that's worth saying (a drive is safe to remove)
+    void notice(const QString &title, const QString &message);
 
 private:
     struct Entry {
@@ -157,6 +167,7 @@ private:
         QString typeText;
         QString iconKind;
         QString sizeText; // precomputed for drives (free of total)
+        QString driveId;  // a plug-in drive (Drives' id)
     };
 
     void navigate(const QString &path, bool recordHistory);

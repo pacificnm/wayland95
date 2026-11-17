@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games find repos markdown startup monitors screen
+#                                  games find repos markdown startup drives monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -808,6 +808,12 @@ shell_prepare() {
         DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS python3 -I "$HERE/fakes/timedate.py" "$FAKE_LOG" America/New_York &
         PIDS+=($!)
         for _ in $(seq 50); do grep -q "timedate: ready" "$FAKE_LOG" && break; sleep 0.1; done
+    fi
+    if [ -n "${WITH_UDISKS:-}" ]; then
+        mkdir -p "$WORK/media"
+        DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS W95_FAKE_MEDIA=$WORK/media python3 -I "$HERE/fakes/udisks.py" "$FAKE_LOG" &
+        PIDS+=($!)
+        for _ in $(seq 50); do grep -q "udisks: ready" "$FAKE_LOG" && break; sleep 0.1; done
     fi
     if [ -n "${WITH_PACKAGEKIT:-}" ]; then
         DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS python3 -I "$HERE/fakes/packagekit.py" "$FAKE_LOG" &
@@ -2843,8 +2849,72 @@ suite_startup() {
     query close "Start Up Properties"; sleep 0.6
 }
 
+# --- Drives: USB drives in My Computer, opened, ejected (a stand-in UDisks2) -------------
+# tests/fakes/udisks.py on the test's own bus: a USB stick "STICK" whose
+# "mount" is a folder under $WORK/media; the computer's own disks are never
+# touched. Plug(label) plugs another one in.
+start_files_at() { # ARGS...
+    HOME=$WORK/home-$SUITE XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland \
+        DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS WAYLAND95_TEST_AGENTS_ON_SESSION_BUS=1 \
+        "$BUILD/win95files" "$@" >>"$WORK/$SUITE-files.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95files)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1
+}
+udisks_said() { grep -q "udisks: $1" "$FAKE_LOG"; }
+suite_drives() {
+    say "drives: a USB drive in My Computer (a stand-in UDisks2): opened, ejected, plugged in"
+    fresh
+    mkdir -p "$WORK/home-$SUITE"
+    WITH_UDISKS=1 start_shell || return
+    start_files_at --details --select STICK computer:
+    [ "$(windows_of win95files)" -ge 1 ]; expect_true $? "My Computer opens" "$(tail -3 "$WORK/$SUITE-files.log")"
+    away; shot computer
+    pointer key:Return wait:1.2
+    udisks_said "Mount /org/freedesktop/UDisks2/block_devices/stick1"; expect_true $? "opening the USB drive mounts it (UDisks2 Mount)" "$(tail -3 "$FAKE_LOG")"
+    query list | grep -q "^STICK|win95files|"; expect_true $? "and shows what's on it" "$(query list | tr '\n' ' ')"
+    away; shot opened
+
+    # back in My Computer: Eject (S selects it; the Menu key is the right-click menu)
+    pointer key:alt+Left wait:0.8 type:s wait:0.3 key:Menu wait:0.5
+    away; shot menu
+    : >"$WORK/busy"
+    pointer key:e wait:1
+    away; shot busy
+    udisks_said "Unmount" && [ -d "$WORK/media/STICK" ]
+    expect_true $? "Eject while something's open on it: it stays, and says why" "$(tail -3 "$FAKE_LOG")"
+    pointer key:Return wait:0.5
+    rm -f "$WORK/busy"
+    pointer type:s wait:0.3 key:Menu wait:0.5 key:e wait:1.2
+    away; shot ejected
+    udisks_said "PowerOff /org/freedesktop/UDisks2/drives/STICK" && [ ! -d "$WORK/media/STICK" ]
+    expect_true $? "Eject unmounts it and powers it off" "$(tail -3 "$FAKE_LOG")"
+    pointer key:Return wait:0.8
+    away; shot after-eject
+    [ "$(pixel after-eject 56 199)" = ffffff ]; expect_true $? "and it's gone from My Computer" "$(pixel after-eject 56 199) where it was"
+    ! shell_said "removed without ejecting"; expect_true $? "(and no \"removed without ejecting\" warning for it)" "$(grep -i drives "$WORK/$SUITE-shell.log" | tail -3)"
+
+    # another one plugged in: a notice, and My Computer shows it at once
+    in_bus gdbus call --session --dest org.freedesktop.UDisks2 --object-path /org/freedesktop/UDisks2 \
+        --method org.wayland95.Test.Plug PHOTOS >/dev/null
+    for _ in $(seq 20); do shell_said "notice from Drives: PHOTOS was plugged in" && break; sleep 0.25; done
+    shell_said "notice from Drives: PHOTOS was plugged in"; expect_true $? "plugging one in: a notice says so" "$(grep -i notice "$WORK/$SUITE-shell.log" | tail -3)"
+    sleep 0.5; away; shot plugged
+    [ "$(pixel plugged 56 199)" != ffffff ]; expect_true $? "and My Computer shows it straight away" "$(pixel plugged 56 199)"
+    pointer click:1100,$(($(note_title_y plugged) + 30)) wait:1.5
+    for _ in $(seq 20); do query list | grep -q "^PHOTOS|win95files|" && break; sleep 0.25; done
+    query list | grep -q "^PHOTOS|win95files|" && udisks_said "Mount /org/freedesktop/UDisks2/block_devices/photos1"
+    expect_true $? "clicking the notice opens it in a folder window" "$(query list | tr '\n' ' '); $(tail -2 "$FAKE_LOG")"
+
+    # pulled out while it's open: a warning to eject first next time
+    in_bus gdbus call --session --dest org.freedesktop.UDisks2 --object-path /org/freedesktop/UDisks2 \
+        --method org.wayland95.Test.Pull PHOTOS >/dev/null
+    for _ in $(seq 20); do shell_said "PHOTOS was removed without ejecting it" && break; sleep 0.25; done
+    shell_said "PHOTOS was removed without ejecting it"; expect_true $? "pulling one out while it's open warns to eject first" "$(grep -i drives "$WORK/$SUITE-shell.log" | tail -3)"
+}
+
 # --- run -------------------------------------------------------------------
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

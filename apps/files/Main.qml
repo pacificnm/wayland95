@@ -39,6 +39,7 @@ Window {
         }
 
         onError: (title, message) => msgBox.show(title, message, "error", ["OK"], window.focusView)
+        onNotice: (title, message) => msgBox.show(title, message, "info", ["OK"], window.focusView)
         onPathChanged: {
             window.renameRow = -1;
             address.text = displayPath;
@@ -229,7 +230,10 @@ Window {
             { text: "Home", action: dir.goHome },
             { text: "My Computer", action: function () { dir.path = "computer:"; } },
             { text: "Recycle Bin", action: function () { dir.path = "trash:"; } },
-        ];
+        ].concat(Drives.drives.length === 0 ? [] : [{ separator: true }].concat(Drives.drives.map(function (d) {
+            // the drives plugged in: opened (mounted) when chosen
+            return { text: d.name + (d.sizeText ? " (" + d.sizeText + ")" : ""), action: function () { dir.openDrive(d.id); } };
+        })));
     }
 
     function helpMenu() {
@@ -251,6 +255,15 @@ Window {
                 { text: "Delete", action: function () { window.confirmDelete(true); } },
                 { separator: true },
                 { text: "Properties", action: window.showProperties },
+            ];
+        }
+        if (dir.isComputer && dir.selectedIsDrive()) {
+            return [
+                { text: "&Open", action: dir.openSelected },
+                { separator: true },
+                { text: "&Eject", action: dir.ejectSelected },
+                { separator: true },
+                { text: "P&roperties", action: window.showProperties },
             ];
         }
         return [
@@ -365,6 +378,14 @@ Window {
         else if (k === Qt.Key_Return || k === Qt.Key_Enter) dir.openSelected();
         else if (k === Qt.Key_Delete) confirmDelete(shift);
         else if (k === Qt.Key_F2) startRename();
+        else if (k === Qt.Key_Menu || (shift && k === Qt.Key_F10)) {
+            // the right-click menu from the keyboard, at the current item
+            var it = view.currentItem;
+            if (dir.selectionCount > 0 && it)
+                popupAt(it, it.width / 2, it.height / 2, itemMenu());
+            else
+                popupAt(view, 20, 20, backgroundMenu());
+        }
         else if (k === Qt.Key_F5) dir.refresh();
         else if (ctrl && shift && k === Qt.Key_N) newFolder();
         else if (ctrl && k === Qt.Key_A) dir.selectAll();

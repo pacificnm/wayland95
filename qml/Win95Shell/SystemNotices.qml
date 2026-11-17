@@ -126,6 +126,45 @@ QtObject {
                     Launcher.launch("win95control", ["--applet", "programs", "--tab", "1", "--check"]);
                 else if (id === problemNotice.id)
                     Launcher.launch("win95control", ["--applet", "problems"]);
+                else if (driveNotice.drives[id])
+                    driveNotice.open(driveNotice.drives[id]);
+            }
+        },
+
+        // a drive plugged in (Drives: UDisks2): Open mounts it and shows it
+        // in the file manager, like Windows' AutoPlay
+        QtObject {
+            id: driveNotice
+            property var drives: ({}) // notification id -> drive id
+
+            function open(id) {
+                Ui.Drives.mount(id, function (ok, result) {
+                    if (ok)
+                        Launcher.launch("win95files", [result]);
+                    else
+                        Notifications.notify("Drives", "The drive couldn't be opened", result, "", 1);
+                });
+            }
+        },
+
+        Connections {
+            target: Ui.Drives
+            function onDriveAdded(drive) {
+                var n = Notifications.notifyWithActions(
+                    "Drives", drive.name + " was plugged in",
+                    (drive.encrypted ? "An encrypted disk" : "A removable disk")
+                        + (drive.sizeText ? " (" + drive.sizeText + ")" : "")
+                        + (drive.driveName ? ", " + drive.driveName : "") + ". Click here to open it.",
+                    ["default", "Open", "open", "Open Folder"], 1, 15000);
+                var map = driveNotice.drives;
+                map[n] = drive.id;
+                driveNotice.drives = map;
+            }
+            function onDriveRemoved(drive) {
+                if (drive.mounted && !drive.ejected)
+                    Notifications.notify("Drives", drive.name + " was removed without ejecting it",
+                                         "Next time, right-click it in My Computer and choose Eject first, "
+                                         + "so nothing that was being saved to it is lost.", "", 1);
             }
         },
 

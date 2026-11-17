@@ -15,6 +15,8 @@
 #include <QProcess>
 #include <QStandardPaths>
 #include <QStorageInfo>
+
+#include "drives.h"
 #include <QUrl>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -174,6 +176,17 @@ DirectoryModel::DirectoryModel(QObject *parent)
 
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, &DirectoryModel::updateCanPaste);
     updateCanPaste();
+
+    // a drive plugged in, pulled out, opened or ejected
+    connect(Drives::instance(), &Drives::drivesChanged, this, [this] {
+        if (isComputer()) {
+            reload(true);
+            return;
+        }
+        // the folder shown was on a drive that's gone (pulled out, ejected)
+        if (!realDir().isEmpty() && !QFileInfo::exists(realDir()))
+            navigate(QStringLiteral("computer:"), false);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -430,9 +443,17 @@ void DirectoryModel::loadComputer()
     home.iconKind = QStringLiteral("home");
     m_entries.append(home);
 
+    // plug-in drives come from Drives (mounted or not), the rest from the mounts
+    const QVariantList drives = Drives::instance()->drives();
+    QSet<QString> driveDevices;
+    for (const QVariant &v : drives)
+        driveDevices << v.toMap().value(QStringLiteral("device")).toString();
+
     const auto volumes = QStorageInfo::mountedVolumes();
     for (const QStorageInfo &vol : volumes) {
         if (!vol.isValid() || !vol.isReady())
+            continue;
+        if (driveDevices.contains(QString::fromLocal8Bit(vol.device())))
             continue;
         const QString root = vol.rootPath();
         if (!vol.device().startsWith("/dev/") || vol.device().startsWith("/dev/loop"))
@@ -456,6 +477,85 @@ void DirectoryModel::loadComputer()
         e.sizeText = QStringLiteral("%1 free of %2").arg(formatSize(vol.bytesAvailable()), formatSize(vol.bytesTotal()));
         m_entries.append(e);
     }
+
+    for (const QVariant &v : drives) {
+        const QVariantMap d = v.toMap();
+        Entry e;
+        e.name = d.value(QStringLiteral("name")).toString();
+        e.driveId = d.value(QStringLiteral("id")).toString();
+        e.isDir = true;
+        e.iconKind = d.value(QStringLiteral("removable")).toBool() ? QStringLiteral("removable") : QStringLiteral("drive");
+        e.typeText = d.value(QStringLiteral("removable")).toBool() ? QStringLiteral("Removable Disk") : QStringLiteral("Local Disk");
+        e.size = d.value(QStringLiteral("size")).toLongLong();
+        if (d.value(QStringLiteral("mounted")).toBool()) {
+            e.path = d.value(QStringLiteral("mountPath")).toString();
+            const QStorageInfo vol(e.path);
+            e.sizeText = QStringLiteral("%1 free of %2").arg(formatSize(vol.bytesAvailable()), formatSize(vol.bytesTotal()));
+        } else {
+            // opening it mounts it (openRow); until then it has no folder
+            e.path = QStringLiteral("drive:") + e.driveId;
+            e.sizeText = d.value(QStringLiteral("sizeText")).toString();
+            if (d.value(QStringLiteral("encrypted")).toBool())
+                e.typeText = QStringLiteral("Encrypted Disk");
+        }
+        m_entries.append(e);
+    }
+}
+
+void DirectoryModel::openDrive(const QString &id)
+{
+    const QVariantMap d = Drives::instance()->drive(id);
+    if (d.value(QStringLiteral("mounted")).toBool()) {
+        navigate(d.value(QStringLiteral("mountPath")).toString(), true);
+        return;
+    }
+    m_busy = true;
+    emit busyChanged();
+    const QString name = d.value(QStringLiteral("name"), QStringLiteral("The drive")).toString();
+    Drives::instance()->mount(id, [this, name](bool ok, const QString &result) {
+        m_busy = false;
+        emit busyChanged();
+        if (!ok) {
+            emit error(name, result);
+            return;
+        }
+        navigate(result, true);
+    });
+}
+
+bool DirectoryModel::selectedIsDrive() const
+{
+    const int row = firstSelectedRow();
+    if (!isComputer() || row < 0 || selectionCount() != 1)
+        return false;
+    const QString id = m_entries.at(row).driveId;
+    return !id.isEmpty() && Drives::instance()->drive(id).value(QStringLiteral("canEject")).toBool();
+}
+
+void DirectoryModel::ejectSelected()
+{
+    if (selectedIsDrive())
+        ejectDrive(m_entries.at(firstSelectedRow()).driveId);
+}
+
+void DirectoryModel::ejectDrive(const QString &id)
+{
+    const QVariantMap d = Drives::instance()->drive(id);
+    const QString name = d.value(QStringLiteral("name"), QStringLiteral("The drive")).toString();
+    // not looking into it while it's unmounted
+    if (!realDir().isEmpty() && !Drives::instance()->driveAt(realDir()).isEmpty()
+        && Drives::instance()->driveAt(realDir()).value(QStringLiteral("id")) == id)
+        navigate(QStringLiteral("computer:"), true);
+    m_busy = true;
+    emit busyChanged();
+    Drives::instance()->eject(id, [this, name](bool ok, const QString &err) {
+        m_busy = false;
+        emit busyChanged();
+        if (!ok)
+            emit error(QStringLiteral("Eject"), err);
+        else
+            emit notice(QStringLiteral("Eject"), QStringLiteral("%1 can now be safely removed.").arg(name));
+    });
 }
 
 void DirectoryModel::loadDirectory(const QString &dir)
@@ -580,6 +680,10 @@ void DirectoryModel::openRow(int row)
     if (row < 0 || row >= m_entries.size())
         return;
     const Entry e = m_entries.at(row);
+    if (!e.driveId.isEmpty() && e.path.startsWith(QLatin1String("drive:"))) {
+        openDrive(e.driveId);
+        return;
+    }
     if (e.isDir) {
         if (isTrash()) {
             emit error(QStringLiteral("Recycle Bin"),
@@ -857,6 +961,18 @@ QString DirectoryModel::propertiesText() const
         return QStringLiteral("%1 Files, %2 Folders\n\nSize of files: %3").arg(files).arg(folders).arg(formatSize(total));
     }
     const Entry &e = m_entries.at(firstSelectedRow());
+    if (!e.driveId.isEmpty()) {
+        const QVariantMap d = Drives::instance()->drive(e.driveId);
+        QString text = QStringLiteral("%1\n\nType: %2\nDevice: %3\n").arg(e.name, e.typeText, d.value(QStringLiteral("device")).toString());
+        if (!d.value(QStringLiteral("driveName")).toString().isEmpty())
+            text += QStringLiteral("Drive: %1\n").arg(d.value(QStringLiteral("driveName")).toString());
+        if (!d.value(QStringLiteral("fsType")).toString().isEmpty())
+            text += QStringLiteral("File system: %1\n").arg(d.value(QStringLiteral("fsType")).toString());
+        text += d.value(QStringLiteral("mounted")).toBool()
+            ? QStringLiteral("Space: %1\nOpened at: %2").arg(e.sizeText, e.path)
+            : QStringLiteral("Size: %1\nNot opened yet: double-click it to open it.").arg(e.sizeText);
+        return text;
+    }
     const QFileInfo info(e.path);
     QString text = QStringLiteral("%1\n\nType: %2\nLocation: %3\n").arg(e.name, e.typeText, info.absolutePath());
     if (e.symlink)

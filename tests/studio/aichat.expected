@@ -1,0 +1,42 @@
+tools list_tables,find_records,get_record,add_record,update_record,delete_record,list_forms,read_form,set_field,set_element,click_element,form_action,open_form,get_weather,stop_now
+> hello
+reply Hi **there**, 1 messages. [thinking,text]
+> count the customers
+tool find_records ok
+reply There are 2 customers. [text]
+> add ada
+tool add_record ok
+reply Results: [{"is_error": false, "content": "{\"ok\":true,\"id\":3}"}] [text]
+> add
+tool add_record error
+reply Results: [{"is_error": true, "content": "{\"ok\":false,\"error\":\"\",\"errors\":{\"Name\":\"Name is required.\"},\"messages\":[\"Name is required.\"]}"}] [text]
+> fill the form
+tool read_form ok
+tool set_element ok
+tool set_element ok
+tool form_action ok
+reply Results: [{"is_error": false, "content": "{\"ok\":true,\"form\":\"Main\",\"isNew\":false,\"recordId\":4,\"record\":{\"City\":\"Paris\",\"Name\":\"Grace\",\"created_on\":\"TIME\",\"id\":4,\"modified_on\":\"TIME\"},\"errors\":{}}"}] [text]
+> weather please
+tool get_weather ok
+reply Results: [{"is_error": false, "content": "{\"city\":\"Paris\",\"sky\":\"sunny\",\"celsius\":21}"}] [text]
+> twotools
+tool get_weather ok
+stopped [["toolu_get_weather",false,"{\"city\":\"Paris\",\"sky\":\"sunny\",\"celsius\":21}"],["toolu_stop_now",true,"The person stopped Claude, so this wasn't done."]]
+> badjson
+tool find_records error
+reply Results: [{"is_error": true, "content": "{\"INVALID_JSON\":\"{\\\"table\\\": \\\"Cust\"}"}] [text]
+> fallback
+reply Part one.  |  | Part two. [text,fallback,text]
+> noschema
+tool find_records error
+reply Results: [{"is_error": true, "content": "The input isn't right: \"table\" should be string"}] [text]
+> refuse
+failed Claude can't help with that request.
+> busy
+reply Second try worked. [text]
+> long
+reply Cut [text]
+> broken
+failed Claude is busy just now: try again in a moment. (Anthropic said: Overloaded)
+messages 0 usage true
+records ["Bob/Leeds","Cy/York","Ada/London","Grace/Paris"]

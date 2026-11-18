@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "app": { "name": "selftest", "title": "Self Test", "version": "1.0", "startForm": "Main" },
+  "database": { "driver": "sqlite", "file": "selftest.db" },
+  "tables": [
+    { "name": "Items", "fields": [
+        { "name": "Name", "type": "text", "required": true, "unique": true },
+        { "name": "Qty", "label": "Quantity", "type": "integer", "min": 1 },
+        { "name": "Kind", "type": "choice", "choices": ["Part", "Tool"], "default": "Part" },
+        { "name": "Done", "type": "boolean" } ] }
+  ],
+  "forms": [
+    { "name": "Main", "width": 420, "height": 220,
+      "props": { "title": "Self Test", "table": "Items", "showErrors": false },
+      "code": {
+        "general": "property var seen: []\nfunction log(s) { console.log(\"T \" + s); }",
+        "current": "seen.push(isNew ? \"new\" : recordId);",
+        "load": "log(\"new \" + form.isNew + \" kind \" + kindBox.text + \" option \" + partOption.checked);\nform.setField(\"Qty\", 0);\nlog(\"save1 \" + form.save() + \" \" + JSON.stringify(form.errors));\nlog(\"marked \" + nameBox.error + \" | \" + qtyBox.error);\nnameBox.text = \"Widget\";\nform.setField(\"Qty\", \"3\");\nlog(\"cleared \" + JSON.stringify(form.errors) + \" dirty \" + form.dirty);\nkindBox.choose(1);\ndoneBox.toggle();\nlog(\"save2 \" + form.save() + \" id \" + form.recordId + \" qty \" + form.record.Qty + \" \" + typeof form.record.Qty + \" kind \" + form.record.Kind + \" done \" + form.record.Done + \" tool \" + toolOption.checked);\nlog(\"grid \" + grid.rows.length + \" current \" + grid.currentId + \" label \" + nameLabel.shown);\nform.newRecord();\nnameBox.text = \"Widget\";\nform.setField(\"Qty\", 1);\nlog(\"save3 \" + form.save() + \" \" + JSON.stringify(form.errors));\nnameBox.text = \"Gadget\";\nlog(\"save4 \" + form.save() + \" id \" + form.recordId);\nlog(\"first \" + form.first() + \" \" + form.record.Name + \" box \" + nameBox.text + \" check \" + doneBox.checked);\nlog(\"next \" + form.next() + \" \" + form.record.Name + \" check \" + doneBox.checked);\ngrid.select(0, false);\nlog(\"grid row \" + form.record.Name);\nform.setField(\"Qty\", 9);\nlog(\"update \" + form.save() + \" \" + Db.get(\"Items\", 1).Qty);\nlog(\"delete \" + form.deleteRecord() + \" left \" + Db.count(\"Items\") + \" new \" + form.isNew);\nlog(\"seen \" + seen.join(\",\"));\nlog(\"app \" + App.name + \" \" + App.title + \" \" + App.formNames.join(\",\") + \" args \" + JSON.stringify(args));\nApp.quit();"
+      },
+      "controls": [
+        { "type": "TextBox", "name": "nameBox", "x": 8, "y": 8, "width": 150, "height": 21, "props": { "field": "Name" } },
+        { "type": "TextBox", "name": "qtyBox", "x": 8, "y": 36, "width": 150, "height": 21, "props": { "field": "Qty" } },
+        { "type": "ComboBox", "name": "kindBox", "x": 8, "y": 64, "width": 150, "height": 21, "props": { "field": "Kind" } },
+        { "type": "CheckBox", "name": "doneBox", "x": 8, "y": 92, "width": 150, "height": 17, "props": { "field": "Done", "text": "Done" } },
+        { "type": "OptionButton", "name": "partOption", "x": 8, "y": 116, "width": 70, "height": 17, "props": { "field": "Kind", "text": "Part" } },
+        { "type": "OptionButton", "name": "toolOption", "x": 84, "y": 116, "width": 70, "height": 17, "props": { "field": "Kind", "text": "Tool" } },
+        { "type": "Label", "name": "nameLabel", "x": 8, "y": 140, "width": 150, "height": 17, "props": { "field": "Name" } },
+        { "type": "DataGrid", "name": "grid", "x": 170, "y": 8, "width": 240, "height": 200, "props": {} }
+      ]
+    }
+  ]
+}

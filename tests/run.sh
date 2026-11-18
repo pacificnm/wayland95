@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games find repos markdown startup drives backup calc email web dbservices nginx monitors screen
+#                                  games find repos markdown startup drives backup calc email web dbservices nginx studio monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -3658,7 +3658,676 @@ suite_nginx() {
 }
 NG_LOCAL=111,244; NG_MAKE_YOURS=167,329; NG_MY_WEBSITE=162,183; NG_LIST=95,214
 
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup calc email web dbservices nginx monitors screen classic vscode)
+# --- Wayland Studio (win95studio): design a form, its code, run it, the Data view, make a program ---
+# The Studio's window is 1000x680 with its inside at 43,55. A form on the
+# canvas starts at 177,199 (ST_FORM); the Properties rows are 18 apart from
+# 363; a program the Studio starts opens at 73,85 inside.
+stf() { echo "$((177 + $1)),$((199 + $2))"; }          # a point on the form being designed
+stprop() { echo "960,$((363 + 18 * $1))"; }            # the Nth property's value
+stapp() { echo "$((73 + $1)),$((85 + $2))"; }          # a point on the running program's form
+stjson() { # FORM ELEMENT EXPRESSION(c is the element, f the form): from the saved project
+    python3 - "$STHOME/contacts.w95proj" "$1" "$2" "$3" <<'PY' 2>&1
+import json, sys
+p = json.load(open(sys.argv[1]))
+f = [f for f in p["forms"] if f["name"] == sys.argv[2]][0]
+c = next((c for c in f["controls"] if c["name"] == sys.argv[3]), None)
+print(eval(sys.argv[4]))
+PY
+}
+strows() { sqlite3 "$STHOME/contacts.db" "$1" 2>&1; }
+sttable() { # TABLE FIELD EXPRESSION(f is the field): from the saved project
+    python3 - "$STHOME/contacts.w95proj" "$1" "$2" "$3" <<'PY' 2>&1
+import json, sys
+p = json.load(open(sys.argv[1]))
+t = [t for t in p["tables"] if t["name"] == sys.argv[2]][0]
+f = next((f for f in t["fields"] if f["name"] == sys.argv[3]), None)
+print(eval(sys.argv[4]))
+PY
+}
+suite_studio() {
+    say "studio: Wayland Studio (win95studio): the form designer, properties, code, Start, the Data view, Make Program"
+    [ -x "$BUILD/win95studio" ] && [ -x "$BUILD/win95apprun" ] || { bad "win95studio" "not built"; return; }
+    fresh
+    start_shell || return
+    STHOME=$WORK/home-$SUITE
+    rm -rf "$STHOME"; mkdir -p "$STHOME"
+    cp "$REPO/tests/studio/contacts.w95proj" "$STHOME/"
+    HOME=$STHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        PATH="$HERE/fakes:$PATH" W95_FAKE_LOG=$WORK/$SUITE-fakes.log W95_MARKDOWN_DEBUG=1 \
+        "$BUILD/win95studio" "$STHOME/contacts.w95proj" >"$WORK/$SUITE-studio.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95studio)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    query list | grep -q "^contacts.w95proj - Wayland Studio|win95studio|"
+    expect_true $? "the Studio opens a project" "$(query list | tr '\n' ' ')$(tail -3 "$WORK/$SUITE-studio.log")"
+    away; shot open
+    expect_pixel "the form is on the canvas (its face)" open $(stf 402 302 | tr ',' ' ') c0c0c0
+    expect_pixel "with its grid's dots" open $(stf 400 304 | tr ',' ' ') 000000
+    expect_pixel "on the designer's white" open 700 620 ffffff
+    expect_pixel "its DataGrid drawn as the real one (white inside)" open $(stf 380 100 | tr ',' ' ') ffffff
+
+    # drag an element: it moves by the grid
+    drag $(stf 136 212 | tr ',' ' ') $(stf 225 307 | tr ',' ' ')
+    away; shot dragged
+    expect_pixel "a dragged element is selected (a handle at its corner)" dragged $(stf 184 296 | tr ',' ' ') 000080
+    pointer key:ctrl+s wait:0.5
+    [ "$(stjson Main saveButton '(c["x"], c["y"])')" = "(184, 296)" ]
+    expect_true $? "dragging Save by 89,95 moves it 88,96 (the grid of 8); Ctrl+S saves the project" "$(stjson Main saveButton '(c["x"], c["y"])')"
+
+    # Properties: the selected element's
+    pointer click:$(stprop 1) wait:0.3 type:go key:Return wait:0.3 key:ctrl+s wait:0.4
+    [ "$(stjson Main saveButton 'c["props"]["text"]')" = go ]
+    expect_true $? "Properties: typing a Caption changes the element" "$(stjson Main saveButton 'c["props"]')"
+    away; shot caption
+    # Undo takes it back
+    pointer click:327,94 wait:0.4 key:ctrl+s wait:0.4
+    [ "$(stjson Main saveButton 'c["props"]["text"]')" = Save ]
+    expect_true $? "Undo puts the Caption back" "$(stjson Main saveButton 'c["props"]')"
+
+    # the Toolbox: double-click puts one in the middle; or drag out where it goes
+    pointer click:99,215 click:99,215 wait:0.5 key:ctrl+s wait:0.4
+    [ "$(stjson Main button1 '(c["type"], c["x"], c["y"], c["width"], c["height"], c["props"]["text"])')" = "('Button', 224, 160, 80, 24, 'Button1')" ]
+    expect_true $? "double-clicking Button in the Toolbox adds button1 in the middle of the form" "$(stjson Main button1 c)"
+    pointer click:99,191 wait:0.3
+    drag $(stf 16 296 | tr ',' ' ') $(stf 121 321 | tr ',' ' ')
+    pointer key:ctrl+s wait:0.4
+    [ "$(stjson Main textBox1 '(c["type"], c["x"], c["y"], c["width"], c["height"])')" = "('TextBox', 16, 296, 104, 24)" ]
+    expect_true $? "TextBox in the Toolbox, then a drag on the form: textBox1 where it was dragged" "$(stjson Main textBox1 c)"
+    away; shot added
+    # (Name): code calls it by this
+    pointer click:$(stprop 0) wait:0.3 type:total key:Return wait:0.3 key:ctrl+s wait:0.4
+    [ "$(stjson Main total 'c["type"]')" = TextBox ]; expect_true $? "(Name) renames it" "$(stjson Main total c)"
+    pointer click:$(stprop 0) wait:0.3 type:form key:Return wait:0.5
+    away; shot badname
+    pointer key:Return wait:0.3 key:ctrl+s wait:0.4
+    [ "$(stjson Main total 'c["type"]')" = TextBox ]; expect_true $? "a name code already uses (form) is refused" "$(stjson Main form c)"
+    # Delete
+    pointer click:$(stf 60 308) wait:0.3 key:Delete wait:0.3 key:ctrl+s wait:0.4
+    [ "$(stjson Main total c)" = None ]; expect_true $? "Delete removes the selected element" "$(stjson Main total c)"
+
+    # code: double-click an element for its event; what's typed is its handler
+    pointer click:$(stf 312 212) click:$(stf 312 212) wait:0.7
+    away; shot code
+    pointer key:ctrl+a type:db key:period type:insert key:shift+9 type:table key:comma key:space type:record key:shift+0 wait:0.3 key:ctrl+s wait:0.5
+    [ "$(stjson Main aboutButton 'c["events"]["clicked"]')" = "db.insert(table, record)" ]
+    expect_true $? "double-click About: its clicked code; what's typed there is saved as the event's code" "$(stjson Main aboutButton 'c["events"]')"
+
+    # Start: the project runs as its own program
+    pointer key:F5
+    for _ in $(seq 40); do [ "$(windows_of contacts)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1
+    [ "$(windows_of contacts)" -ge 1 ]; expect_true $? "F5 starts the app (its window: Contacts)" "$(query list | tr '\n' ' ')$(tail -3 "$WORK/$SUITE-studio.log")"
+    away; shot running
+    expect_pixel "the app's form shows its elements (the Name box)" running $(stapp 160 38 | tr ',' ' ') ffffff
+    # Save with nothing typed: the table's rules refuse it, and say why
+    pointer click:$(stapp 224 308) wait:1
+    [ "$(windows_of contacts)" -ge 2 ]; expect_true $? "Save with no Name: a message box (Name is required.)" "$(query list | tr '\n' ' ')"
+    away; shot refused
+    pointer key:Return wait:0.6
+    [ "$(strows 'select count(*) from Contacts')" = 0 ]; expect_true $? "and nothing is written" "$(strows 'select * from Contacts')"
+    away; shot marked
+    expect_pixel "the Name box is marked (a red frame)" marked $(stapp 162 26 | tr ',' ' ') ff0000
+    # the code typed in the Studio runs: About now inserts the form's record
+    pointer click:$(stapp 160 38) type:zed wait:0.2 click:$(stapp 312 212) wait:0.8
+    [ "$(strows 'select Name, Kind, Active from Contacts')" = "zed|Friend|1" ]
+    expect_true $? "typing a Name and pressing About runs the new code: the record is in the database, defaults filled in" "$(strows 'select * from Contacts')"
+    away; shot inserted
+    query close Contacts; sleep 1
+    [ "$(windows_of contacts)" -eq 0 ]; expect_true $? "closing its window ends it" "$(query list | tr '\n' ' ')"
+
+    # the Data Designer: Contacts, then its records
+    pointer click:835,232 wait:0.6
+    away; shot table
+    pointer click:113,143 wait:1
+    away; shot data
+    pointer click:89,168 wait:0.6
+    # a drop-down in the dialog (Kind, F4) opens over it, not behind it: Family, under the pointer, lit
+    pointer click:420,443 wait:0.3 key:F4 wait:0.5 move:560,500 wait:0.3
+    away; shot record-dropdown
+    expect_pixel "a list in the New Record dialog (Kind) opens over the dialog" record-dropdown 585 500 000080
+    pointer key:Escape wait:0.3 click:629,559 wait:0.6
+    away; shot record-refused
+    # (red text, whatever the smoothing made of its edges: a pixel that's mostly red)
+    magick "$WORK/$SUITE-record-refused.png" -crop 100x16+345+509 -depth 8 txt:- \
+        | awk -F'[(,)]' '$3 > 150 && $4 < 90 && $5 < 90 { found = 1 } END { exit !found }'
+    expect_true $? "New Record, Save with no Name: the dialog says what's wrong (in red)" "no red text under the fields in $SUITE-record-refused.png"
+    [ "$(strows 'select count(*) from Contacts')" = 1 ]; expect_true $? "and writes nothing" "$(strows 'select * from Contacts')"
+    pointer click:600,247 wait:0.3 type:amy key:Return wait:0.3 click:629,559 wait:0.8
+    [ "$(strows 'select Name from Contacts order by id')" = "zed
+amy" ]
+    expect_true $? "with a Name typed, Save writes the record" "$(strows 'select * from Contacts')"
+    away; shot record-saved
+
+    # a Validation Rule from the list: Phone, its 10th property (F4 opens
+    # the list: a menu for a Phone; 13 down is Phone number (US and Canada))
+    pointer click:70,143 wait:0.5 click:140,268 wait:0.4 click:150,400 wait:0.2
+    pointer key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down wait:0.2 key:F4 wait:0.8
+    away; shot rule-list
+    pointer key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down wait:0.2 key:Return wait:0.5
+    away; shot rule-picked
+    # Validation Text starts from the rule's own message, in grey
+    pointer key:Down wait:0.2 key:F4 wait:0.3 key:End key:space type:thanks key:Return wait:0.3 key:ctrl+s wait:0.5
+    [ "$(sttable Contacts Phone '(f.get("validator"), f.get("message"))')" = "('phone_nanp', 'Phone has to be a US or Canadian phone number, like (212) 555-0123. thanks')" ]
+    expect_true $? "Validation Rule: Phone number (US and Canada) picked from the list; Validation Text starts from its message" \
+        "$(sttable Contacts Phone f)"
+    # and the table's rule refuses a record that doesn't meet it
+    pointer click:113,143 wait:1 click:89,168 wait:0.6 click:600,247 wait:0.3 type:cy key:Return wait:0.3
+    pointer click:600,283 wait:0.3 type:5550123 key:Return wait:0.3 click:629,559 wait:0.8
+    away; shot rule-refused
+    [ "$(strows 'select count(*) from Contacts')" = 2 ]; expect_true $? "a Phone the rule refuses isn't written" "$(strows 'select * from Contacts')"
+    pointer click:600,283 wait:0.3 key:ctrl+a type:2125550123 key:Return wait:0.3 click:629,559 wait:0.8
+    [ "$(strows "select Phone from Contacts where Name = 'cy'")" = 2125550123 ]
+    expect_true $? "and one it takes is" "$(strows 'select * from Contacts')"
+    away; shot rule-taken
+
+    # a date's Default Value from its list: Seen (Last Seen), "When the record is saved" (4th down)
+    # (the field list scrolled down to it; picking it puts the property grid back at its top)
+    pointer click:70,143 wait:0.5 move:300,300 wheel:3 wait:1.5 click:140,265 wait:0.4 click:150,401 wait:0.3
+    pointer key:Down key:Down key:Down key:Down key:Down wait:0.2 key:F4 wait:0.6 key:Down key:Down key:Down key:Down wait:0.2
+    away; shot date-default-list
+    pointer key:Return wait:0.4 key:ctrl+s wait:0.5
+    [ "$(sttable Contacts Seen '(f.get("auto"), f.get("default"))')" = "('modified', None)" ]
+    expect_true $? "Default Value of a Date and Time: When the record is saved, from its list" "$(sttable Contacts Seen f)"
+    away; shot date-default
+    # and the database fills it in when a record is saved
+    pointer click:113,143 wait:1 click:89,168 wait:0.6 click:600,247 wait:0.3 type:dee key:Return wait:0.3 click:629,559 wait:0.8
+    case "$(strows "select Seen from Contacts where Name = 'dee'")" in "$(date +%Y-%m-%d)"*) true ;; *) false ;; esac
+    expect_true $? "a record saved in the Data view gets Last Seen: now" "$(strows "select Name, Seen from Contacts")"
+
+    # Make Program: the app as a file of its own
+    pointer click:60,67 wait:0.4 click:100,169 wait:0.8
+    away; shot make
+    pointer key:Return wait:2
+    [ -x "$STHOME/contacts" ] && [ "$(tail -c 8 "$STHOME/contacts")" = W95APP01 ]
+    expect_true $? "File > Make Program writes contacts, a program" "$(ls -la "$STHOME" 2>&1)"
+    away; shot made
+    pointer key:Return wait:0.4
+    # and it runs by itself, with its own data folder
+    W95APP_DATA_DIR=$STHOME/appdata XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        PATH="$HERE/fakes:$PATH" W95_FAKE_LOG=$WORK/$SUITE-fakes.log "$STHOME/contacts" >"$WORK/$SUITE-program.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of contacts)" -ge 1 ] && break; sleep 0.25; done
+    [ "$(windows_of contacts)" -ge 1 ] && [ -s "$STHOME/appdata/contacts.db" ]
+    expect_true $? "the program runs on its own, its database in its data folder" "$(query list | tr '\n' ' ')$(tail -3 "$WORK/$SUITE-program.log")"
+    away; shot program
+    query close Contacts; sleep 0.8
+
+    # a Menu: Main again, Menu in the Toolbox (double-click): across the top, the rest moved down
+    pointer click:835,159 wait:0.6 click:99,431 click:99,431 wait:0.6 key:ctrl+s wait:0.5
+    [ "$(stjson Main menu1 '(c["x"], c["y"], c["width"], c["height"], [m["name"] for m in c["props"]["menus"]])')" = "(0, 0, 520, 20, ['fileMenu', 'helpMenu'])" ] \
+        && [ "$(stjson Main saveButton 'c["y"]')" = 316 ]
+    expect_true $? "Menu in the Toolbox: a menu bar across the top (File, Help to start with); what was there moves down" \
+        "$(stjson Main menu1 c) $(stjson Main saveButton c)"
+    away; shot menu-added
+    # the Menu Editor (Menus, F4): Help > About opens the About form
+    pointer click:960,380 wait:0.3 key:F4 wait:0.8
+    away; shot menu-editor
+    pointer click:370,413 wait:0.3 click:487,274 wait:0.4 key:Down key:Down key:Return wait:0.3
+    pointer click:687,274 wait:0.4 key:Down key:Down key:Return wait:0.3
+    away; shot menu-edited
+    pointer click:658,592 wait:0.5 key:ctrl+s wait:0.5
+    [ "$(stjson Main menu1 'sorted(c["props"]["menus"][1]["items"][0].items())')" = "[('action', 'openForm'), ('form', 'About'), ('name', 'helpAbout'), ('text', '&About')]" ]
+    expect_true $? "Menu Editor: About's Action is Open a form, its Form About" "$(stjson Main menu1 'c["props"]["menus"]')"
+    # and in the program: Help > About opens it; File > Exit ends it
+    pointer key:F5
+    for _ in $(seq 40); do [ "$(windows_of contacts)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1
+    pointer click:$(stapp 42 10) wait:0.5
+    away; shot menu-running
+    pointer click:$(stapp 56 31) wait:1
+    [ "$(windows_of contacts)" -ge 2 ]; expect_true $? "in the program, Help > About opens the About form" "$(query list | tr '\n' ' ')$(tail -3 "$WORK/$SUITE-studio.log")"
+    away; shot menu-about
+    query activate Contacts; sleep 0.4
+    pointer click:$(stapp 12 10) wait:0.5 click:$(stapp 30 31) wait:1
+    [ "$(windows_of contacts)" -eq 0 ]; expect_true $? "and File > Exit (Action: quit) ends it" "$(query list | tr '\n' ' ')"
+
+    # the code window: coloured, and a list of what can be typed (About is 20 lower under the Menu)
+    pointer click:$(stf 312 232) click:$(stf 312 232) wait:0.7 key:ctrl+End key:Return type:form key:period wait:0.4 type:sa wait:0.4
+    away; shot code-complete
+    pointer key:Return wait:0.3 key:Return key:shift+a type:pp key:period type:open key:shift+f type:orm key:shift+9 key:shift+apostrophe key:shift+a type:b wait:0.4
+    away; shot code-complete-string
+    pointer key:Return key:shift+apostrophe key:shift+0 wait:0.3 key:ctrl+s wait:0.5
+    [ "$(stjson Main aboutButton 'c["events"]["clicked"]')" = 'db.insert(table, record)
+form.save()
+App.openForm("About")' ]
+    expect_true $? "code: form.sa and Enter puts in form.save(); in App.openForm(\"Ab, Enter puts in About" "$(stjson Main aboutButton 'c["events"]')"
+
+    # a DateTimePicker (Toolbox, double-click: the middle of the form, 184,168 under the Menu);
+    # its changed code logs the value; in the program, ▼, Right and Enter: tomorrow
+    pointer click:69,143 wait:0.5 click:99,479 click:99,479 wait:0.6
+    # (its changed code puts the value in the window's title, for the test to read)
+    pointer click:$(stf 230 178) click:$(stf 230 178) wait:0.7 key:ctrl+a type:form key:period type:title key:space key:equal key:space \
+        type:date key:shift+p type:icker1 key:period type:value wait:0.3 key:ctrl+s wait:0.5
+    [ "$(stjson Main datePicker1 '(c["type"], c["x"], c["y"], c["events"]["changed"])')" = "('DateTimePicker', 184, 168, 'form.title = datePicker1.value')" ]
+    expect_true $? "DateTimePicker in the Toolbox; its changed code" "$(stjson Main datePicker1 c)"
+    pointer key:F5
+    for _ in $(seq 40); do [ "$(windows_of contacts)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1
+    pointer click:$(stapp 324 178) wait:0.6
+    away; shot picker-calendar
+    pointer key:Right key:Return wait:0.5
+    away; shot picker-picked
+    query list | grep -q "^$(date -d tomorrow +%Y-%m-%d)|contacts|"
+    expect_true $? "in the program: its calendar (▼), Right and Enter pick tomorrow (not the form's default button)" "$(query list | tr '\n' ' ')"
+    query activate "$(date -d tomorrow +%Y-%m-%d)"; sleep 0.3
+    pointer click:$(stapp 12 10) wait:0.5 click:$(stapp 30 31) wait:1
+
+    # a MediaPlayer (Toolbox, double-click: 104,80, 320x206) playing media/tone.wav (typed in
+    # its Source); its started code puts its title in the window's; in the program, ▶
+    if command -v ffmpeg >/dev/null && "$REPO/tests/studio/make-media.sh" "$STHOME/media" 2>/dev/null; then
+        query activate "contacts.w95proj - Wayland Studio"; sleep 0.4
+        pointer click:69,143 wait:0.5 click:99,503 click:99,503 wait:0.6
+        pointer click:$(stprop 1) wait:0.3 type:media key:slash type:tone key:period type:wav key:Return wait:0.4
+        away; shot media-designer
+        pointer click:$(stf 200 120) click:$(stf 200 120) wait:0.7 key:ctrl+a type:form key:period type:title key:space key:equal key:space \
+            type:player1 key:period type:title wait:0.3 key:ctrl+s wait:0.5
+        [ "$(stjson Main player1 '(c["type"], c["x"], c["y"], c["props"].get("source"), c["events"].get("started"))')" = "('MediaPlayer', 104, 80, 'media/tone.wav', 'form.title = player1.title')" ]
+        expect_true $? "MediaPlayer in the Toolbox: its Source typed, its started code" "$(stjson Main player1 c)"
+        pointer key:F5
+        for _ in $(seq 40); do [ "$(windows_of contacts)" -ge 1 ] && break; sleep 0.25; done
+        sleep 1.5
+        away; shot media-running
+        pointer click:$(stapp 118 273) wait:1.5
+        query list | grep -q "^tone.wav|contacts|"
+        expect_true $? "in the program: ▶ plays it (its file inside the program)" "$(query list | tr '\n' ' ')"
+        away; shot media-playing
+        query activate "tone.wav"; sleep 0.3
+        pointer click:$(stapp 12 10) wait:0.5 click:$(stapp 30 31) wait:1
+    else
+        echo "SKIP  [studio] MediaPlayer (no ffmpeg to make a sound)"
+    fi
+
+    # Help: the manual, in the Markdown Reader (win95markdown --reader: it says what it does in the Studio's log)
+    pointer key:Escape wait:0.3 key:F1
+    for _ in $(seq 40); do [ "$(windows_of win95markdown)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1
+    query list | grep -q "^index.md - Markdown Reader|win95markdown|" && grep -q "markdown: opened .*/studio-manual/index.md" "$WORK/$SUITE-studio.log"
+    expect_true $? "F1: the manual's Contents, in the Markdown Reader" "$(query list | tr '\n' ' ')$(grep 'markdown: ' "$WORK/$SUITE-studio.log" | tail -2)"
+    away; shot manual-contents
+    query close "index.md - Markdown Reader"; sleep 1
+    query activate "contacts.w95proj - Wayland Studio"; sleep 0.4
+    # Help > Writing Code (the 5th), then its Contents link (the first on the page)
+    pointer click:296,66 wait:0.4 key:Down key:Down key:Down key:Down key:Down key:Return
+    for _ in $(seq 40); do [ "$(windows_of win95markdown)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    query list | grep -q "^code.md - Markdown Reader|win95markdown|"
+    expect_true $? "Help > Writing Code: that chapter" "$(query list | tr '\n' ' ')"
+    away; shot manual-code
+    xy=$(grep "markdown: linkat 0 " "$WORK/$SUITE-studio.log" | tail -1 | awk '{ print $(NF-1) + 73 "," $NF + 86 }')
+    pointer click:$xy wait:1.5
+    query list | grep -q "^index.md - Markdown Reader|win95markdown|"
+    expect_true $? "its Contents link goes back to the Contents" "$(query list | tr '\n' ' ') (clicked $xy)"
+    # the reader's history: Back (Alt+Left) to Writing Code, Forward (Alt+Right) to the Contents again
+    pointer key:alt+Left wait:1
+    query list | grep -q "^code.md - Markdown Reader|win95markdown|"
+    expect_true $? "Back (Alt+Left): Writing Code again" "$(query list | tr '\n' ' ')"
+    away; shot manual-back
+    pointer key:alt+Right wait:1
+    query list | grep -q "^index.md - Markdown Reader|win95markdown|"
+    expect_true $? "Forward (Alt+Right): the Contents" "$(query list | tr '\n' ' ')"
+    # nothing to edit with: typing changes nothing, and Ctrl+S, Ctrl+N and Ctrl+M do nothing
+    pointer type:abc key:Return key:ctrl+s key:ctrl+n key:ctrl+m wait:0.8
+    query list | grep -q "^index.md - Markdown Reader|win95markdown|" && ! grep -q "markdown: saved\|markdown: view markdown" "$WORK/$SUITE-studio.log"
+    expect_true $? "the reader doesn't edit: typing, Ctrl+S, Ctrl+N and Ctrl+M do nothing" "$(query list | tr '\n' ' ')$(grep 'markdown: ' "$WORK/$SUITE-studio.log" | tail -3)"
+    query close "index.md - Markdown Reader"; sleep 0.8
+    # Help > Open the Book Club Sample (the 7th): copied to ~/Book Club, and opened
+    query activate "contacts.w95proj - Wayland Studio"; sleep 0.4
+    pointer click:296,66 wait:0.4 key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Return wait:1.5
+    query list | grep -q "^bookclub.w95proj - Wayland Studio|win95studio|" && [ -s "$STHOME/Book Club/bookclub.w95proj" ] \
+        && [ -s "$STHOME/Book Club/bookclub.db" ]
+    expect_true $? "Help > Open the Book Club Sample: copied to ~/Book Club, and open" "$(query list | tr '\n' ' '; ls -la "$STHOME/Book Club" 2>&1)"
+    away; shot sample-open
+
+    # Start > Programs > Programming > Wayland Studio
+    pointer key:ctrl+Escape wait:0.6 key:p wait:0.5 key:p wait:0.5
+    away; shot start-programming
+    pointer key:w
+    for _ in $(seq 40); do [ "$(windows_of win95studio)" -ge 2 ] && break; sleep 0.25; done
+    sleep 1
+    query list | grep -q "^Project1 - Wayland Studio|win95studio|"
+    expect_true $? "Start > Programs > Programming > Wayland Studio starts it, on a new project" "$(query list | tr '\n' ' ')"
+    away; shot from-start
+}
+
+
+# --- Wayland Studio: a database that was there already, into a project (Project > Import Tables) ---
+suite_studioimport() {
+    say "studioimport: Wayland Studio: Import Tables from a database the Studio didn't make, and forms for them"
+    [ -x "$BUILD/win95studio" ] && command -v sqlite3 >/dev/null || { bad "studioimport" "not built, or no sqlite3"; return; }
+    fresh
+    start_shell || return
+    STHOME=$WORK/home-$SUITE
+    rm -rf "$STHOME"; mkdir -p "$STHOME/shop"
+    sqlite3 "$STHOME/shop/shop.db" <<'SQL'
+CREATE TABLE customers (customer_id INTEGER PRIMARY KEY, "Full Name" VARCHAR(80) NOT NULL, email VARCHAR(120) UNIQUE);
+CREATE TABLE products (sku VARCHAR(20) PRIMARY KEY, title VARCHAR(100) NOT NULL, price NUMERIC(8,2));
+CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+                     sku VARCHAR(20) REFERENCES products(sku), qty INTEGER NOT NULL);
+INSERT INTO customers VALUES (7, 'Ada Lovelace', 'ada@example.com'), (9, 'Grace Hopper', 'grace@example.com');
+INSERT INTO products VALUES ('A-1', 'Anvil', 99.95), ('B-2', 'Bell', 5);
+INSERT INTO orders VALUES (1, 7, 'A-1', 2);
+SQL
+    echo '{"format": 1, "app": {"name": "shop", "title": "Shop", "startForm": ""}, "database": {"driver": "sqlite", "file": "shop.db"}, "tables": [], "forms": []}' \
+        >"$STHOME/shop/shop.w95proj"
+    HOME=$STHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        "$BUILD/win95studio" "$STHOME/shop/shop.w95proj" >"$WORK/$SUITE-studio.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95studio)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    # Project > Import Tables... (fourth from the end: then APIs, Add API Table, Properties)
+    pointer click:171,66 wait:0.4 key:Up key:Up key:Up key:Up key:Return wait:1.5
+    away; shot import-dialog
+    query list | grep -q "^shop.w95proj - Wayland Studio|"
+    expect_true $? "Project > Import Tables: the Studio opens on the project" "$(query list | tr '\n' ' ')"
+    # Import (its default button), a form for each ticked
+    pointer key:Return wait:1.5 key:ctrl+s wait:0.6
+    sq() { python3 -c "import json, sys; p = json.load(open('$STHOME/shop/shop.w95proj')); print(eval(sys.argv[1]))" "$1" 2>&1; }
+    [ "$(sq '[t["name"] for t in p["tables"]]')" = "['customers', 'orders', 'products']" ] \
+        && [ "$(sq '[(t["key"], t["keyAuto"]) for t in p["tables"]]')" = "[('customer_id', True), ('id', True), ('sku', False)]" ] \
+        && [ "$(sq '[f.get("column") for f in p["tables"][0]["fields"]]')" = "['Full Name', None]" ]
+    expect_true $? "Import: the three tables, with their own keys and the name with a space" "$(sq 'p["tables"]')"
+    [ "$(sq '[f["name"] for f in p["forms"]]')" = "['customersForm', 'ordersForm', 'productsForm']" ] && [ "$(sq 'p["app"]["startForm"]')" = customersForm ] \
+        && [ "$(sq '[(c["type"], c["props"].get("field")) for c in p["forms"][1]["controls"] if c["type"] == "ComboBox"]')" = "[('ComboBox', 'customer_id'), ('ComboBox', 'sku')]" ]
+    expect_true $? "and a form for each, its foreign keys as lists (Lookups)" "$(sq '[(f["name"], [(c["type"], c["name"]) for c in f["controls"]]) for f in p["forms"]]')"
+    away; shot import-done
+    # the records are the database's: the app shows them
+    pointer key:F5
+    for _ in $(seq 40); do [ "$(windows_of shop)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    query list | grep -q "^customers|shop|"
+    expect_true $? "F5: the app opens on customersForm" "$(query list | tr '\n' ' ')$(tail -3 "$WORK/$SUITE-studio.log")"
+    away; shot import-running
+    # (its grid, white with rows: Ada's row is dark text on white at the grid's first row)
+    [ "$(sqlite3 "$STHOME/shop/shop.db" 'select count(*) from customers')" = 2 ]
+    expect_true $? "and the database is as it was (nothing made, nothing lost)" "$(sqlite3 "$STHOME/shop/shop.db" '.tables')"
+}
+
+# --- Wayland Studio: a web API's endpoint as a table (Project > APIs, Add API Table) ---
+suite_studioapi() {
+    say "studioapi: Wayland Studio: an API's endpoint as a table, a form for it, records added through the form"
+    [ -x "$BUILD/win95studio" ] && command -v python3 >/dev/null && command -v curl >/dev/null || { bad "studioapi" "not built, or no python3/curl"; return; }
+    fresh
+    start_shell || return
+    STHOME=$WORK/home-$SUITE
+    rm -rf "$STHOME"; mkdir -p "$STHOME/shop"
+    python3 "$REPO/tests/studio/mockapi.py" "$STHOME/port" 2>"$WORK/$SUITE-mock.err" &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ -s "$STHOME/port" ] && break; sleep 0.1; done
+    local base="http://127.0.0.1:$(cat "$STHOME/port")"
+    python3 "$REPO/tests/studio/api-project.py" "$(cat "$STHOME/port")" "$STHOME/shop/shop.w95proj"
+    # (the key one first in the dialog's list)
+    python3 - "$STHOME/shop/shop.w95proj" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))
+p["apis"].sort(key=lambda a: a["name"] != "key")
+p["app"]["name"] = "shop"
+json.dump(p, open(sys.argv[1], "w"))
+PY
+    HOME=$STHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        "$BUILD/win95studio" "$STHOME/shop/shop.w95proj" >"$WORK/$SUITE-studio.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95studio)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    # Project > APIs... (third from the end): the connections, and their sign-in
+    pointer click:171,66 wait:0.4 key:Up key:Up key:Up key:Return wait:1
+    away; shot apis
+    query list | grep -q "^shop.w95proj - Wayland Studio|"
+    expect_true $? "Project > APIs: the dialog" "$(query list | tr '\n' ' ')"
+    pointer key:Escape wait:0.5
+    # Project > Add API Table... (second from the end): /key/products, Read, Add (a form for it)
+    pointer click:171,66 wait:0.4 key:Up key:Up key:Return wait:1
+    pointer key:slash type:key key:slash type:products key:Return wait:1.5
+    away; shot read
+    pointer click:672,604 wait:1.5 key:ctrl+s wait:0.6
+    sq() { python3 -c "import json, sys; p = json.load(open('$STHOME/shop/shop.w95proj')); print(eval(sys.argv[1]))" "$1" 2>&1; }
+    [ "$(sq '[(t["name"], t["source"], t["api"], t["endpoint"], t["recordsPath"], t["key"]) for t in p["tables"]]')" = "[('Products', 'api', 'key', '/key/products', 'data', 'id')]" ] \
+        && [ "$(sq '[f["name"] for f in p["tables"][0]["fields"]]')" = "['name', 'price', 'inStock', 'released', 'vendor_name', 'vendor_email', 'updated']" ] \
+        && [ "$(sq '[f["name"] for f in p["forms"]]')" = "['ProductsForm']" ]
+    expect_true $? "Add API Table: /key/products read as a table (its fields, its id), and a form for it" "$(sq 'p["tables"]') $(sq '[f["name"] for f in p["forms"]]')"
+    away; shot added
+    # the app: its records are the API's; one typed into the form and saved is POSTed
+    pointer key:F5
+    for _ in $(seq 40); do [ "$(windows_of shop)" -ge 1 ] && break; sleep 0.25; done
+    sleep 2
+    query list | grep -q "^Products|shop|"
+    expect_true $? "F5: the app opens on ProductsForm" "$(query list | tr '\n' ' ')$(tail -3 "$WORK/$SUITE-studio.log")"
+    away; shot running
+    pointer click:$(stapp 160 22) wait:0.3 type:cup click:$(stapp 140 225) wait:2
+    away; shot saved
+    curl -s -H "X-Api-Key: k1" "$base/key/products" | grep -q '"name": "cup"'
+    expect_true $? "a record typed into the form and saved: POSTed to the API" "$(curl -s -H 'X-Api-Key: k1' "$base/key/products" | head -c 600)"
+}
+
+# --- Wayland Studio: an AI Chat on a form, talking to Claude (mockclaude.py stands in for Anthropic) ---
+suite_studioai() {
+    say "studioai: Wayland Studio: an AIChat from the Toolbox, the key in Project > Properties; in the app: Claude's tools, a change asked about first"
+    [ -x "$BUILD/win95studio" ] && command -v python3 >/dev/null && command -v sqlite3 >/dev/null || { bad "studioai" "not built, or no python3/sqlite3"; return; }
+    fresh
+    start_shell || return
+    STHOME=$WORK/home-$SUITE
+    rm -rf "$STHOME"; mkdir -p "$STHOME"
+    python3 "$REPO/tests/studio/mockclaude.py" "$STHOME/port" "$STHOME/requests.log" 2>"$WORK/$SUITE-mock.err" &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ -s "$STHOME/port" ] && break; sleep 0.1; done
+    # aichat.w95proj's table and text boxes, without its chat (the Toolbox gives one)
+    python3 - "$REPO/tests/studio/aichat.w95proj" "$STHOME/contacts.w95proj" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))
+p["app"].update(name="chatapp", title="Chat App")
+p["database"]["file"] = "chatapp.db"
+p.pop("ai", None)   # (no key yet: Project > Properties gives it)
+f = p["forms"][0]
+f.update(width=520, height=340, code={})
+f["props"]["title"] = "Customers"
+f["controls"] = [dict(c, width=80) for c in f["controls"] if c["type"] == "TextBox"]
+json.dump(p, open(sys.argv[2], "w"), indent=1)
+PY
+    env -u ANTHROPIC_API_KEY HOME=$STHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        ANTHROPIC_BASE_URL="http://127.0.0.1:$(cat "$STHOME/port")" \
+        "$BUILD/win95studio" "$STHOME/contacts.w95proj" >"$WORK/$SUITE-studio.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95studio)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    query list | grep -q "^contacts.w95proj - Wayland Studio|win95studio|"
+    expect_true $? "the Studio opens the project" "$(query list | tr '\n' ' ')"
+    # AIChat in the Toolbox (double-click: the middle of the form)
+    pointer click:69,143 wait:0.5 click:99,551 click:99,551 wait:0.6 key:ctrl+s wait:0.5
+    away; shot designer
+    [ "$(stjson Main chat1 '(c["type"], c["width"], c["height"])')" = "('AIChat', 320, 260)" ]
+    expect_true $? "AIChat in the Toolbox: chat1 on the form" "$(stjson Main chat1 c)"
+    # DataAccess (the 7th property; F4 on its name): Read and Change (Up: the last)
+    pointer click:830,$(stprop 7 | cut -d, -f2) wait:0.4 key:F4 wait:0.5
+    away; shot properties
+    pointer key:Up wait:0.2 key:Return wait:0.4 key:ctrl+s wait:0.5
+    [ "$(stjson Main chat1 'c["props"].get("dataAccess")')" = "Read and Change" ]
+    expect_true $? "its DataAccess set to Read and Change" "$(stjson Main chat1 c)"
+
+    # Project > Properties... (the last): the AI Chat's key, a wrong one tested, then the right one
+    pointer click:171,66 wait:0.4 key:Up key:Return wait:0.8 click:561,436 wait:0.3 type:wrong click:669,436 wait:1.2
+    away; shot key-wrong
+    pointer click:561,436 wait:0.2 key:ctrl+a type:test key:minus type:key click:669,436 wait:1.2
+    away; shot key-works
+    grep '"method": "GET"' "$STHOME/requests.log" | python3 -c "import json, sys; print([json.loads(l)['key'] for l in sys.stdin])" | grep -qx "\['wrong', 'test-key'\]"
+    expect_true $? "Project > Properties: Test asks Anthropic about the key (a wrong one, then the right one)" "$(cat "$STHOME/requests.log")"
+    pointer click:561,436 key:Return wait:0.6 key:ctrl+s wait:0.5
+    [ "$(python3 -c "import json; print(json.load(open('$STHOME/contacts.w95proj'))['ai'])" 2>&1)" = "{'apiKey': 'test-key'}" ]
+    expect_true $? "and the key is the project's (saved in it)" "$(python3 -c "import json; print(json.load(open('$STHOME/contacts.w95proj')).get('ai'))" 2>&1)"
+
+    # the app: the chat has no key box (the project's key), and talks at once
+    pointer key:F5
+    for _ in $(seq 40); do [ "$(windows_of chatapp)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    query list | grep -q "^Customers|chatapp|"
+    expect_true $? "F5: the app opens" "$(query list | tr '\n' ' ')$(tail -3 "$WORK/$SUITE-studio.log")"
+    away; shot running
+    pointer click:$(stapp 160 288) wait:0.3
+    # a message; Claude adds a record: asked first (Yes)
+    pointer type:add key:space type:ada key:Return wait:2
+    away; shot confirm
+    query list | grep -q "^Claude|chatapp|"
+    expect_true $? "Claude wants to add a record: the person is asked" "$(query list | tr '\n' ' ')"
+    pointer key:Return wait:2
+    away; shot added
+    [ "$(sqlite3 "$STHOME/chatapp.db" "select Name || '/' || City from Customers")" = "Ada/London" ]
+    expect_true $? "Yes: the record is added" "$(sqlite3 "$STHOME/chatapp.db" 'select * from Customers' 2>&1)"
+    # another: No
+    pointer type:add key:space type:bob key:Return wait:2 key:Escape wait:2
+    away; shot declined
+    [ "$(sqlite3 "$STHOME/chatapp.db" "select count(*) from Customers")" = 1 ] \
+        && tail -1 "$STHOME/requests.log" | python3 -c "import json, sys; r = json.load(sys.stdin)['body']['messages'][-1]['content'][0]
+sys.exit(not (r.get('is_error') is True and r['content'].startswith('The person using the app said no')))"
+    expect_true $? "No: nothing added, and Claude is told so" "$(sqlite3 "$STHOME/chatapp.db" 'select * from Customers' 2>&1; tail -1 "$STHOME/requests.log" | head -c 600)"
+    # a new conversation fills in the form (read_form, set_element x2, then save: Yes)
+    pointer type:fill key:space type:the key:space type:form key:Return wait:2.5
+    away; shot fill-confirm
+    pointer key:Return wait:2
+    away; shot filled
+    [ "$(sqlite3 "$STHOME/chatapp.db" "select Name || '/' || City from Customers order by id desc limit 1")" = "Grace/Paris" ]
+    expect_true $? "Claude fills in the form's boxes and saves it (asked first)" "$(sqlite3 "$STHOME/chatapp.db" 'select * from Customers' 2>&1)"
+    # Markdown in an answer
+    pointer type:hello key:Return wait:2
+    away; shot markdown
+}
+
+# --- Wayland Studio: a Graph from the Toolbox, its Graph Editor, the app showing a table as a pie ---
+suite_studiograph() {
+    say "studiograph: Wayland Studio: a Graph from the Toolbox, the Graph Editor (Type, Display, Data, preview), the app's pie, a click on a slice"
+    [ -x "$BUILD/win95studio" ] && command -v python3 >/dev/null && command -v magick >/dev/null || { bad "studiograph" "not built, or no python3/magick"; return; }
+    fresh
+    start_shell || return
+    STHOME=$WORK/home-$SUITE
+    rm -rf "$STHOME"; mkdir -p "$STHOME"
+    # graphs.w95proj's Sales table and records, and an empty form
+    python3 - "$REPO/tests/studio/graphs.w95proj" "$STHOME/contacts.w95proj" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))
+p["app"].update(name="salesapp", title="Sales")
+p["database"]["file"] = "sales.db"
+p["forms"] = [{"name": "Main", "width": 520, "height": 340, "props": {"title": "Sales"}, "code": {}, "controls": []}]
+json.dump(p, open(sys.argv[2], "w"), indent=1)
+PY
+    cat >"$STHOME/seed.js" <<'JS'
+[["North", 100], ["South", 50], ["North", 25], ["East", 80], ["South", 10], ["West", 5]].forEach(function (r) {
+    Db.insert("Sales", { Region: r[0], Amount: r[1], Sold: "2026-01-05", Units: 1, Paid: true });
+});
+Test.out(Db.count("Sales"));
+JS
+    ( cd "$STHOME" && QT_QPA_PLATFORM=offscreen "$BUILD/win95apprun" --eval seed.js contacts.w95proj >/dev/null 2>&1 )
+    HOME=$STHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        "$BUILD/win95studio" "$STHOME/contacts.w95proj" >"$WORK/$SUITE-studio.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95studio)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    # Graph in the Toolbox (double-click): the Graph Editor opens at once, on Type
+    pointer click:69,143 wait:0.5 click:99,527 click:99,527 wait:1
+    away; shot editor-type
+    # Pie; Data: Sales, its Region as labels, the sum of Amount; Display: a title, values on it
+    pointer click:285,350 wait:0.3 click:350,215 wait:0.4
+    pointer click:450,271 wait:0.4 key:Down key:Down key:Return wait:0.5
+    pointer click:450,299 wait:0.4 key:Down key:Down key:Down key:Return wait:0.5
+    pointer click:400,355 wait:0.4 key:Down key:Down key:Down key:Down key:Return wait:0.8
+    away; shot editor-data
+    pointer click:305,215 wait:0.4 click:450,243 wait:0.2 type:sales key:space type:by key:space type:region \
+        click:256,495 wait:0.6
+    away; shot editor-display
+    pointer click:742,588 wait:0.6 key:ctrl+s wait:0.5
+    [ "$(stjson Main graph1 'c["type"] == "Graph" and c["props"]["graph"] == {"type": "Pie", "title": "sales by region", "showValues": True, "table": "Sales", "labelField": "Region", "series": [{"field": "Amount", "aggregate": "sum"}]}')" = True ]
+    expect_true $? "Graph in the Toolbox: the Graph Editor at once; Pie, Sales by Region, the sum of Amount, a title and values: in the project" \
+        "$(stjson Main graph1 c)"
+    away; shot designer
+    # its clicked code (double-click it: the code window) puts the slice's label in the form's title
+    pointer click:$(stf 264 174) click:$(stf 264 174) wait:0.8 key:ctrl+a type:form key:period type:title key:space key:equal \
+        key:space type:graph1 key:period type:clicked key:shift+l type:abel wait:0.3 key:Escape key:ctrl+s wait:0.5
+    [ "$(stjson Main graph1 'c["events"].get("clicked")')" = "form.title = graph1.clickedLabel" ]
+    expect_true $? "its clicked code" "$(stjson Main graph1 c)"
+    # the app: Sales's records as a pie (North 125, South 60, East 80, West 5)
+    pointer key:F5
+    for _ in $(seq 40); do [ "$(windows_of salesapp)" -ge 1 ] && break; sleep 0.25; done
+    sleep 2
+    query list | grep -q "^Sales|salesapp|"
+    expect_true $? "F5: the app opens" "$(query list | tr '\n' ' ')$(tail -3 "$WORK/$SUITE-studio.log")"
+    away; shot running
+    expect_pixel "North's slice, the first (Windows: lavender), top right of the middle" running $(stapp 250 140 | tr ',' ' ') 9999ff
+    expect_pixel "South's, the second (Windows: plum)" running $(stapp 202 225 | tr ',' ' ') 993366
+    pointer click:$(stapp 202 225) wait:0.8
+    query list | grep -q "^South|salesapp|"
+    expect_true $? "a click on South's slice: clicked, with graph1.clickedLabel South" "$(query list | tr '\n' ' ')"
+    away; shot clicked
+}
+
+# --- Wayland Studio: a stock graph in the Graph Editor (Type, Data, Stock), the app's candles ---
+suite_studiostock() {
+    say "studiostock: Wayland Studio: a Candlestick graph in the Graph Editor (its fields, an SMA, Volume and RSI), the app's candles, a click on one"
+    [ -x "$BUILD/win95studio" ] && command -v python3 >/dev/null && command -v magick >/dev/null || { bad "studiostock" "not built, or no python3/magick"; return; }
+    fresh
+    start_shell || return
+    STHOME=$WORK/home-$SUITE
+    rm -rf "$STHOME"; mkdir -p "$STHOME"
+    # stocks.w95proj's tables, thirty days of bars, and an empty form
+    python3 - "$REPO/tests/studio/stocks.w95proj" "$STHOME/contacts.w95proj" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))
+p["app"].update(name="stockapp", title="Stocks")
+p["database"]["file"] = "stocks.db"
+p["forms"] = [{"name": "Main", "width": 520, "height": 340, "props": {"title": "Stocks"}, "code": {}, "controls": []}]
+json.dump(p, open(sys.argv[2], "w"), indent=1)
+PY
+    cat >"$STHOME/seed.js" <<'JS'
+var p = 20;
+for (var d = 1; d <= 30; ++d) {
+    var o = p, c = o + (d % 4 === 0 ? -1.5 : d % 3 === 0 ? -0.5 : 1);
+    Db.insert("Bars", { Day: "2026-03-" + (d < 10 ? "0" : "") + d, Open: o, High: Math.max(o, c) + 0.6, Low: Math.min(o, c) - 0.4,
+                        Close: c, Volume: 1000 + d * 50 });
+    p = c;
+}
+Test.out(Db.count("Bars"));
+JS
+    ( cd "$STHOME" && QT_QPA_PLATFORM=offscreen "$BUILD/win95apprun" --eval seed.js contacts.w95proj >/dev/null 2>&1 )
+    HOME=$STHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        "$BUILD/win95studio" "$STHOME/contacts.w95proj" >"$WORK/$SUITE-studio.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95studio)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    # Graph in the Toolbox (double-click): the Graph Editor; Candlestick
+    pointer click:69,143 wait:0.5 click:99,527 click:99,527 wait:1
+    pointer click:537,334 wait:0.4
+    away; shot editor-type
+    # Data: Bars, a bar a Day, its Close, Open, High, Low and Volume
+    pointer click:350,215 wait:0.4
+    pointer click:450,272 wait:0.4 key:Down key:Down key:Down key:Return wait:0.5
+    pointer click:450,300 wait:0.4 key:Down key:Down key:Down key:Return wait:0.5
+    pointer click:450,356 wait:0.4 key:Down key:Down key:Down key:Down key:Down key:Down key:Return wait:0.3
+    pointer click:450,382 wait:0.4 key:Down key:Down key:Down key:Return wait:0.3
+    pointer click:450,408 wait:0.4 key:Down key:Down key:Down key:Down key:Return wait:0.3
+    pointer click:450,434 wait:0.4 key:Down key:Down key:Down key:Down key:Down key:Return wait:0.3
+    pointer click:450,460 wait:0.4 key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Return wait:0.8
+    away; shot editor-data
+    # Stock: an SMA (20, as it starts) over the prices, Volume and an RSI (14) under them, the latest 25
+    pointer click:395,215 wait:0.4
+    pointer click:425,275 wait:0.4 key:Down key:Down key:Return wait:0.3
+    pointer click:373,355 wait:0.2
+    pointer click:425,381 wait:0.4 key:Down key:Down key:Return wait:0.3
+    pointer click:395,465 wait:0.2 type:25 wait:0.8
+    away; shot editor-stock
+    pointer click:742,588 wait:0.6 key:ctrl+s wait:0.5
+    [ "$(stjson Main graph1 'c["props"]["graph"] == {"type": "Candlestick", "table": "Bars", "labelField": "Day", "groupDates": "day", "closeField": "Close", "openField": "Open", "highField": "High", "lowField": "Low", "volumeField": "Volume", "overlays": ["SMA 20"], "studies": ["Volume", "RSI 14"], "showLast": 25}')" = True ]
+    expect_true $? "the Graph Editor: Candlestick, Bars a Day, its five fields, an SMA, Volume and RSI, the latest 25: in the project" \
+        "$(stjson Main graph1 c)"
+    away; shot designer
+    # the app: the bars as candles, the last close (down) in red on the axis, the volume in lavender
+    pointer key:F5
+    for _ in $(seq 40); do [ "$(windows_of stockapp)" -ge 1 ] && break; sleep 0.25; done
+    sleep 2
+    query list | grep -q "^Stocks|stockapp|"
+    expect_true $? "F5: the app opens" "$(query list | tr '\n' ' ')$(tail -3 "$WORK/$SUITE-studio.log")"
+    away; shot running
+    colors=$(magick "$WORK/$SUITE-running.png" -crop "320x220+$(stapp 104 64 | tr ',' '+')" +repage -format %c histogram:info:- 2>/dev/null)
+    echo "$colors" | grep -qi "#FF0000" && echo "$colors" | grep -qi "#9999FF" && echo "$colors" | grep -qi "#000080"
+    expect_true $? "its candles: the last price on the axis (red: down), the volume (lavender), the SMA (navy)" \
+        "$(echo "$colors" | sort -rn | head -8 | tr '\n' ' ')"
+}
+
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup calc email web dbservices nginx studio studioimport studioapi studioai studiograph studiostock monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

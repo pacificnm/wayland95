@@ -1,0 +1,10 @@
+byRegion {"labels":["East","North","South","West"],"series":[["Amount",[80,125,60.5,0]],["Units sold",[4,7,2,0]]]}
+top2 {"labels":["South","North"],"series":[["Records",[2,2]]]}
+perMonth {"labels":["Jan 2026","Feb 2026","Mar 2026"],"series":[["Amount",[150.5,105,10]],["Most Amount",[100,80,10]]]}
+paidOnly {"labels":["Yes"],"series":[["Average Amount",[68.33]]]}
+fromCode {"labels":["a","b","c"],"series":[["",[5,-2,7]]]}
+fromCode2 {"labels":["x","y"],"series":[["One",[1,2]],["Two",[3,null]]]}
+empty {"labels":[],"series":[["Units",[]]]}
+after insert {"labels":["East","North","South","West"],"series":[["Amount",[100,125,60.5,0]],["Units sold",[7,7,2,0]]]}
+hit East Amount 100 0 at 45 200
+slice South 2

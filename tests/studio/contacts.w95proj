@@ -1,0 +1,86 @@
+{
+  "format": 1,
+  "app": { "name": "contacts", "title": "Contacts", "version": "1.0", "startForm": "Main" },
+  "database": { "driver": "sqlite", "file": "contacts.db" },
+  "tables": [
+    {
+      "name": "Companies", "label": "Companies",
+      "fields": [
+        { "name": "Name", "label": "Company", "type": "text", "required": true, "unique": true, "maxLength": 40 },
+        { "name": "Website", "type": "url" }
+      ]
+    },
+    {
+      "name": "Contacts", "label": "Contacts",
+      "fields": [
+        { "name": "Name", "type": "text", "required": true, "minLength": 2, "maxLength": 30 },
+        { "name": "Email", "label": "E-mail", "type": "email", "unique": true },
+        { "name": "Phone", "type": "phone" },
+        { "name": "Age", "type": "integer", "min": 0, "max": 150 },
+        { "name": "Balance", "type": "currency", "default": "0" },
+        { "name": "Score", "type": "decimal", "decimals": 1 },
+        { "name": "Ratio", "type": "float" },
+        { "name": "Active", "type": "boolean", "default": "yes" },
+        { "name": "Born", "type": "date", "min": "1900-01-01", "max": "today" },
+        { "name": "Wakes", "type": "time" },
+        { "name": "Seen", "label": "Last Seen", "type": "datetime" },
+        { "name": "Kind", "type": "choice", "choices": ["Friend", "Family", "Work"], "default": "Friend" },
+        { "name": "Company", "type": "lookup", "lookupTable": "Companies" },
+        { "name": "Code", "type": "text", "pattern": "[A-Z]{2}-[0-9]{3}", "message": "Code looks like AB-123." },
+        { "name": "Notes", "type": "memo" },
+        { "name": "Discount", "type": "integer", "rule": "value <= 50 || record.Kind === 'Family'", "message": "Only family gets more than 50% off." }
+      ]
+    }
+  ],
+  "forms": [
+    {
+      "name": "Main", "width": 520, "height": 340,
+      "props": { "title": "Contacts", "table": "Contacts" },
+      "code": {
+        "general": "property int saves: 0\nfunction status(text) {\n    statusLabel.text = text;\n    console.log(\"status: \" + text);\n}",
+        "load": "status(\"Ready\");",
+        "saved": "saves += 1;\nstatus(\"Saved \" + record.Name + \" as #\" + recordId);",
+        "validationFailed": "status(\"Refused: \" + Object.keys(errors).join(\",\"));"
+      },
+      "controls": [
+        { "type": "Frame", "name": "frame1", "x": 8, "y": 8, "width": 248, "height": 180, "props": { "text": "Contact" } },
+        { "type": "Label", "name": "label1", "x": 20, "y": 32, "width": 60, "height": 17, "props": { "text": "Name:" } },
+        { "type": "TextBox", "name": "nameBox", "x": 88, "y": 28, "width": 152, "height": 21, "props": { "field": "Name" } },
+        { "type": "Label", "name": "label2", "x": 20, "y": 60, "width": 60, "height": 17, "props": { "text": "E-mail:" } },
+        { "type": "TextBox", "name": "emailBox", "x": 88, "y": 56, "width": 152, "height": 21, "props": { "field": "Email" } },
+        { "type": "Label", "name": "label3", "x": 20, "y": 88, "width": 60, "height": 17, "props": { "text": "Kind:" } },
+        { "type": "ComboBox", "name": "kindBox", "x": 88, "y": 84, "width": 152, "height": 21, "props": { "field": "Kind" } },
+        { "type": "Label", "name": "label4", "x": 20, "y": 116, "width": 60, "height": 17, "props": { "text": "Company:" } },
+        { "type": "ComboBox", "name": "companyBox", "x": 88, "y": 112, "width": 152, "height": 21, "props": { "field": "Company" } },
+        { "type": "CheckBox", "name": "activeBox", "x": 88, "y": 144, "width": 100, "height": 17, "props": { "text": "Active", "field": "Active" } },
+        { "type": "DataGrid", "name": "grid", "x": 264, "y": 12, "width": 248, "height": 176, "props": { "columns": ["Name", "Email"] } },
+        { "type": "Button", "name": "newButton", "x": 8, "y": 200, "width": 80, "height": 24, "props": { "text": "New" },
+          "events": { "clicked": "form.newRecord();\nnameBox.forceActiveFocus();\nstatus(\"New\");" } },
+        { "type": "Button", "name": "saveButton", "x": 96, "y": 200, "width": 80, "height": 24,
+          "props": { "text": "Save", "isDefault": true, "fontBold": true },
+          "events": { "clicked": "form.save();" } },
+        { "type": "Button", "name": "deleteButton", "x": 184, "y": 200, "width": 80, "height": 24, "props": { "text": "Delete", "foreColor": "#800000" },
+          "events": { "clicked": "if (form.deleteRecord())\n    status(\"Deleted\");" } },
+        { "type": "Button", "name": "aboutButton", "x": 272, "y": 200, "width": 80, "height": 24, "props": { "text": "About" },
+          "events": { "clicked": "App.openForm(\"About\", { from: form.formName });" } },
+        { "type": "Label", "name": "statusLabel", "x": 8, "y": 236, "width": 504, "height": 21,
+          "props": { "text": "", "borderStyle": "Sunken", "backColor": "#ffffe1", "foreColor": "#000080" } },
+        { "type": "Shape", "name": "shape1", "x": 8, "y": 268, "width": 504, "height": 4, "props": { "shape": "Horizontal Line", "borderColor": "#808080" } },
+        { "type": "OptionButton", "name": "optFriend", "x": 8, "y": 284, "width": 80, "height": 17, "props": { "text": "Friend", "field": "Kind" } },
+        { "type": "OptionButton", "name": "optFamily", "x": 96, "y": 284, "width": 80, "height": 17, "props": { "text": "Family", "field": "Kind" } },
+        { "type": "ListBox", "name": "list1", "x": 360, "y": 196, "width": 152, "height": 36, "props": { "items": ["One", "Two", "Three"] } }
+      ]
+    },
+    {
+      "name": "About", "width": 260, "height": 110,
+      "props": { "title": "About Contacts", "resizable": false, "backColor": "#008080" },
+      "code": { "load": "console.log(\"about: opened from \" + args.from);" },
+      "controls": [
+        { "type": "Label", "name": "label1", "x": 16, "y": 16, "width": 228, "height": 40,
+          "props": { "text": "Contacts 1.0\nMade in Wayland Studio", "foreColor": "#ffffff", "fontBold": true, "fontSize": 13, "alignment": "Center" } },
+        { "type": "Button", "name": "okButton", "x": 90, "y": 72, "width": 80, "height": 24, "props": { "text": "OK", "isDefault": true },
+          "events": { "clicked": "form.close();" } }
+      ]
+    }
+  ]
+}

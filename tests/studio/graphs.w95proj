@@ -1,0 +1,204 @@
+{
+ "format": 1,
+ "app": {
+  "name": "graphtest",
+  "title": "Graph Test",
+  "version": "1.0",
+  "startForm": "Main"
+ },
+ "database": {
+  "driver": "sqlite",
+  "file": "graphtest.db"
+ },
+ "tables": [
+  {
+   "name": "Sales",
+   "fields": [
+    {
+     "name": "Region",
+     "type": "text"
+    },
+    {
+     "name": "Sold",
+     "type": "date"
+    },
+    {
+     "name": "Amount",
+     "type": "currency"
+    },
+    {
+     "name": "Units",
+     "type": "integer"
+    },
+    {
+     "name": "Paid",
+     "type": "boolean"
+    }
+   ]
+  }
+ ],
+ "forms": [
+  {
+   "name": "Main",
+   "width": 700,
+   "height": 520,
+   "props": {
+    "title": "Graphs"
+   },
+   "code": {
+    "general": "function log(s) { console.log(\"T \" + s); }\nfunction show(g) { return JSON.stringify({ labels: g.labels, series: g.series.map(function (s) { return [s.name, s.values.map(function (v) { return v === null ? null : Math.round(v * 100) / 100; })]; }) }); }\nTimer { id: tick; interval: 700; onTriggered: afterPaint() }\n// what's drawn: the first bar found across, low down; then a picture of the graph\nfunction afterPaint() {\n    var y = Math.round(byRegion.height * 0.8), hit = null, x;\n    for (x = 0; x < byRegion.width && !hit; ++x)\n        hit = byRegion.itemAt(x, y);\n    log(hit ? \"hit \" + hit.label + \" \" + hit.name + \" \" + hit.value + \" \" + hit.index + \" at \" + (x + 2) + \" \" + y : \"hit nothing\");\n    var slice = top2.itemAt(top2.width / 2 + 5, top2.height / 2 - 30);\n    log(\"slice \" + (slice ? slice.label + \" \" + slice.value : \"nothing\"));\n    byRegion.grabToImage(function (r) {\n        r.saveToFile(\"byRegion.png\");\n        top2.grabToImage(function (r2) {\n            r2.saveToFile(\"top2.png\");\n            App.quit();\n        });\n    });\n}",
+    "load": "var rows = [[\"North\", \"2026-01-05\", 100, 2, true], [\"South\", \"2026-01-20\", 50.5, 1, false], [\"North\", \"2026-02-11\", 25, 5, true],\n            [\"East\", \"2026-02-12\", 80, 4, true], [\"South\", \"2026-03-01\", 10, 1, true], [\"West\", \"2026-03-15\", 0, 0, false]];\nrows.forEach(function (r) { Db.insert(\"Sales\", { Region: r[0], Sold: r[1], Amount: r[2], Units: r[3], Paid: r[4] }); });\n[byRegion, top2, perMonth, paidOnly, fromCode, empty].forEach(function (g) { g.refresh(); });\nlog(\"byRegion \" + show(byRegion));\nlog(\"top2 \" + show(top2));\nlog(\"perMonth \" + show(perMonth));\nlog(\"paidOnly \" + show(paidOnly));\nfromCode.setData([\"a\", \"b\", \"c\"], [5, -2, 7]);\nlog(\"fromCode \" + show(fromCode));\nfromCode.setData([\"x\", \"y\"], [{ name: \"One\", values: [1, 2] }, { name: \"Two\", values: [3, null] }]);\nlog(\"fromCode2 \" + show(fromCode));\nlog(\"empty \" + show(empty));\n// a new record: the graphs of its table are read again\nDb.insert(\"Sales\", { Region: \"East\", Sold: \"2026-03-20\", Amount: 20, Units: 3, Paid: true });\nQt.callLater(function () {\n    log(\"after insert \" + show(byRegion));\n    // drawn: what's at the middle of the first bar, and a picture of it\n    tick.start();\n});"
+   },
+   "controls": [
+    {
+     "type": "Graph",
+     "name": "byRegion",
+     "x": 0,
+     "y": 0,
+     "width": 340,
+     "height": 250,
+     "props": {
+      "graph": {
+       "type": "Column",
+       "table": "Sales",
+       "labelField": "Region",
+       "sort": "label",
+       "legend": "None",
+       "series": [
+        {
+         "field": "Amount",
+         "aggregate": "sum"
+        },
+        {
+         "field": "Units",
+         "aggregate": "sum",
+         "name": "Units sold"
+        }
+       ],
+       "palette": "Bright"
+      }
+     },
+     "events": {
+      "clicked": "log(\"clicked \" + byRegion.clickedLabel + \" \" + byRegion.clickedSeries + \" \" + byRegion.clickedValue + \" \" + byRegion.clickedIndex);"
+     }
+    },
+    {
+     "type": "Graph",
+     "name": "top2",
+     "x": 350,
+     "y": 0,
+     "width": 340,
+     "height": 250,
+     "props": {
+      "graph": {
+       "type": "Pie",
+       "table": "Sales",
+       "labelField": "Region",
+       "series": [
+        {
+         "field": "",
+         "aggregate": "count"
+        }
+       ],
+       "sort": "valueDesc",
+       "limit": 2
+      }
+     },
+     "events": {}
+    },
+    {
+     "type": "Graph",
+     "name": "perMonth",
+     "x": 0,
+     "y": 260,
+     "width": 230,
+     "height": 250,
+     "props": {
+      "graph": {
+       "type": "Line",
+       "table": "Sales",
+       "labelField": "Sold",
+       "groupDates": "month",
+       "series": [
+        {
+         "field": "Amount",
+         "aggregate": "sum"
+        },
+        {
+         "field": "Amount",
+         "aggregate": "max"
+        }
+       ]
+      }
+     },
+     "events": {}
+    },
+    {
+     "type": "Graph",
+     "name": "paidOnly",
+     "x": 240,
+     "y": 260,
+     "width": 230,
+     "height": 250,
+     "props": {
+      "graph": {
+       "type": "Bar",
+       "table": "Sales",
+       "labelField": "Paid",
+       "series": [
+        {
+         "field": "Amount",
+         "aggregate": "average"
+        }
+       ],
+       "filterField": "Units",
+       "filterOp": ">=",
+       "filterValue": "2"
+      }
+     },
+     "events": {}
+    },
+    {
+     "type": "Graph",
+     "name": "fromCode",
+     "x": 480,
+     "y": 260,
+     "width": 110,
+     "height": 120,
+     "props": {
+      "graph": {
+       "type": "Area",
+       "source": "code"
+      }
+     },
+     "events": {}
+    },
+    {
+     "type": "Graph",
+     "name": "empty",
+     "x": 480,
+     "y": 390,
+     "width": 110,
+     "height": 120,
+     "props": {
+      "graph": {
+       "type": "Doughnut",
+       "table": "Sales",
+       "labelField": "Region",
+       "series": [
+        {
+         "field": "Units",
+         "aggregate": "sum"
+        }
+       ],
+       "filterField": "Region",
+       "filterOp": "=",
+       "filterValue": "Nowhere"
+      }
+     },
+     "events": {}
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,219 @@
+# (sourced by screenshots.sh after tests/run.sh's helpers)
+
+# the Studio's window (1000x680 at 43,55 inside its frame), a part of it, or the whole screen -> images/NAME.png
+pic() { # NAME [X Y W H]
+    away; shot "$1"
+    local geometry=${2:-}
+    [ -z "$geometry" ] && geometry="1280x768+0+0"
+    magick "$WORK/$SUITE-$1.png" -crop "$geometry" +repage "$MANUAL/images/$1.png"
+}
+studio() { # PROJECT (or nothing): the Studio, on it
+    HOME=$STHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        "$BUILD/win95studio" "$@" >>"$WORK/$SUITE-studio.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95studio)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    # maximized (its frame's middle button)
+    pointer click:1013,43 wait:1
+}
+
+# the program the Studio starts (Start): its window, with a little around it
+APP="680x440+60+50"
+# a dialog W x H in the middle of the Studio, with a little around it
+middle() { echo "$(($1 + 40))x$(($2 + 40))+$((640 - $1 / 2 - 20))+$((384 - $2 / 2 - 20))"; }
+suite_manual() {
+    SUITE=manual
+    say "the Studio manual's pictures"
+    fresh
+    start_shell || return
+    STHOME=$WORK/home-manual
+    mkdir -p "$STHOME"
+    cp "$MANUAL/sample/bookclub-tables.w95proj" "$STHOME/bookclub.w95proj"
+    ( cd "$STHOME" && QT_QPA_PLATFORM=offscreen "$BUILD/win95apprun" --eval "$MANUAL/sample/seed.js" bookclub.w95proj )
+
+    # a new project
+    studio
+    pic new-project
+    query close "Project1 - Wayland Studio"; sleep 1
+
+    studio "$STHOME/bookclub.w95proj"
+    # the Data Designer: Books, its Finished field
+    pointer click:1050,162 wait:0.6 click:100,307 wait:0.5
+    pic data-designer
+    # Author's Validation Rule (its 10th property): the list of rules
+    pointer click:100,217 wait:0.5 click:100,614 wait:0.3 key:F4 wait:0.8
+    pic validation-rules
+    pointer key:Escape wait:0.5
+    # Added's Default Value (its 6th): the list
+    pointer click:100,343 wait:0.5 click:100,542 wait:0.3 key:F4 wait:0.6
+    pic date-defaults
+    pointer key:Escape wait:0.4
+    # the Data view, and New Record
+    pointer click:70,110 wait:1.2
+    pic data-view
+    pointer click:67,135 wait:0.8
+    pic new-record
+    pointer key:Escape wait:0.4
+
+    # Add Form for Members, then for Books (Project, its third item), and save
+    pointer click:28,110 wait:0.5 click:1050,144 wait:0.6 click:128,33 wait:0.4 key:Down key:Down key:Down key:Return wait:1
+    pointer click:1050,180 wait:0.6 click:128,33 wait:0.4 key:Down key:Down key:Down key:Return wait:1 key:ctrl+s wait:0.6
+    pic add-form
+    query close "bookclub.w95proj - Wayland Studio"; sleep 1
+
+    # the finished sample: a Menu, a ToolBar, code, an About form
+    python3 "$MANUAL/sample/finish.py" "$STHOME/bookclub.w95proj" "$MANUAL/sample/bookclub.w95proj"
+    cp "$MANUAL/sample/bookclub.w95proj" "$STHOME/bookclub.w95proj"
+    studio "$STHOME/bookclub.w95proj"
+    # the form designer: Title's box selected, its properties
+    pointer click:332,236 wait:0.5
+    pic form-designer
+    # the Menu on the form: its Menus property (its 2nd), F4: the Menu Editor
+    pointer click:400,175 wait:0.5 click:1130,349 wait:0.3 key:F4 wait:0.8
+    # (Club > Members..., the 15th in its list: Open a form, MembersForm)
+    pointer click:500,361 wait:0.3 key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down wait:0.4
+    pic menu-editor
+    pointer click:832,592 wait:0.5
+    # the code window: the form's code (its title bar selects the form), then a list after "form."
+    pointer click:400,151 wait:0.4 click:177,109 wait:0.8
+    pic code-window
+    pointer click:600,400 wait:0.3 key:ctrl+End key:Return type:if key:space key:shift+9 type:form key:period wait:0.3 type:is wait:0.5
+    pic code-complete
+    pointer key:Escape key:BackSpace key:BackSpace key:BackSpace key:BackSpace key:BackSpace key:BackSpace key:BackSpace key:BackSpace key:BackSpace key:BackSpace key:BackSpace wait:0.3
+    # Start: the program
+    pointer key:F5
+    for _ in $(seq 40); do [ "$(windows_of bookclub)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    # (the first book, from the grid)
+    pointer click:420,174 wait:0.8
+    pic app-running "$APP"
+    # Started's calendar
+    pointer click:350,294 wait:0.7
+    pic app-calendar "$APP"
+    pointer key:Escape wait:0.4
+    # a new book, saved with nothing in it: refused, and why
+    pointer click:96,118 wait:0.5 click:152,118 wait:1
+    pic app-refused "$APP"
+    pointer key:Return wait:0.5
+    pic app-marked "$APP"
+    # Club > Members..., and Help > About
+    pointer click:152,94 wait:0.5
+    pic app-menu "$APP"
+    pointer key:Down key:Return wait:1.5
+    pic app-members "720x270+80+66"
+    query close Members; sleep 0.8
+    query activate "Book Club"; sleep 0.4
+    pointer click:188,94 wait:0.5 key:Down key:Return wait:1.2
+    pic app-about "400x210+50+66"
+    pointer key:Return wait:0.6
+    # File > Exit (the last on the menu)
+    query activate "Book Club"; sleep 0.4
+    pointer click:88,94 wait:0.5 key:Up key:Return wait:1.5
+
+    # Make Program (the toolbar): where it goes, then that it's made
+    pointer click:494,60 wait:1
+    pic make-program "$(middle 440 330)"
+    pointer key:Return wait:3
+    pic make-done "$(middle 420 130)"
+    pointer key:Return wait:0.5
+    # Project > Properties... and Database... (the last two: Add Form for is off while a form shows)
+    pointer click:128,33 wait:0.4 key:Up key:Return wait:0.8
+    pic project-properties "$(middle 340 330)"
+    pointer key:Return wait:0.6
+    pointer click:128,33 wait:0.4 key:Up key:Up key:Return wait:1.5
+    pic database "$(middle 400 330)"
+    pointer key:Escape wait:0.5
+    # the Help menu: the manual
+    pointer click:254,33 wait:0.5
+    pic help-menu "420x250+220+20"
+    pointer key:Escape wait:0.3
+    # the sample's records go with it
+    cp "$STHOME/bookclub.db" "$MANUAL/sample/bookclub.db"
+    # (a desktop of their own for the AI Chat's pictures: its Studio where the first one was)
+    fresh
+    start_shell || return
+    manual_ai
+    fresh
+    start_shell || return
+    manual_graph
+}
+
+# the AI Chat chapter: a copy of the finished sample with a form to ask it
+# things (AskForm, its start form); tests/studio/mockclaude.py answers for Claude
+manual_ai() {
+    local AI=$STHOME/ai ASK="440x372+64+56"   # (AskForm's window, from the maximized Studio)
+    rm -rf "$AI"; mkdir -p "$AI"
+    cp "$MANUAL/sample/bookclub.w95proj" "$MANUAL/sample/bookclub.db" "$AI/"
+    python3 - "$AI/bookclub.w95proj" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))
+p["forms"].append({"name": "AskForm", "width": 420, "height": 330, "props": {"title": "Ask the Book Club"}, "code": {},
+    "controls": [{"type": "AIChat", "name": "chat1", "x": 8, "y": 8, "width": 404, "height": 314, "events": {},
+                  "props": {"dataAccess": "Read and Change", "greeting": "Hello! Ask me about the club's books and members.",
+                            "instructions": "You help the members of a small book club keep track of what they read."}}]})
+p["app"]["startForm"] = "AskForm"
+json.dump(p, open(sys.argv[1], "w"), indent=1)
+PY
+    python3 "$REPO/tests/studio/mockclaude.py" "$AI/port" "$AI/requests.log" 2>/dev/null &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ -s "$AI/port" ] && break; sleep 0.1; done
+    export ANTHROPIC_BASE_URL="http://127.0.0.1:$(cat "$AI/port")"
+    studio "$AI/bookclub.w95proj"
+    unset ANTHROPIC_BASE_URL
+    # the project's key: Project > Properties... (the last), typed in and tested, OK
+    pointer click:128,33 wait:0.4 key:Up key:Return wait:0.8 click:658,425 wait:0.3 type:test key:minus type:key \
+        click:766,425 wait:1.5
+    pic ai-chat-key "$(middle 340 330)"
+    pointer click:658,425 key:Return wait:0.6 key:ctrl+s wait:0.5
+    # AskForm (the fourth form), its chat selected: the properties
+    pointer click:1070,180 wait:0.8 click:343,323 wait:0.5
+    pic ai-chat-designer
+    # F5; a question; then a change, asked about first
+    pointer key:F5 wait:2.5 click:231,395 wait:0.3 type:which key:space type:books key:space type:are key:space type:still \
+        key:space type:being key:space type:read key:shift+slash key:Return wait:2
+    pic ai-chat-answer "$ASK"
+    pointer type:put key:space type:dune key:space type:on key:space type:the key:space type:list key:Return wait:2
+    pic ai-chat-confirm "$ASK"
+    pointer key:Return wait:2
+    pic ai-chat-added "$ASK"
+    query close "Ask the Book Club"; sleep 0.8
+}
+
+# Graphs: a copy of the finished sample with an empty StatsForm (its start
+# form); a Graph from the Toolbox, its Graph Editor's pages, and the app
+manual_graph() {
+    local G=$STHOME/graph ED="660x466+309+161" STATS="480x362+64+56"
+    rm -rf "$G"; mkdir -p "$G"
+    cp "$MANUAL/sample/bookclub.w95proj" "$MANUAL/sample/bookclub.db" "$G/"
+    python3 - "$G/bookclub.w95proj" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))
+p["forms"].append({"name": "StatsForm", "width": 460, "height": 320, "props": {"title": "Club Statistics"}, "code": {}, "controls": []})
+p["app"]["startForm"] = "StatsForm"
+json.dump(p, open(sys.argv[1], "w"), indent=1)
+PY
+    studio "$G/bookclub.w95proj"
+    # StatsForm (the fourth form); Graph in the Toolbox (double-click): the Graph Editor
+    pointer click:1070,180 wait:0.8 click:60,493 click:60,493 wait:1.2
+    pic graph-editor-type "$ED"
+    # Pie; Data: Books, by Genre, how many; Display: a title, the percents
+    pointer click:382,349 wait:0.3 click:447,214 wait:0.4
+    pointer click:547,270 wait:0.4 key:Down key:Down key:Down key:Return wait:0.5
+    pointer click:547,298 wait:0.4 key:Down key:Down key:Down key:Down key:Down key:Return wait:0.5
+    pointer click:497,354 wait:0.4 key:Down key:Down key:Return wait:0.8
+    pic graph-editor-data "$ED"
+    pointer click:402,214 wait:0.4 click:547,242 wait:0.2 key:shift+b type:ooks key:space type:by key:space type:genre \
+        click:353,494 wait:0.6
+    pic graph-editor-display "$ED"
+    pointer click:839,587 wait:0.6 key:ctrl+s wait:0.5
+    pic graph-designer
+    pointer key:F5 wait:2.5
+    pic graph-app "$STATS"
+    query close "Club Statistics"; sleep 0.8
+    # a stock graph's Stock page (another Graph, Candlestick; an SMA, Volume and RSI), then Cancel
+    pointer click:60,493 click:60,493 wait:1.2 click:634,333 wait:0.3 click:492,214 wait:0.4
+    pointer click:522,274 wait:0.4 key:Down key:Down key:Return wait:0.3 click:470,354 wait:0.2
+    pointer click:522,380 wait:0.4 key:Down key:Down key:Return wait:0.8
+    pic graph-editor-stock "$ED"
+    pointer click:915,587 wait:0.5
+}

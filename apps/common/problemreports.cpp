@@ -62,6 +62,7 @@ QString ProblemReports::displayName(const QString &program)
         { QStringLiteral("win95calc"), QStringLiteral("Calculator") },
         { QStringLiteral("win95email"), QStringLiteral("Email") },
         { QStringLiteral("win95web"), QStringLiteral("Web Browser") },
+        { QStringLiteral("win95studio"), QStringLiteral("Wayland Studio") },
         { QStringLiteral("win95notify"), QStringLiteral("win95notify") },
     };
     return names.value(program, program);

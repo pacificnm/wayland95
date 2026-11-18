@@ -213,6 +213,7 @@ add_subdirectory(apps/markdown) # win95markdown
 add_subdirectory(apps/calc)     # win95calc
 add_subdirectory(apps/email)    # win95email
 add_subdirectory(apps/web)      # win95web
+add_subdirectory(apps/studio)   # win95studio, win95apprun
 
 pkg_check_modules(VTERM IMPORTED_TARGET vterm)
 if(VTERM_FOUND)

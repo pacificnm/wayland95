@@ -1,0 +1,99 @@
+{
+ "format": 1,
+ "app": {
+  "name": "pickertest",
+  "title": "Picker Test",
+  "version": "1.0",
+  "startForm": "Main"
+ },
+ "database": {
+  "driver": "sqlite",
+  "file": "pickertest.db"
+ },
+ "tables": [
+  {
+   "name": "Events",
+   "fields": [
+    {
+     "name": "Day",
+     "type": "date"
+    },
+    {
+     "name": "At",
+     "type": "time",
+     "default": "09:00"
+    },
+    {
+     "name": "When",
+     "type": "datetime"
+    }
+   ]
+  }
+ ],
+ "forms": [
+  {
+   "name": "Main",
+   "width": 400,
+   "height": 200,
+   "props": {
+    "title": "Pickers",
+    "table": "Events",
+    "showErrors": false
+   },
+   "code": {
+    "general": "property int changes: 0\nfunction log(s) { console.log(\"T \" + s); }",
+    "load": "function pad(n) { return (n < 10 ? \"0\" : \"\") + n; }\nvar now = new Date(), today = now.getFullYear() + \"-\" + pad(now.getMonth() + 1) + \"-\" + pad(now.getDate());\nlog(\"formats \" + dayPicker.text + \" | \" + atPicker.text);\ndayPicker.value = \"2025-03-04\";\nlog(\"set \" + dayPicker.value + \" \" + dayPicker.text + \" field \" + form.record.Day + \" changed \" + changes);\ndayPicker.value = \"today\";\nlog(\"today \" + (dayPicker.value === today));\nlog(\"read \" + AppDates.read(\"04/03/2025\", \"Date\", \"dd/MM/yyyy\", \"\", \"\") + \" \" + AppDates.read(\"2025-03-04\", \"Date\", \"dd/MM/yyyy\", \"\", \"\")\n    + \" \" + AppDates.read(\"nonsense\", \"Date\", \"dd/MM/yyyy\", \"\", \"\") + \"|\");\ndayPicker.value = \"2025-01-02\";\ndayPicker.step(-1); dayPicker.step(-1);\nlog(\"earliest \" + dayPicker.value + \" allowed \" + dayPicker.dayAllowed(new Date(2024, 11, 31)) + \" \" + dayPicker.dayAllowed(new Date(2025, 0, 1)));\natPicker.value = \"16:50\";\natPicker.step(1);\nlog(\"latest time \" + atPicker.value + \" \" + atPicker.text);\natPicker.value = \"07:00\"; atPicker.step(1);\nlog(\"earliest time \" + atPicker.value);\natPicker.value = \"12:00\"; atPicker.step(1);\nlog(\"step \" + atPicker.value);\nwhenPicker.value = \"2025-06-01T12:00:00\";\nvar utc = new Date(2025, 5, 1, 12, 0, 0).toISOString().substring(0, 19);\nlog(\"zone \" + (AppDates.toZone(whenPicker.value, \"Date and Time\", \"UTC\") === utc) + \" \"\n    + (whenPicker.text.indexOf(\"UTC\") > 0 || whenPicker.text.indexOf(\"GMT\") > 0) + \" back \"\n    + (AppDates.read(whenPicker.text, \"Date and Time\", whenPicker.datePattern, whenPicker.timePattern, \"UTC\") === whenPicker.value));\nwhenPicker.openCalendar();\nwhenPicker.closeCalendar(true);\nlog(\"calendar kept \" + whenPicker.value);\nlog(\"date \" + (whenPicker.date instanceof Date) + \" \" + whenPicker.date.getHours());\ndayPicker.value = \"2025-03-04\"; atPicker.value = \"09:15\"; whenPicker.value = \"2025-06-01 12:00\";\nlog(\"save \" + form.save() + \" \" + JSON.stringify([Db.get(\"Events\", form.recordId).Day, Db.get(\"Events\", form.recordId).At, Db.get(\"Events\", form.recordId).When]));\nform.newRecord();\nlog(\"new record: blank \" + JSON.stringify(dayPicker.value) + \" default \" + (atPicker.value === \"09:00:00\"));\ndayPicker.clear();\nlog(\"cleared \" + JSON.stringify(dayPicker.value) + \" \" + form.record.Day);\nlog(\"two-digit years \" + AppDates.read(\"10/8/26\", \"Date\", \"M/d/yy\", \"\", \"\") + \" \" + AppDates.read(\"1/2/99\", \"Date\", \"M/d/yy\", \"\", \"\"));\ndayPicker.dateFormat = \"M/d/yy\"; dayPicker.value = \"2026-10-08\"; dayPicker.openCalendar(); dayPicker.closeCalendar(false);\nlog(\"what shows is not read again \" + dayPicker.value);\nApp.quit();"
+   },
+   "controls": [
+    {
+     "type": "DateTimePicker",
+     "name": "dayPicker",
+     "x": 8,
+     "y": 8,
+     "width": 150,
+     "height": 21,
+     "events": {
+      "changed": "changes++;"
+     },
+     "props": {
+      "field": "Day",
+      "dateFormat": "dd/MM/yyyy",
+      "value": "2024-12-25",
+      "earliestDate": "2025-01-01"
+     }
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "atPicker",
+     "x": 8,
+     "y": 36,
+     "width": 150,
+     "height": 21,
+     "props": {
+      "field": "At",
+      "mode": "Time",
+      "timeFormat": "h:mm AP",
+      "minuteStep": 15,
+      "earliestTime": "09:00",
+      "latestTime": "17:00"
+     }
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "whenPicker",
+     "x": 8,
+     "y": 64,
+     "width": 220,
+     "height": 21,
+     "props": {
+      "field": "When",
+      "mode": "Date and Time",
+      "dateFormat": "yyyy-MM-dd",
+      "timeFormat": "HH:mm",
+      "timeZone": "UTC"
+     }
+    }
+   ]
+  }
+ ]
+}

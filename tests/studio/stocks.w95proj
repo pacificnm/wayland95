@@ -1,0 +1,190 @@
+{
+ "format": 1,
+ "app": {
+  "name": "stocktest",
+  "title": "Stock Test",
+  "version": "1.0",
+  "startForm": "Main"
+ },
+ "database": {
+  "driver": "sqlite",
+  "file": "stocktest.db"
+ },
+ "tables": [
+  {
+   "name": "Trades",
+   "fields": [
+    {
+     "name": "Symbol",
+     "type": "text"
+    },
+    {
+     "name": "At",
+     "type": "datetime"
+    },
+    {
+     "name": "Price",
+     "type": "decimal"
+    },
+    {
+     "name": "Qty",
+     "type": "integer"
+    }
+   ]
+  },
+  {
+   "name": "Bars",
+   "fields": [
+    {
+     "name": "Day",
+     "type": "date"
+    },
+    {
+     "name": "Open",
+     "type": "decimal"
+    },
+    {
+     "name": "High",
+     "type": "decimal"
+    },
+    {
+     "name": "Low",
+     "type": "decimal"
+    },
+    {
+     "name": "Close",
+     "type": "decimal"
+    },
+    {
+     "name": "Volume",
+     "type": "integer"
+    }
+   ]
+  }
+ ],
+ "forms": [
+  {
+   "name": "Main",
+   "width": 700,
+   "height": 520,
+   "props": {
+    "title": "Stocks"
+   },
+   "code": {
+    "general": "function log(s) { console.log(\"T \" + s); }\nfunction r2(v) { return v === null || v === undefined ? null : Math.round(v * 100) / 100; }\nfunction show(g) {\n    return JSON.stringify({ labels: g.labels, series: g.series.map(function (s) {\n        var out = { name: s.name };\n        [\"open\", \"high\", \"low\", \"close\", \"volume\", \"values\"].forEach(function (k) { if (s[k] && (k !== \"values\" || !s.close)) out[k] = s[k].map(r2); });\n        return out;\n    }) });\n}\nTimer { id: later; interval: 700; onTriggered: afterPaint() }\n// where each bar is across (its middle), from itemAt\nfunction middles(g, y) {\n    var at = {}, x;\n    for (x = 0; x < g.width; ++x) {\n        var it = g.itemAt(x, y);\n        if (it) { if (!at[it.index]) at[it.index] = []; at[it.index].push(x); }\n    }\n    return Object.keys(at).map(function (k) { var xs = at[k]; return Math.round((xs[0] + xs[xs.length - 1]) / 2); });\n}\nfunction afterPaint() {\n    var bar = byMinute.itemAt(middles(byMinute, 60)[1], 60);\n    log(\"bar \" + bar.label + \" \" + [bar.open, bar.high, bar.low, bar.close, bar.volume, r2(bar.change)].join(\" \"));\n    log(\"middles \" + middles(byMinute, 60).join(\" \"));\n    byMinute.grabToImage(function (r) {\n        r.saveToFile(\"byMinute.png\");\n        weekly.grabToImage(function (r2) {\n            r2.saveToFile(\"weekly.png\");\n            App.quit();\n        });\n    });\n}",
+    "load": "var trades = [[\"ACME\", \"09:30:05\", 10, 100], [\"ACME\", \"09:30:40\", 10.5, 50], [\"XYZ\", \"09:30:30\", 50, 1], [\"ACME\", \"09:30:55\", 9.8, 25],\n              [\"ACME\", \"09:31:50\", 10.2, 40], [\"ACME\", \"09:31:10\", 9.9, 10], [\"ACME\", \"09:32:30\", 10.1, 5]];\ntrades.forEach(function (t) { Db.insert(\"Trades\", { Symbol: t[0], At: \"2026-03-02T\" + t[1], Price: t[2], Qty: t[3] }); });\nvar bars = [[\"2026-03-02\", 10, 11, 9.5, 10.5, 100], [\"2026-03-03\", 10.5, 12, 10, 11.5, 200], [\"2026-03-06\", 11.5, 11.8, 10.8, 11, 150],\n            [\"2026-03-09\", 11, 11.2, 10, 10.2, 300], [\"2026-03-10\", 10.2, 10.9, 9.9, 10.8, 120]];\nbars.forEach(function (b) { Db.insert(\"Bars\", { Day: b[0], Open: b[1], High: b[2], Low: b[3], Close: b[4], Volume: b[5] }); });\n[byMinute, weekly, perRecord, noClose].forEach(function (g) { g.refresh(); });\nlog(\"byMinute \" + show(byMinute));\nlog(\"weekly \" + show(weekly));\nlog(\"sma \" + JSON.stringify(weekly.indicator(\"SMA 2\").map(r2)));\nlog(\"perRecord \" + show(perRecord));\nlog(\"noClose \" + noClose.labels.length + \" \" + noClose.problem);\n// live, from code: trades, then a whole bar; the first two go\nlive.maxBars = 2;\nlive.tick(\"09:30\", 10, 100);\nlive.tick(\"09:30\", 10.4, 50);\nlive.tick(\"09:30\", 9.9);\nlive.tick(\"09:31\", 10.2, 10);\nlog(\"live \" + show(live));\nlive.addBar(\"09:32\", 10.2, 10.6, 10.1, 10.5, 70);\nlive.addBar(\"09:32\", 10.2, 10.7, 10.1, 10.6, 80);\nlog(\"live2 \" + show(live));\nlog(\"types \" + byMinute.graphType + \" \" + weekly.graphType + \" \" + live.isStock + \" \" + perRecord.isStock);\nlater.start();"
+   },
+   "controls": [
+    {
+     "type": "Graph",
+     "name": "byMinute",
+     "x": 0,
+     "y": 0,
+     "width": 340,
+     "height": 250,
+     "props": {
+      "graph": {
+       "type": "Candlestick",
+       "table": "Trades",
+       "labelField": "At",
+       "groupDates": "minute",
+       "closeField": "Price",
+       "volumeField": "Qty",
+       "filterField": "Symbol",
+       "filterOp": "=",
+       "filterValue": "ACME",
+       "legend": "None",
+       "studies": [
+        "Volume"
+       ],
+       "lastPrice": false
+      }
+     },
+     "events": {}
+    },
+    {
+     "type": "Graph",
+     "name": "weekly",
+     "x": 350,
+     "y": 0,
+     "width": 340,
+     "height": 250,
+     "props": {
+      "graph": {
+       "type": "OHLC",
+       "table": "Bars",
+       "labelField": "Day",
+       "groupDates": "week",
+       "openField": "Open",
+       "highField": "High",
+       "lowField": "Low",
+       "closeField": "Close",
+       "volumeField": "Volume",
+       "overlays": [
+        "SMA 2"
+       ],
+       "studies": [
+        "Volume",
+        "RSI 14"
+       ],
+       "candleColors": "Green and red"
+      }
+     },
+     "events": {}
+    },
+    {
+     "type": "Graph",
+     "name": "perRecord",
+     "x": 0,
+     "y": 260,
+     "width": 230,
+     "height": 250,
+     "props": {
+      "graph": {
+       "type": "Price",
+       "table": "Bars",
+       "closeField": "Close",
+       "legend": "None"
+      }
+     },
+     "events": {}
+    },
+    {
+     "type": "Graph",
+     "name": "noClose",
+     "x": 240,
+     "y": 260,
+     "width": 230,
+     "height": 250,
+     "props": {
+      "graph": {
+       "type": "Candlestick",
+       "table": "Bars",
+       "labelField": "Day"
+      }
+     },
+     "events": {}
+    },
+    {
+     "type": "Graph",
+     "name": "live",
+     "x": 480,
+     "y": 260,
+     "width": 210,
+     "height": 250,
+     "props": {
+      "graph": {
+       "type": "Candlestick",
+       "source": "code",
+       "studies": [
+        "Volume"
+       ],
+       "legend": "None"
+      }
+     },
+     "events": {}
+    }
+   ]
+  }
+ ]
+}

@@ -281,6 +281,23 @@ Canvas {
             ctx.fillStyle = "#e0a000";
             ctx.beginPath(); ctx.moveTo(30, 18); ctx.lineTo(32, 20); ctx.lineTo(22, 30); ctx.lineTo(19, 31); ctx.lineTo(20, 28); ctx.closePath(); ctx.fill(); ctx.stroke();
             break;
+        case "studio":
+            // a form being designed: a window with a label, a text box and
+            // a button on its grid, and a pencil across the corner
+            appWindow(2, 3, 26, 24, "#c0c0c0");
+            for (var gy = 0; gy < 5; ++gy)
+                for (var gx = 0; gx < 6; ++gx)
+                    rect(5 + gx * 4, 11 + gy * 3, 1, 1, "#808080");
+            rect(5, 10, 6, 2, "#000000");
+            frame(13, 9, 12, 5, "#ffffff");
+            frame(13, 18, 12, 6, "#c0c0c0");
+            rect(14, 19, 10, 1, "#ffffff");
+            rect(16, 21, 6, 1, "#000000");
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1;
+            ctx.fillStyle = "#e0a000";
+            ctx.beginPath(); ctx.moveTo(29, 15); ctx.lineTo(32, 18); ctx.lineTo(21, 29); ctx.lineTo(17, 31); ctx.lineTo(18, 27); ctx.closePath(); ctx.fill(); ctx.stroke();
+            break;
         case "doc":
             page(7, 2, 19, 28, 7);
             break;

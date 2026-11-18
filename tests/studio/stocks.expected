@@ -1,0 +1,10 @@
+byMinute {"labels":["09:30","09:31","09:32"],"series":[{"name":"ACME","open":[10,9.9,null],"high":[10.5,10.2,null],"low":[9.8,9.9,null],"close":[9.8,10.2,10.1],"volume":[175,50,5]}]}
+weekly {"labels":["2 Mar 2026","9 Mar 2026"],"series":[{"name":"Bars","open":[10,11],"high":[12,11.2],"low":[9.5,9.9],"close":[11,10.8],"volume":[450,420]}]}
+sma [null,10.9]
+perRecord {"labels":["1","2","3","4","5"],"series":[{"name":"Bars","open":[null,null,null,null,null],"high":[null,null,null,null,null],"low":[null,null,null,null,null],"close":[10.5,11.5,11,10.2,10.8]}]}
+noClose 0 Which field is the price? (Data: Close)
+live {"labels":["09:30","09:31"],"series":[{"name":"","open":[10,10.2],"high":[10.4,10.2],"low":[9.9,10.2],"close":[9.9,10.2],"volume":[150,10]}]}
+live2 {"labels":["09:31","09:32"],"series":[{"name":"","open":[10.2,10.2],"high":[10.2,10.7],"low":[10.2,10.1],"close":[10.2,10.6],"volume":[10,80]}]}
+types Candlestick OHLC true true
+bar 09:31 9.9 10.2 9.9 10.2 50 0.4
+middles 54 151 249

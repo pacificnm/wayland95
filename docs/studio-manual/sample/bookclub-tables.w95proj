@@ -1,0 +1,101 @@
+{
+ "format": 1,
+ "app": {
+  "name": "bookclub",
+  "title": "Book Club",
+  "version": "1.0",
+  "startForm": ""
+ },
+ "database": {
+  "driver": "sqlite",
+  "file": "bookclub.db"
+ },
+ "tables": [
+  {
+   "name": "Members",
+   "label": "Members",
+   "fields": [
+    {
+     "name": "Name",
+     "type": "text",
+     "required": true,
+     "unique": true,
+     "maxLength": 60
+    },
+    {
+     "name": "Email",
+     "label": "E-mail",
+     "type": "email",
+     "unique": true
+    },
+    {
+     "name": "Joined",
+     "type": "date",
+     "default": "today"
+    }
+   ]
+  },
+  {
+   "name": "Books",
+   "label": "Books",
+   "fields": [
+    {
+     "name": "Title",
+     "type": "text",
+     "required": true,
+     "unique": true,
+     "maxLength": 120
+    },
+    {
+     "name": "Author",
+     "type": "text",
+     "required": true,
+     "validator": "person_name"
+    },
+    {
+     "name": "Genre",
+     "type": "choice",
+     "choices": [
+      "Fiction",
+      "Non-fiction",
+      "Poetry",
+      "Biography"
+     ],
+     "default": "Fiction"
+    },
+    {
+     "name": "Reader",
+     "type": "lookup",
+     "lookupTable": "Members"
+    },
+    {
+     "name": "Pages",
+     "type": "integer",
+     "min": 1
+    },
+    {
+     "name": "Started",
+     "type": "date"
+    },
+    {
+     "name": "Finished",
+     "type": "date",
+     "validator": "on_or_after_field",
+     "validatorArg": "Started"
+    },
+    {
+     "name": "Rating",
+     "type": "integer",
+     "min": 1,
+     "max": 5
+    },
+    {
+     "name": "Added",
+     "type": "datetime",
+     "auto": "created"
+    }
+   ]
+  }
+ ],
+ "forms": []
+}

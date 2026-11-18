@@ -140,6 +140,76 @@ values it refuses).
 `tests/services/run.sh --setup` prints what to set to try the
 windows themselves against that copy, with a stand-in `pkexec`.
 
+`tests/studio/run.sh` tests what Wayland Studio's apps are built from,
+without a screen: the ORM against `orm.expected` (every field rule
+refusing and passing, reading, updating, deleting, in SQLite), every
+Validation Rule on the Data Designer's list with values it has to take
+and refuse and its message (`rules.js`, self-checking), a database the
+Studio didn't make (its own keys, a typed-in key, foreign keys, names with
+spaces, a table with no key) read into project tables and read and written
+through them (`import.js`, self-checking; on the servers too), web
+APIs as tables against `mockapi.py` (each kind of sign-in, OAuth's three
+grants and a refresh, an endpoint read as a table, CRUD through it, text
+ids, a Lookup of it: `api.js`, its project made by `api-project.py`), date and time
+defaults (`today+7`, and the times the database sets when a record is
+made or saved: `dates.js`), a database
+growing with its project, the compiler (what a form compiles to, what it
+says about a broken project, one of every element in `elements.json`),
+three DateTimePickers on a form, set, stepped, read, limited, in a time
+zone and saved (`pickers.w95proj`), `form.reset()` after everything on
+a form was changed (`reset.w95proj`), a MediaPlayer for each kind of
+sound and video file (`media.w95proj`, the files made by
+`make-media.sh` with ffmpeg; skipped without it), from the project and
+as a program, a form with a Menu and a ToolBar
+whose items run their Actions and
+events (`menus.w95proj`), Graphs (`graphs.w95proj`: a Sales table and a
+graph of each type and kind of data, grouped and summed, counted, by
+month, filtered, sorted and cut to the first two, from code, and none;
+read again when the table changes; what they read in `graphs.expected`,
+what's drawn where by `itemAt`, pictures of two checked by their pixels,
+and Check for Problems naming a missing table and fields), stock graphs
+(`stocks.w95proj`: trades put in out of order, two symbols, made into a
+candle a minute; daily bars made into weeks with an SMA; a bar for each
+record; no Close field; from code, trades as they happen and whole bars,
+keeping the last two; what they read in `stocks.expected`, a down candle
+black and an up one white by their pixels, and Check for Problems naming
+a missing stock field; and Graph95 on its own through `qmltestrunner`,
+`tst_graph95_stock.qml`: each indicator's numbers, a bar's tip, `tick()`
+and `addBar()` keeping `maxBars`, the wheel, dragging and a double-click),
+an AIChat talking to `mockclaude.py` (a stand-in
+for Anthropic's Messages API, streamed, from a script: `aichat.w95proj`
+sends it one message after another, and what it logs is `aichat.expected`:
+answers, the app's records and form worked through tools, a tool of the
+app's own, Stop part way through a turn (what ran keeps its result), input
+that isn't JSON or doesn't fit, a fallback part way, a
+refusal, a 529 tried again, max_tokens, an error mid-stream; then the project's key wrong, and no
+key at all (said, nothing sent); `aichat-requests.py` then checks every request against
+the API: headers, fields, thinking blocks sent back signed, each tool
+call answered), what the code window offers to complete
+(`apps/studio/codeassist.js` against `assist.js`), and a made program whose form saves through
+validation and moves between records (`selftest.w95proj`). To run it in a server too, name a database
+you can throw away: `STUDIO_MYSQL="name=test user=me"
+STUDIO_POSTGRES="name=test" tests/studio/run.sh` (also `host=`, `port=`,
+`password=`): the same ORM checks against the same `orm.expected`, a
+table growing, the form of `selftest.w95proj`, and importing a database
+the Studio didn't make (`import.js`), in each (it drops its own tables
+before and after). The Studio's own windows are `tests/run.sh studio`,
+and `tests/run.sh studioimport` (Project > Import Tables on a SQLite
+database made with `sqlite3`, a form for each table, and the app on it),
+and `tests/run.sh studioapi` (Project > APIs, Add API Table on
+`mockapi.py`, the app, and a record saved through its form reaching the
+API), and `tests/run.sh studioai` (an AIChat from the Toolbox, its
+DataAccess set, the key in Project > Properties with Test (a wrong one,
+then the right one, saved in the project), and in the app on
+`mockclaude.py` with no key box: a record Claude adds asked about first, Yes and No, and the form
+filled in and saved), and `tests/run.sh studiograph` (a Graph from the
+Toolbox opens the Graph Editor; Pie, Data and Display set through it and
+saved in the project; its clicked code; the app's pie by its pixels, and
+a click on a slice running clicked), and `tests/run.sh studiostock` (a
+Candlestick graph through the Graph Editor: Bars a day, its five fields,
+an SMA, Volume and RSI, the latest 25, saved in the project; the app's
+candles, last price, volume and SMA by their colors).
+
 `tests/calc/run.sh` checks the Calculator's arithmetic through `win95calc
 --keys` (97 sums: left to right in Standard, the usual order and brackets
 in Scientific, = again, %, memory, errors that clear with a number, 16-digit

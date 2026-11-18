@@ -1,0 +1,42 @@
+tables: ["Companies","Contacts"]
+driver: "sqlite"
+refused: false
+refused.errors: {"Age":"Age must be a whole number.","Born":"Born can't be after TODAY.","Code":"Code looks like AB-123.","Company":"Company: that record isn't in Companies any more.","Discount":"Only family gets more than 50% off.","Email":"E-mail must be an e-mail address.","Kind":"Kind must be one of: Friend, Family, Work.","Name":"Name is required.","Phone":"Phone must be a telephone number."}
+refused.messages: 9
+nothing written: 0
+validate: {"Active":"Active must be Yes or No.","Age":"Age must be 0 or more.","Name":"Name must be at least 2 characters.","Score":"Score must be a number.","Seen":"Last Seen must be a date and time, like TODAY 14:30.","Wakes":"Wakes must be a time, like 14:30."}
+validate wrote: 0
+length: {"Name":"Name can be at most 30 characters."}
+company: [true,1]
+company again: {"Name":"There is already a record with this Company."}
+company url: {"Website":"Website must be a web address, like https://example.com."}
+ada: [true,1,[]]
+ada row: {"Active":true,"Age":36,"Balance":12.3457,"Born":"1985-12-10","Code":"AB-123","Company":1,"Discount":80,"Email":"ada@example.com","Kind":"Family","Name":"Ada","Notes":"line one\nline two","Phone":"+1 (555) 010-9999 x12","Ratio":0.1,"Score":9.9,"Seen":"2024-03-05T08:30:00","Wakes":"07:05:00","id":1}
+ada stamped: "string"
+bob row: {"Active":true,"Age":20,"Balance":0,"Born":null,"Code":null,"Company":null,"Discount":null,"Email":null,"Kind":"Friend","Name":"Bob","Notes":null,"Phone":null,"Ratio":null,"Score":null,"Seen":null,"Wakes":null,"id":2}
+same e-mail: {"Email":"There is already a record with this E-mail."}
+update keeps e-mail: true
+update refused: {"Age":"Age must be 150 or less."}
+update unknown field: {"Nope":"Contacts has no field named Nope."}
+update gone: "That record isn't in Contacts any more."
+age: 37
+rule: {"Discount":"Only family gets more than 50% off."}
+rule passes: true
+order: ["Dee","Cy","Bob","Ada"]
+where >=: ["Ada","Cy"]
+where yes/no: ["Cy"]
+where null: ["Bob","Cy","Dee"]
+where like: ["Cy"]
+search: ["Ada"]
+limit: ["Bob","Cy"]
+count: [4,2]
+bad field: [0,"Contacts has no field named x; DROP TABLE Contacts."]
+bad table: "There is no table named Nope."
+lookup list: [{"id":1,"label":"Acme"}]
+lookup label: "Acme"
+remove in use: "This can't be deleted: a record in Contacts still uses it."
+remove: true
+remove free: true
+defaults: {"Active":true,"Age":null,"Balance":0,"Born":null,"Code":null,"Company":null,"Discount":null,"Email":null,"Kind":"Friend","Name":null,"Notes":null,"Phone":null,"Ratio":null,"Score":null,"Seen":null,"Wakes":null}
+names: ["","Names start with a letter and have only letters, digits and _ in them.","Every table already has a field named id.","A name is needed."]
+field info: ["Friend","Family","Work"]

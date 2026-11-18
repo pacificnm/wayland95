@@ -1,0 +1,166 @@
+{
+ "format": 1,
+ "app": {
+  "name": "mediatest",
+  "title": "Media Test",
+  "version": "1.0",
+  "startForm": "Main"
+ },
+ "database": {
+  "driver": "sqlite",
+  "file": "mediatest.db"
+ },
+ "tables": [],
+ "forms": [
+  {
+   "name": "Main",
+   "width": 540,
+   "height": 280,
+   "props": {
+    "title": "Media"
+   },
+   "code": {
+    "general": "property var order: [\"mp3Player\", \"wavPlayer\", \"flacPlayer\", \"oggPlayer\", \"m4aPlayer\", \"mp4Player\", \"webmPlayer\", \"badPlayer\"]\nproperty int at: -1\nfunction log(s) { console.log(\"T \" + s); }\nfunction next() {\n    at += 1;\n    if (at >= order.length) {\n        log(\"urls \" + (String(mp3Player.playing).indexOf(\"file://\") === 0) + \" \" + (String(mp4Player.playing).indexOf(\"/media/clip.mp4\") > 0)\n            + \" embedded \" + (String(mp3Player.playing).indexOf(\"/cache/\") > 0));\n        mp3Player.source = \"\";\n        log(\"cleared \" + JSON.stringify(mp3Player.playing));\n        App.quit();\n        return;\n    }\n    // (the broken one gets its file at its turn)\n    if (order[at] === \"badPlayer\")\n        badPlayer.source = \"/nowhere/broken.mp3\";\n    eval(order[at]).play();\n}",
+    "load": "next();"
+   },
+   "controls": [
+    {
+     "type": "MediaPlayer",
+     "name": "mp3Player",
+     "x": 8,
+     "y": 8,
+     "width": 120,
+     "height": 120,
+     "props": {
+      "source": "media/tone.mp3",
+      "muted": true
+     },
+     "events": {
+      "finished": "log(\"mp3Player finished\");\nnext();",
+      "started": "log(\"mp3Player started video \" + mp3Player.hasVideo + \" audio \" + mp3Player.hasAudio + \" length \" + (mp3Player.duration > 500 && mp3Player.duration < 1600));",
+      "failed": "log(\"mp3Player failed \" + (mp3Player.errorString !== \"\"));\nnext();"
+     }
+    },
+    {
+     "type": "MediaPlayer",
+     "name": "wavPlayer",
+     "x": 138,
+     "y": 8,
+     "width": 120,
+     "height": 120,
+     "props": {
+      "source": "media/tone.wav",
+      "muted": true
+     },
+     "events": {
+      "finished": "log(\"wavPlayer finished\");\nnext();",
+      "started": "log(\"wavPlayer started video \" + wavPlayer.hasVideo + \" audio \" + wavPlayer.hasAudio + \" length \" + (wavPlayer.duration > 500 && wavPlayer.duration < 1600));",
+      "failed": "log(\"wavPlayer failed \" + (wavPlayer.errorString !== \"\"));\nnext();"
+     }
+    },
+    {
+     "type": "MediaPlayer",
+     "name": "flacPlayer",
+     "x": 268,
+     "y": 8,
+     "width": 120,
+     "height": 120,
+     "props": {
+      "source": "media/tone.flac",
+      "muted": true
+     },
+     "events": {
+      "finished": "log(\"flacPlayer finished\");\nnext();",
+      "started": "log(\"flacPlayer started video \" + flacPlayer.hasVideo + \" audio \" + flacPlayer.hasAudio + \" length \" + (flacPlayer.duration > 500 && flacPlayer.duration < 1600));",
+      "failed": "log(\"flacPlayer failed \" + (flacPlayer.errorString !== \"\"));\nnext();"
+     }
+    },
+    {
+     "type": "MediaPlayer",
+     "name": "oggPlayer",
+     "x": 398,
+     "y": 8,
+     "width": 120,
+     "height": 120,
+     "props": {
+      "source": "media/tone.ogg",
+      "muted": true
+     },
+     "events": {
+      "finished": "log(\"oggPlayer finished\");\nnext();",
+      "started": "log(\"oggPlayer started video \" + oggPlayer.hasVideo + \" audio \" + oggPlayer.hasAudio + \" length \" + (oggPlayer.duration > 500 && oggPlayer.duration < 1600));",
+      "failed": "log(\"oggPlayer failed \" + (oggPlayer.errorString !== \"\"));\nnext();"
+     }
+    },
+    {
+     "type": "MediaPlayer",
+     "name": "m4aPlayer",
+     "x": 8,
+     "y": 138,
+     "width": 120,
+     "height": 120,
+     "props": {
+      "source": "media/tone.m4a",
+      "muted": true
+     },
+     "events": {
+      "finished": "log(\"m4aPlayer finished\");\nnext();",
+      "started": "log(\"m4aPlayer started video \" + m4aPlayer.hasVideo + \" audio \" + m4aPlayer.hasAudio + \" length \" + (m4aPlayer.duration > 500 && m4aPlayer.duration < 1600));",
+      "failed": "log(\"m4aPlayer failed \" + (m4aPlayer.errorString !== \"\"));\nnext();"
+     }
+    },
+    {
+     "type": "MediaPlayer",
+     "name": "mp4Player",
+     "x": 138,
+     "y": 138,
+     "width": 120,
+     "height": 120,
+     "props": {
+      "source": "media/clip.mp4",
+      "muted": true,
+      "embed": false
+     },
+     "events": {
+      "finished": "log(\"mp4Player finished\");\nnext();",
+      "started": "log(\"mp4Player started video \" + mp4Player.hasVideo + \" audio \" + mp4Player.hasAudio + \" length \" + (mp4Player.duration > 500 && mp4Player.duration < 1600));",
+      "failed": "log(\"mp4Player failed \" + (mp4Player.errorString !== \"\"));\nnext();"
+     }
+    },
+    {
+     "type": "MediaPlayer",
+     "name": "webmPlayer",
+     "x": 268,
+     "y": 138,
+     "width": 120,
+     "height": 120,
+     "props": {
+      "source": "media/clip.webm",
+      "muted": true
+     },
+     "events": {
+      "finished": "log(\"webmPlayer finished\");\nnext();",
+      "started": "log(\"webmPlayer started video \" + webmPlayer.hasVideo + \" audio \" + webmPlayer.hasAudio + \" length \" + (webmPlayer.duration > 500 && webmPlayer.duration < 1600));",
+      "failed": "log(\"webmPlayer failed \" + (webmPlayer.errorString !== \"\"));\nnext();"
+     }
+    },
+    {
+     "type": "MediaPlayer",
+     "name": "badPlayer",
+     "x": 398,
+     "y": 138,
+     "width": 120,
+     "height": 120,
+     "props": {
+      "muted": true
+     },
+     "events": {
+      "finished": "log(\"badPlayer finished\");\nnext();",
+      "started": "log(\"badPlayer started video \" + badPlayer.hasVideo + \" audio \" + badPlayer.hasAudio + \" length \" + (badPlayer.duration > 500 && badPlayer.duration < 1600));",
+      "failed": "log(\"badPlayer failed \" + (badPlayer.errorString !== \"\"));\nnext();"
+     }
+    }
+   ]
+  }
+ ]
+}

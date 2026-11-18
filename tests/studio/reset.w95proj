@@ -1,0 +1,209 @@
+{
+ "format": 1,
+ "app": {
+  "name": "resettest",
+  "title": "Reset Test",
+  "version": "1.0",
+  "startForm": "Main"
+ },
+ "database": {
+  "driver": "sqlite",
+  "file": "resettest.db"
+ },
+ "tables": [
+  {
+   "name": "Items",
+   "fields": [
+    {
+     "name": "Name",
+     "type": "text",
+     "required": true
+    },
+    {
+     "name": "Qty",
+     "type": "integer",
+     "default": "1",
+     "min": 1
+    },
+    {
+     "name": "Done",
+     "type": "boolean"
+    }
+   ]
+  }
+ ],
+ "forms": [
+  {
+   "name": "Main",
+   "width": 400,
+   "height": 260,
+   "props": {
+    "title": "Reset",
+    "table": "Items",
+    "showErrors": false
+   },
+   "code": {
+    "general": "function log(s) { console.log(\"T \" + s); }",
+    "load": "function state() {\n    return JSON.stringify({ name: nameBox.text, qty: qtyBox.text, note: noteBox.text, check: keepCheck.checked, done: doneCheck.checked,\n                            opt: [optA.checked, optB.checked], combo: sizeCombo.currentIndex, list: colourList.currentIndex,\n                            day: dayPicker.value, record: { Name: form.record.Name, Qty: form.record.Qty, Done: form.record.Done },\n                            isNew: form.isNew, errors: Object.keys(form.errors).length });\n}\nlog(\"start \" + state());\nnameBox.text = \"Widget\"; qtyBox.text = \"0\"; noteBox.text = \"changed\"; keepCheck.toggle(); doneCheck.toggle();\noptA.choose(); sizeCombo.choose(2); colourList.choose(0); dayPicker.value = \"2031-05-05\";\nlog(\"save \" + form.save());\nlog(\"changed \" + state());\nform.reset();\nlog(\"reset \" + state());\nqtyBox.text = \"4\"; nameBox.text = \"Gadget\";\nlog(\"save again \" + form.save() + \" \" + Db.count(\"Items\"));\nform.reset();\nlog(\"after a saved one \" + state());\nvar other = App.openForm(\"Plain\");\nother.box.text = \"typed\"; other.tick.toggle();\nother.reset();\nlog(\"no table \" + JSON.stringify([other.box.text, other.tick.checked, other.dirty]));\nApp.quit();"
+   },
+   "controls": [
+    {
+     "type": "TextBox",
+     "name": "nameBox",
+     "x": 8,
+     "y": 8,
+     "width": 150,
+     "height": 21,
+     "props": {
+      "field": "Name"
+     }
+    },
+    {
+     "type": "TextBox",
+     "name": "qtyBox",
+     "x": 8,
+     "y": 34,
+     "width": 150,
+     "height": 21,
+     "props": {
+      "field": "Qty"
+     }
+    },
+    {
+     "type": "CheckBox",
+     "name": "doneCheck",
+     "x": 8,
+     "y": 60,
+     "width": 150,
+     "height": 17,
+     "props": {
+      "field": "Done",
+      "text": "Done"
+     }
+    },
+    {
+     "type": "TextBox",
+     "name": "noteBox",
+     "x": 8,
+     "y": 84,
+     "width": 150,
+     "height": 21,
+     "props": {
+      "text": "hello"
+     }
+    },
+    {
+     "type": "CheckBox",
+     "name": "keepCheck",
+     "x": 8,
+     "y": 110,
+     "width": 150,
+     "height": 17,
+     "props": {
+      "text": "Keep",
+      "checked": true
+     }
+    },
+    {
+     "type": "OptionButton",
+     "name": "optA",
+     "x": 8,
+     "y": 132,
+     "width": 80,
+     "height": 17,
+     "props": {
+      "text": "A"
+     }
+    },
+    {
+     "type": "OptionButton",
+     "name": "optB",
+     "x": 90,
+     "y": 132,
+     "width": 80,
+     "height": 17,
+     "props": {
+      "text": "B",
+      "checked": true
+     }
+    },
+    {
+     "type": "ComboBox",
+     "name": "sizeCombo",
+     "x": 8,
+     "y": 156,
+     "width": 150,
+     "height": 21,
+     "props": {
+      "items": [
+       "S",
+       "M",
+       "L"
+      ],
+      "currentIndex": 1
+     }
+    },
+    {
+     "type": "ListBox",
+     "name": "colourList",
+     "x": 200,
+     "y": 8,
+     "width": 150,
+     "height": 60,
+     "props": {
+      "items": [
+       "Red",
+       "Green"
+      ]
+     }
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "dayPicker",
+     "x": 200,
+     "y": 80,
+     "width": 150,
+     "height": 21,
+     "props": {
+      "value": "2030-01-01"
+     }
+    }
+   ]
+  },
+  {
+   "name": "Plain",
+   "width": 200,
+   "height": 100,
+   "props": {
+    "title": "Plain"
+   },
+   "code": {
+    "general": "property alias box: plainBox\nproperty alias tick: plainCheck"
+   },
+   "controls": [
+    {
+     "type": "TextBox",
+     "name": "plainBox",
+     "x": 8,
+     "y": 8,
+     "width": 150,
+     "height": 21,
+     "props": {
+      "text": "start"
+     }
+    },
+    {
+     "type": "CheckBox",
+     "name": "plainCheck",
+     "x": 8,
+     "y": 36,
+     "width": 150,
+     "height": 17,
+     "props": {
+      "text": "Tick"
+     }
+    }
+   ]
+  }
+ ]
+}

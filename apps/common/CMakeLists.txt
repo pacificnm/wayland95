@@ -34,6 +34,7 @@ qt_add_qml_module(win95ui
         CheckBox95.qml
         ComboBox95.qml
         FileDialog95.qml
+        Graph95.qml
         TabWidget95.qml
         Slider95.qml
         VSlider95.qml

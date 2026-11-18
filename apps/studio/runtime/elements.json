@@ -1,0 +1,271 @@
+{
+  "comment": "Wayland Studio's elements: what the Toolbox offers, what the Properties window edits and what the compiler writes. To add an element: write its App<Name>.qml (root: AppElement), list it in CMakeLists.txt and describe it here. Property types: string, text (several lines), int, real, bool, color, font, enum (values), list (one per line), field, table, form, image, menu and toolbar (items, in the Menu Editor), graph (an object, in the Graph Editor), timezone (this computer's zones), media (a sound or video file, put inside the program like a picture). An enum with `examples` (date or time) shows each format with now in it. `label`: its name in the Toolbox, if not its type (which code and projects use). `initial`: what a new element starts with, if not the default. `editor`: a dialog that opens as soon as one is added (graph). `dock`: it sits across the top of the form (x, y and width are the Studio's). `common` properties belong to every element; an element opts into the `appearance` and `data` sets.",
+
+  "common": [
+    { "name": "visible", "type": "bool", "default": true, "label": "Visible" },
+    { "name": "enabled", "type": "bool", "default": true, "label": "Enabled" },
+    { "name": "toolTip", "type": "string", "default": "", "label": "ToolTipText" }
+  ],
+  "appearance": [
+    { "name": "foreColor", "type": "color", "default": "", "label": "ForeColor" },
+    { "name": "backColor", "type": "color", "default": "", "label": "BackColor" },
+    { "name": "fontFamily", "type": "font", "default": "", "label": "FontName" },
+    { "name": "fontSize", "type": "int", "default": 0, "label": "FontSize" },
+    { "name": "fontBold", "type": "bool", "default": false, "label": "FontBold" },
+    { "name": "fontItalic", "type": "bool", "default": false, "label": "FontItalic" },
+    { "name": "fontUnderline", "type": "bool", "default": false, "label": "FontUnderline" }
+  ],
+  "data": [
+    { "name": "field", "type": "field", "default": "", "label": "DataField" }
+  ],
+
+  "form": {
+    "props": [
+      { "name": "title", "type": "string", "default": "", "label": "Caption" },
+      { "name": "backColor", "type": "color", "default": "", "label": "BackColor" },
+      { "name": "picture", "type": "image", "default": "", "label": "Picture" },
+      { "name": "table", "type": "table", "default": "", "label": "DataTable" },
+      { "name": "resizable", "type": "bool", "default": true, "label": "Resizable" },
+      { "name": "showErrors", "type": "bool", "default": true, "label": "ShowErrors" }
+    ],
+    "events": [
+      { "name": "load", "signal": "load", "hint": "The form has opened." },
+      { "name": "current", "signal": "current", "hint": "Another record is showing (or a new, empty one)." },
+      { "name": "saved", "signal": "saved", "hint": "The record was saved." },
+      { "name": "validationFailed", "signal": "validationFailed", "hint": "Save was refused: form.errors has why, by field." },
+      { "name": "unload", "signal": "unload", "hint": "The form is closing." }
+    ]
+  },
+
+  "elements": [
+    {
+      "type": "Label", "component": "AppLabel", "prefix": "label", "glyph": "A",
+      "size": [80, 17], "sets": ["appearance", "data"],
+      "props": [
+        { "name": "text", "type": "text", "default": "Label", "label": "Caption", "usesName": true },
+        { "name": "alignment", "type": "enum", "values": ["Left", "Center", "Right"], "default": "Left", "label": "Alignment" },
+        { "name": "wordWrap", "type": "bool", "default": false, "label": "WordWrap" },
+        { "name": "borderStyle", "type": "enum", "values": ["None", "Single", "Sunken"], "default": "None", "label": "BorderStyle" }
+      ],
+      "events": [ { "name": "clicked", "signal": "clicked", "hint": "The label was clicked." } ]
+    },
+    {
+      "type": "TextBox", "component": "AppTextBox", "prefix": "textBox", "glyph": "ab|",
+      "size": [152, 21], "sets": ["appearance", "data"],
+      "props": [
+        { "name": "text", "type": "text", "default": "", "label": "Text" },
+        { "name": "multiLine", "type": "bool", "default": false, "label": "MultiLine" },
+        { "name": "readOnly", "type": "bool", "default": false, "label": "Locked" },
+        { "name": "password", "type": "bool", "default": false, "label": "Password" },
+        { "name": "maxLength", "type": "int", "default": 0, "label": "MaxLength" },
+        { "name": "alignment", "type": "enum", "values": ["Left", "Center", "Right"], "default": "Left", "label": "Alignment" }
+      ],
+      "events": [
+        { "name": "changed", "signal": "changed", "hint": "The text was edited." },
+        { "name": "accepted", "signal": "accepted", "hint": "Enter was pressed." },
+        { "name": "gotFocus", "signal": "gotFocus", "hint": "The box has the keyboard." },
+        { "name": "lostFocus", "signal": "lostFocus", "hint": "The keyboard went elsewhere." }
+      ]
+    },
+    {
+      "type": "Button", "component": "AppButton", "prefix": "button", "glyph": "OK",
+      "size": [80, 24], "sets": ["appearance"],
+      "props": [
+        { "name": "text", "type": "string", "default": "Button", "label": "Caption", "usesName": true },
+        { "name": "isDefault", "type": "bool", "default": false, "label": "Default" }
+      ],
+      "events": [ { "name": "clicked", "signal": "clicked", "hint": "The button was pressed." } ]
+    },
+    {
+      "type": "CheckBox", "component": "AppCheckBox", "prefix": "checkBox", "glyph": "☑",
+      "size": [112, 17], "sets": ["appearance", "data"],
+      "props": [
+        { "name": "text", "type": "string", "default": "CheckBox", "label": "Caption", "usesName": true },
+        { "name": "checked", "type": "bool", "default": false, "label": "Value" }
+      ],
+      "events": [ { "name": "clicked", "signal": "clicked", "hint": "The box was ticked or cleared." } ]
+    },
+    {
+      "type": "OptionButton", "component": "AppOptionButton", "prefix": "option", "glyph": "◉",
+      "size": [112, 17], "sets": ["appearance", "data"],
+      "props": [
+        { "name": "text", "type": "string", "default": "Option", "label": "Caption", "usesName": true },
+        { "name": "checked", "type": "bool", "default": false, "label": "Value" },
+        { "name": "group", "type": "string", "default": "", "label": "Group" },
+        { "name": "optionValue", "type": "string", "default": "", "label": "OptionValue" }
+      ],
+      "events": [ { "name": "clicked", "signal": "clicked", "hint": "The option was chosen." } ]
+    },
+    {
+      "type": "ComboBox", "component": "AppComboBox", "prefix": "comboBox", "glyph": "▾",
+      "size": [152, 21], "sets": ["appearance", "data"],
+      "props": [
+        { "name": "items", "type": "list", "default": [], "label": "List" },
+        { "name": "currentIndex", "type": "int", "default": -1, "label": "ListIndex" }
+      ],
+      "events": [ { "name": "changed", "signal": "changed", "hint": "Another item was chosen." } ]
+    },
+    {
+      "type": "ListBox", "component": "AppListBox", "prefix": "listBox", "glyph": "≡",
+      "size": [152, 96], "sets": ["appearance", "data"],
+      "props": [
+        { "name": "items", "type": "list", "default": [], "label": "List" },
+        { "name": "currentIndex", "type": "int", "default": -1, "label": "ListIndex" }
+      ],
+      "events": [
+        { "name": "changed", "signal": "changed", "hint": "Another item was chosen." },
+        { "name": "doubleClicked", "signal": "doubleClicked", "hint": "An item was double-clicked." }
+      ]
+    },
+    {
+      "type": "Frame", "component": "AppFrame", "prefix": "frame", "glyph": "▭",
+      "size": [200, 120], "sets": ["appearance"], "behind": true,
+      "props": [
+        { "name": "text", "type": "string", "default": "Frame", "label": "Caption", "usesName": true }
+      ],
+      "events": []
+    },
+    {
+      "type": "Image", "component": "AppImage", "prefix": "image", "glyph": "▨",
+      "size": [96, 96], "sets": [],
+      "props": [
+        { "name": "picture", "type": "image", "default": "", "label": "Picture" },
+        { "name": "sizeMode", "type": "enum", "values": ["Stretch", "Fit", "Center", "Tile"], "default": "Fit", "label": "SizeMode" },
+        { "name": "borderStyle", "type": "enum", "values": ["None", "Single", "Sunken"], "default": "None", "label": "BorderStyle" },
+        { "name": "backColor", "type": "color", "default": "", "label": "BackColor" }
+      ],
+      "events": [ { "name": "clicked", "signal": "clicked", "hint": "The picture was clicked." } ]
+    },
+    {
+      "type": "Shape", "component": "AppShape", "prefix": "shape", "glyph": "◯",
+      "size": [96, 64], "sets": [], "behind": true,
+      "props": [
+        { "name": "shape", "type": "enum", "values": ["Rectangle", "Rounded Rectangle", "Oval", "Horizontal Line", "Vertical Line"], "default": "Rectangle", "label": "Shape" },
+        { "name": "backColor", "type": "color", "default": "", "label": "FillColor" },
+        { "name": "borderColor", "type": "color", "default": "#000000", "label": "BorderColor" },
+        { "name": "borderWidth", "type": "int", "default": 1, "label": "BorderWidth" }
+      ],
+      "events": []
+    },
+    {
+      "type": "DataGrid", "component": "AppDataGrid", "prefix": "grid", "glyph": "▦",
+      "size": [320, 160], "sets": ["appearance"],
+      "props": [
+        { "name": "table", "type": "table", "default": "", "label": "DataTable" },
+        { "name": "columns", "type": "list", "default": [], "label": "Columns" },
+        { "name": "search", "type": "string", "default": "", "label": "Search" },
+        { "name": "orderBy", "type": "string", "default": "", "label": "OrderBy" },
+        { "name": "followForm", "type": "bool", "default": true, "label": "FollowForm" }
+      ],
+      "events": [
+        { "name": "rowSelected", "signal": "rowSelected", "hint": "A row was chosen: grid.currentId is its id, grid.currentRow the record." },
+        { "name": "rowActivated", "signal": "rowActivated", "hint": "A row was double-clicked." }
+      ]
+    },
+    {
+      "type": "Menu", "component": "AppMenuBar", "prefix": "menu", "glyph": "☰",
+      "size": [400, 20], "sets": [], "dock": true,
+      "props": [
+        { "name": "menus", "type": "menu", "default": [], "label": "Menus",
+          "initial": [
+            { "text": "&File", "name": "fileMenu", "items": [
+              { "text": "E&xit", "name": "fileExit", "action": "quit" } ] },
+            { "text": "&Help", "name": "helpMenu", "items": [
+              { "text": "&About", "name": "helpAbout" } ] }
+          ] }
+      ],
+      "events": [ { "name": "itemClicked", "signal": "itemClicked", "hint": "A menu item was chosen (after its Action): menu1.item is its Name." } ]
+    },
+    {
+      "type": "ToolBar", "component": "AppToolBar", "prefix": "toolBar", "glyph": "▤",
+      "size": [400, 28], "sets": [], "dock": true,
+      "props": [
+        { "name": "buttons", "type": "toolbar", "default": [], "label": "Buttons",
+          "initial": [
+            { "text": "New", "name": "newButton", "glyph": "✚", "toolTip": "A new record", "action": "newRecord" },
+            { "text": "Save", "name": "saveButton", "glyph": "✔", "toolTip": "Save the record", "action": "save" }
+          ] },
+        { "name": "showCaptions", "type": "bool", "default": true, "label": "ShowCaptions" },
+        { "name": "backColor", "type": "color", "default": "", "label": "BackColor" }
+      ],
+      "events": [ { "name": "itemClicked", "signal": "itemClicked", "hint": "A button was pressed (after its Action): toolBar1.item is its Name." } ]
+    },
+    {
+      "type": "DateTimePicker", "label": "Date", "component": "AppDateTimePicker", "prefix": "datePicker", "glyph": "31",
+      "size": [152, 21], "sets": ["appearance", "data"],
+      "props": [
+        { "name": "mode", "type": "enum", "values": ["Date", "Date and Time", "Time"], "default": "Date", "label": "Mode" },
+        { "name": "value", "type": "string", "default": "", "label": "Value" },
+        { "name": "dateFormat", "type": "enum", "examples": "date", "default": "Short", "label": "DateFormat",
+          "values": ["Short", "Long", "yyyy-MM-dd", "MM/dd/yyyy", "M/d/yyyy", "dd/MM/yyyy", "d/M/yyyy", "dd.MM.yyyy", "dd-MM-yyyy",
+                     "d MMM yyyy", "d MMMM yyyy", "MMM d, yyyy", "MMMM d, yyyy", "ddd, MMM d, yyyy", "dddd, MMMM d, yyyy", "Custom"] },
+        { "name": "timeFormat", "type": "enum", "examples": "time", "default": "Short", "label": "TimeFormat",
+          "values": ["Short", "Long", "h:mm AP", "h:mm:ss AP", "HH:mm", "HH:mm:ss", "Custom"] },
+        { "name": "customDateFormat", "type": "string", "default": "", "label": "CustomDateFormat" },
+        { "name": "customTimeFormat", "type": "string", "default": "", "label": "CustomTimeFormat" },
+        { "name": "earliestDate", "type": "string", "default": "", "label": "EarliestDate" },
+        { "name": "latestDate", "type": "string", "default": "", "label": "LatestDate" },
+        { "name": "earliestTime", "type": "string", "default": "", "label": "EarliestTime" },
+        { "name": "latestTime", "type": "string", "default": "", "label": "LatestTime" },
+        { "name": "minuteStep", "type": "int", "default": 1, "label": "MinuteStep" },
+        { "name": "timeZone", "type": "timezone", "default": "", "label": "TimeZone" },
+        { "name": "firstDayOfWeek", "type": "enum", "values": ["Sunday", "Monday", "Saturday"], "default": "Sunday", "label": "FirstDayOfWeek" },
+        { "name": "allowBlank", "type": "bool", "default": true, "label": "AllowBlank" }
+      ],
+      "events": [ { "name": "changed", "signal": "changed", "hint": "The date or time was changed: datePicker1.value (as kept), .text (as shown), .date (a Date)." } ]
+    },
+    {
+      "type": "MediaPlayer", "component": "AppMediaPlayer", "prefix": "player", "glyph": "▶",
+      "size": [320, 206], "sets": ["appearance", "data"],
+      "props": [
+        { "name": "source", "type": "media", "default": "", "label": "Source" },
+        { "name": "embed", "type": "bool", "default": true, "label": "Embed" },
+        { "name": "autoPlay", "type": "bool", "default": false, "label": "AutoPlay" },
+        { "name": "loop", "type": "bool", "default": false, "label": "Loop" },
+        { "name": "volume", "type": "int", "default": 100, "label": "Volume" },
+        { "name": "muted", "type": "bool", "default": false, "label": "Mute" },
+        { "name": "showControls", "type": "bool", "default": true, "label": "ShowControls" },
+        { "name": "fillMode", "type": "enum", "values": ["Fit", "Stretch", "Crop"], "default": "Fit", "label": "FillMode" }
+      ],
+      "events": [
+        { "name": "started", "signal": "started", "hint": "It started playing (or went on after a pause)." },
+        { "name": "paused", "signal": "paused", "hint": "It was paused." },
+        { "name": "stopped", "signal": "stopped", "hint": "It was stopped (Stop, or player1.stop())." },
+        { "name": "finished", "signal": "finished", "hint": "It played to the end (a Loop one never does)." },
+        { "name": "failed", "signal": "failed", "hint": "It can't be played: player1.errorString says why." }
+      ]
+    },
+    {
+      "type": "Graph", "component": "AppGraph", "prefix": "graph", "glyph": "▥", "editor": "graph",
+      "size": [320, 220], "sets": ["appearance"],
+      "props": [
+        { "name": "graph", "type": "graph", "default": {}, "label": "Graph" }
+      ],
+      "events": [
+        { "name": "clicked", "signal": "clicked", "hint": "A bar, point or slice was clicked: graph1.clickedLabel, clickedValue (a stock graph: the close), clickedSeries, clickedIndex (-1: not one), clickedItem (all of it)." }
+      ]
+    },
+    {
+      "type": "AIChat", "component": "AppAiChat", "prefix": "chat", "glyph": "✦",
+      "size": [320, 260], "sets": ["appearance"],
+      "props": [
+        { "name": "model", "type": "enum", "values": ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2"], "default": "claude-opus-5-5", "label": "Model" },
+        { "name": "instructions", "type": "text", "default": "", "label": "Instructions" },
+        { "name": "greeting", "type": "string", "default": "Hello! What can I do for you?", "label": "Greeting" },
+        { "name": "effort", "type": "enum", "values": ["Default", "Low", "Medium", "High", "XHigh", "Max"], "default": "Default", "label": "Effort" },
+        { "name": "maxTokens", "type": "int", "default": 16000, "label": "MaxTokens" },
+        { "name": "maxSteps", "type": "int", "default": 20, "label": "MaxSteps" },
+        { "name": "dataAccess", "type": "enum", "values": ["None", "Read", "Read and Change"], "default": "Read", "label": "DataAccess" },
+        { "name": "formAccess", "type": "bool", "default": true, "label": "FormAccess" },
+        { "name": "apiAccess", "type": "bool", "default": false, "label": "ApiAccess" },
+        { "name": "confirmChanges", "type": "bool", "default": true, "label": "ConfirmChanges" },
+        { "name": "showToolCalls", "type": "bool", "default": true, "label": "ShowToolCalls" }
+      ],
+      "events": [
+        { "name": "replied", "signal": "replied", "hint": "Claude finished an answer: chat1.lastReply is its text." },
+        { "name": "toolUsed", "signal": "toolUsed", "hint": "Claude used a tool: chat1.lastTool is { name, input, result, isError }." },
+        { "name": "failed", "signal": "failed", "hint": "Something went wrong (no key, no network, a refusal): chat1.errorString says what." }
+      ]
+    }
+  ]
+}

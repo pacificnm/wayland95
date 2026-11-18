@@ -1,0 +1,149 @@
+{
+ "format": 1,
+ "app": {
+  "name": "menutest",
+  "title": "Menu Test",
+  "version": "1.0",
+  "startForm": "Main"
+ },
+ "database": {
+  "driver": "sqlite",
+  "file": "menutest.db"
+ },
+ "tables": [
+  {
+   "name": "Notes",
+   "fields": [
+    {
+     "name": "Title",
+     "type": "text",
+     "required": true
+    }
+   ]
+  }
+ ],
+ "forms": [
+  {
+   "name": "Main",
+   "width": 400,
+   "height": 200,
+   "props": {
+    "title": "Menu Test",
+    "table": "Notes",
+    "showErrors": false
+   },
+   "code": {
+    "general": "property int clicks: 0\nproperty string lastItem: \"\"\nfunction log(s) { console.log(\"T \" + s); }",
+    "load": "log(\"docked \" + (menu1.width === form.width) + \" \" + menu1.y + \" \" + toolBar1.y + \" \" + (toolBar1.width === form.width));\nmenu1.choose(menu1.itemNamed(\"fileOrders\"));\nlog(\"open \" + (App.form(\"Orders\") !== null) + \" item \" + lastItem + \" clicks \" + clicks);\nvar orders = App.form(\"Orders\");\nmenu1.choose(menu1.itemNamed(\"fileOrders\"));\nlog(\"again the same one \" + (App.form(\"Orders\") === orders) + \" clicks \" + clicks);\nmenu1.setEnabled(\"fileOrders\", false);\nmenu1.choose(menu1.itemNamed(\"fileOrders\"));\nlog(\"disabled: clicks \" + clicks + \" enabled \" + menu1.itemNamed(\"fileOrders\").enabled);\nmenu1.setChecked(\"viewGrid\", true);\nmenu1.setText(\"viewGrid\", \"&Grid Lines\");\nlog(\"checked \" + menu1.itemNamed(\"viewGrid\").checked + \" \" + menu1.itemNamed(\"viewGrid\").text);\nmenu1.choose(menu1.itemNamed(\"viewGrid\"));\nlog(\"no action, its code: \" + lastItem);\ntitleBox.text = \"Hello\";\ntoolBar1.choose(toolBar1.itemNamed(\"saveButton\"));\nlog(\"saved \" + Db.count(\"Notes\") + \" id \" + form.recordId + \" item \" + lastItem);\ntoolBar1.choose(toolBar1.itemNamed(\"newButton\"));\nlog(\"new \" + form.isNew + \" title \" + JSON.stringify(titleBox.text));\ntoolBar1.setEnabled(\"saveButton\", false);\ntoolBar1.choose(toolBar1.itemNamed(\"saveButton\"));\nlog(\"disabled button \" + Db.count(\"Notes\") + \" item \" + lastItem);\nmenu1.choose(menu1.itemNamed(\"fileExit\"));"
+   },
+   "controls": [
+    {
+     "type": "Menu",
+     "name": "menu1",
+     "x": 0,
+     "y": 0,
+     "width": 400,
+     "height": 20,
+     "events": {
+      "itemClicked": "clicks++;\nlastItem = menu1.item;"
+     },
+     "props": {
+      "menus": [
+       {
+        "text": "&File",
+        "name": "fileMenu",
+        "items": [
+         {
+          "text": "&Orders...",
+          "name": "fileOrders",
+          "shortcut": "Ctrl+O",
+          "action": "openForm",
+          "form": "Orders"
+         },
+         {
+          "separator": true
+         },
+         {
+          "text": "E&xit",
+          "name": "fileExit",
+          "action": "quit"
+         }
+        ]
+       },
+       {
+        "text": "&View",
+        "name": "viewMenu",
+        "items": [
+         {
+          "text": "&Grid",
+          "name": "viewGrid"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "type": "ToolBar",
+     "name": "toolBar1",
+     "x": 0,
+     "y": 20,
+     "width": 400,
+     "height": 28,
+     "events": {
+      "itemClicked": "lastItem = \"tb:\" + toolBar1.item;"
+     },
+     "props": {
+      "buttons": [
+       {
+        "text": "New",
+        "name": "newButton",
+        "glyph": "✚",
+        "action": "newRecord"
+       },
+       {
+        "text": "Save",
+        "name": "saveButton",
+        "glyph": "✔",
+        "toolTip": "Save it",
+        "action": "save"
+       },
+       {
+        "separator": true
+       },
+       {
+        "text": "Orders",
+        "name": "ordersButton",
+        "action": "openForm",
+        "form": "Orders"
+       }
+      ]
+     }
+    },
+    {
+     "type": "TextBox",
+     "name": "titleBox",
+     "x": 8,
+     "y": 60,
+     "width": 200,
+     "height": 21,
+     "props": {
+      "field": "Title"
+     }
+    }
+   ]
+  },
+  {
+   "name": "Orders",
+   "width": 300,
+   "height": 120,
+   "props": {
+    "title": "Orders"
+   },
+   "code": {
+    "load": "console.log(\"T orders opened\");"
+   },
+   "controls": []
+  }
+ ]
+}

@@ -1,0 +1,90 @@
+{
+ "format": 1,
+ "app": {
+  "name": "chattest",
+  "title": "Chat Test",
+  "version": "1.0",
+  "startForm": "Main"
+ },
+ "database": {
+  "driver": "sqlite",
+  "file": "chattest.db"
+ },
+ "tables": [
+  {
+   "name": "Customers",
+   "fields": [
+    {
+     "name": "Name",
+     "type": "text",
+     "required": true
+    },
+    {
+     "name": "City",
+     "type": "text"
+    }
+   ]
+  }
+ ],
+ "forms": [
+  {
+   "name": "Main",
+   "width": 520,
+   "height": 400,
+   "props": {
+    "title": "Chat",
+    "table": "Customers",
+    "showErrors": false
+   },
+   "code": {
+    "general": "function log(s) { console.log(\"T \" + s); }\nproperty var steps: [\"hello\", \"count the customers\", \"add ada\", \"add\", \"fill the form\", \"weather please\", \"twotools\", \"badjson\", \"fallback\", \"noschema\", \"refuse\", \"busy\", \"long\", \"broken\"]\nproperty int at: 0\nfunction next() {\n    if (at >= steps.length) {\n        log(\"messages \" + chat1.messages.length + \" usage \" + (chat1.usage.input > 0 && chat1.usage.output > 0));\n        log(\"records \" + JSON.stringify(Db.select(\"Customers\", {}).map(function (r) { return r.Name + \"/\" + r.City; })));\n        App.quit();\n        return;\n    }\n    var s = steps[at++];\n    chat1.clear();\n    log(\"> \" + s);\n    if (!chat1.send(s))\n        log(\"not sent\");\n}",
+    "load": "chat1.addTool(\"get_weather\", \"The weather in a city, now.\", { city: { type: \"string\", description: \"The city.\" } }, function (input) {\n    if (input.city !== \"Paris\")\n        throw new Error(\"only Paris\");\n    return { city: input.city, sky: \"sunny\", celsius: 21 };\n});\nchat1.addTool(\"stop_now\", \"Stops the chat (as Stop does).\", {}, function (input) {\n    chat1.cancel();\n    var last = chat1.messages[chat1.messages.length - 1];\n    log(\"stopped \" + JSON.stringify(last.content.map(function (r) { return [r.tool_use_id.replace(/_\\d+$/, \"\"), !!r.is_error, r.content]; })));\n    Qt.callLater(next);\n    return \"stopped\";\n});\nlog(\"tools \" + chat1.tools().map(function (t) { return t.name; }).join(\",\"));\nDb.insert(\"Customers\", { Name: \"Bob\", City: \"Leeds\" });\nDb.insert(\"Customers\", { Name: \"Cy\", City: \"York\" });\nnext();"
+   },
+   "controls": [
+    {
+     "type": "TextBox",
+     "name": "nameBox",
+     "x": 8,
+     "y": 8,
+     "width": 150,
+     "height": 21,
+     "props": {
+      "field": "Name"
+     }
+    },
+    {
+     "type": "TextBox",
+     "name": "cityBox",
+     "x": 8,
+     "y": 34,
+     "width": 150,
+     "height": 21,
+     "props": {
+      "field": "City"
+     }
+    },
+    {
+     "type": "AIChat",
+     "name": "chat1",
+     "x": 170,
+     "y": 8,
+     "width": 340,
+     "height": 380,
+     "props": {
+      "dataAccess": "Read and Change",
+      "confirmChanges": false,
+      "greeting": "Hi"
+     },
+     "events": {
+      "replied": "var last = chat1.messages[chat1.messages.length - 1];\nlog(\"reply \" + chat1.lastReply.replace(/\\n/g, \" | \").replace(/\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d/g, \"TIME\") + \" [\" + last.content.map(function (b) { return b.type; }).join(\",\") + \"]\");\nnext();",
+      "toolUsed": "log(\"tool \" + chat1.lastTool.name + (chat1.lastTool.isError ? \" error\" : \" ok\"));",
+      "failed": "log(\"failed \" + chat1.errorString);\nnext();"
+     }
+    }
+   ]
+  }
+ ],
+ "ai": {
+  "apiKey": "${env:TEST_CLAUDE_KEY}"
+ }
+}

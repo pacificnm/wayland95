@@ -30,7 +30,9 @@ compositor in [docs/migration.md](docs/migration.md).
   it's removed.)
 - `apps/` - the programs (File Manager, Notepad, Markdown Editor, Terminal, Control Panel,
   System Monitor, Volume, the file dialogs portal, Disk Image Writer) and
-  `apps/common`, the shared Win95 controls.
+  `apps/common`, the shared Win95 controls. `apps/studio` is Wayland
+  Studio, for making more: its `runtime/` is what a made app is built
+  from (the ORM, the elements, the compiler) and `runner/` what runs one.
 - `session/` - the login session (`wayland95-session`) and its files.
 - `tests/` - the automated tests: `tests/run.sh` (headless),
   `tests/selftest.sh`, `tests/vm/run.sh` (the live image in a VM).
@@ -53,7 +55,8 @@ sudo apt-get install qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-w
     qml6-module-qt-labs-folderlistmodel \
     libwlroots-0.18-dev libcairo2-dev libpango1.0-dev libdrm-dev libpixman-1-dev \
     libinput-dev libxkbcommon-dev libvterm-dev libxcb1-dev libwayland-dev wayland-protocols \
-    zlib1g-dev libfontconfig-dev libsqlite3-dev pkg-config cmake build-essential xwayland
+    zlib1g-dev libfontconfig-dev libsqlite3-dev pkg-config cmake build-essential xwayland \
+    libqt6sql6-sqlite libqt6sql6-mysql libqt6sql6-psql
 
 cmake -B build
 cmake --build build -j$(nproc)
@@ -253,6 +256,255 @@ up next to the shell first, then on `$PATH`.
   - Options: where to clone, and which folders to look in for clones
     (the home folder, three folders down, by default).
 
+- **Wayland Studio** (`win95studio`, [apps/studio/](apps/studio/)): Start >
+  Programs > Programming > Wayland Studio. Make Wayland 95 apps: tables
+  with rules, forms drawn on a grid, code for their events, and a program
+  of its own at the end. A project is one `.w95proj` file.
+  - **Data Designer** (Project > Add Table): a table's fields in a list,
+    the selected one's properties under it. Types: Text, Long Text, Whole
+    Number, Decimal, Floating Point, Currency, Yes/No, Date, Time, Date and
+    Time, Choice (a list you give), Lookup (a record of another table),
+    E-mail, URL and Phone. Rules on each field: Required, No Duplicates,
+    Min/Max Length, Minimum/Maximum (numbers, dates, times; `today` works),
+    a Default Value (a date's or time's from a list: Today/Now, When the
+    record is made or When the record is saved, which the database fills
+    in by itself, for a created or a last modified time, or another one
+    typed, `today+7` and `now+2h` included),
+    Decimal Places, a Pattern, a Validation Rule and the Validation Text
+    to say when that or the Pattern isn't met. The Validation Rule is
+    picked from a list for the field's type, about 100 in all: characters
+    (Letters only, Digits only, All capitals...), what's in it (Starts
+    with, One of a list, At least N words...), internet (E-mail, Web
+    address, Domain, IPv4/IPv6, MAC, UUID, JSON, Strong password...),
+    phones and places (US/Canada and international phone numbers, US ZIP,
+    Canadian and UK postcodes, ISO country/language/currency codes),
+    numbers with a check digit (card number, IBAN, SWIFT/BIC, US routing
+    number, ISBN, barcode, VIN...), numbers (More than zero, A multiple
+    of, At most N decimal places, Percentage, Latitude...), dates (In the
+    past, Within the next N days, At least N years ago, A weekday...),
+    times (Every N minutes, Working hours) and another field (The same
+    as, More than / After, Required when another field is filled in...).
+    Each has a message of its own, shown in grey under Validation Text
+    and said when that's left blank. Custom expression… is still there:
+    `value` and `record`, like `value <= 50 || record.Kind === "Family"`.
+    Every table also has `id`, `created_on` and `modified_on`.
+  - **A database that's there already** (Project > Import Tables, or
+    offered after Project > Database): its tables come into the project
+    as the database has them: their own keys (numbered by the database,
+    or typed in like a product code; `record.id` is its value), types
+    from the columns' (`VARCHAR(80)` is Text of 80, `ENUM` a Choice...),
+    `NOT NULL`, `UNIQUE` and `DEFAULT` as Required, No Duplicates and
+    Default Value, foreign keys as Lookups, names code can't use (`Full
+    Name`) made into ones it can (the database's kept beside them), and
+    optionally a form for each. Nothing in the database is changed; its
+    records show in the forms straight away. SQLite, MySQL/MariaDB and
+    PostgreSQL.
+  - **Web APIs as tables** (Project > APIs, Add API Table): an API's
+    endpoint is a table: its list read (and filtered, sorted, searched
+    here), records POSTed, PATCHed or PUT, and DELETEd, through the same
+    rules as any table; forms, grids, Lookups and code don't know the
+    difference. Add API Table reads the endpoint and makes the fields
+    (types from the values, `vendor.name` as `vendor_name`, the API's own
+    times Read Only). Sign-in: an API key (header or query), Basic, a
+    Bearer token, or OAuth 2.0 (client credentials, password, or the
+    authorization code in the browser with PKCE), its tokens refreshed
+    and kept for the user (600, in the app's data folder); any value can
+    be `${env:NAME}`. `Db.callApi("shop", "GET", "/me")` for anything else.
+  - **The rules are the table's, not the form's:** every write goes
+    through them, whether it's a form's Save, `Db.insert()` /
+    `Db.update()` in code, or the Studio's own Data view. What's refused
+    comes back by field: `{ ok: false, errors: { Email: "E-mail must be an
+    e-mail address." }, messages: [...] }`. A form puts that in
+    `form.errors`, which frames the element showing each such field in
+    red with the message as its tool tip, and (ShowErrors) lists them in
+    a message box.
+  - **Data** (the tab beside Design): the table's records in the database,
+    with New Record, Edit, Delete and Find. It asks before making the
+    tables and fields the database doesn't have yet (they're added, never
+    dropped or retyped: a renamed field is a new one, the old one stays
+    with its data).
+  - **Where the data is** (Project > Database): SQLite (a file beside the
+    project; nothing to set up), MySQL/MariaDB or PostgreSQL (host, port,
+    database, user, password; a blank host is this computer's server
+    through its socket, as Control Panel > Services sets accounts up).
+    Test Connection tries it. The same project runs on any of the three.
+  - **Form designer:** the form as its window will look, on a dotted grid
+    (8 pixels; 4 or 16 in View) that elements snap to; hold Alt to place
+    freely. Pick an element in the Toolbox and drag out where it goes, or
+    double-click it there. Click to select (Ctrl+click or drag a box for
+    several), drag to move, drag a handle to size, arrows to nudge
+    (Shift+arrows size), Delete, Cut/Copy/Paste, Undo/Redo. Format lines
+    several up or makes them one size. The form's own handles size it.
+  - **Elements** so far: Label, TextBox (one line or several, password),
+    Button, CheckBox, OptionButton, ComboBox, ListBox, Frame, Image, Shape,
+    DataGrid, Menu, ToolBar, DateTimePicker (Date in the Toolbox), Graph, MediaPlayer
+    and AIChat. They're drawn
+    by the same QML the program uses, so the canvas is what you get.
+  - **Graph:** our own graph library, `Graph95` in Win95Ui (any app can
+    use it): Column, Bar, Line, Area, Pie, Doughnut, Scatter, and stock
+    graphs (Candlestick, Heikin-Ashi, OHLC, HLC, Price), drawn on a
+    Canvas like a Windows 95 spreadsheet (white chart, grey plot, black
+    outlines, a boxed legend); stacked, markers, smooth lines; a title,
+    axis titles, grid lines, values (a pie's percents), four palettes,
+    the value axis' ends, decimals and a prefix or suffix; resting the
+    pointer shows a value, a click says which (`itemAt(x, y)`). A stock
+    graph has its values axis on the right with the last close on it,
+    lines over the prices (SMA, EMA, Bollinger bands, VWAP), panes under
+    them (Volume, RSI, MACD, Stochastic), a crosshair whose tip is the
+    bar's open, high, low, close, change and volume, the latest N bars,
+    the wheel to zoom and dragging to go back in time; `tick(label, price,
+    volume)` adds trades as they happen (the same label: the same bar),
+    `addBar()` whole bars, and `indicator("RSI 14")` is what one works
+    out to. The
+    element's one property, Graph, is edited in the Graph Editor (it
+    opens as soon as one is added): Type (a picture of each), Display and
+    Data (and Stock), with a preview of the table's records. Its data: a table's
+    records grouped by a label field (dates by minute, hour, day, week,
+    month or year), up to
+    four series each summed, averaged, least, most or counted (or how
+    many records), a filter (= ≠ > ≥ < ≤ has, blank), in order, the first
+    N; a stock graph's Open, High, Low, Close and Volume fields (a bar for
+    each label: its first open, highest high, lowest low, last close and
+    all the volume; just a price field: trades made into bars); or from
+    code (`graph1.setData(labels, series)`, `graph1.tick(...)`). Read again when
+    its table changes; clicked gives `clickedLabel`, `clickedValue`,
+    `clickedSeries`, `clickedIndex`. Check for Problems names a table or
+    field it reads that isn't there.
+  - **AIChat:** a chat with Claude (Anthropic's Messages API, streamed;
+    Opus 5.5 unless its Model says Sonnet 5.5, Haiku 5.5 or Fable 5.2)
+    that works the app for the person: with DataAccess Read it lists the
+    tables, finds and reads records; Read and Change adds, changes and
+    deletes them through the tables' validation; FormAccess reads and
+    fills in open forms, clicks their buttons, saves, moves between
+    records and opens forms; ApiAccess calls the project's APIs. With
+    ConfirmChanges (the default) each change is a Yes/No message box
+    first. The app adds tools of its own in code
+    (`chat1.addTool(name, description, inputs, function (input) {...})`);
+    `send()`, `clear()`, `cancel()`, `lastReply`, `lastTool`, `messages`,
+    `usage`; events replied, toolUsed, failed. The key is the
+    project's (Project > Properties: API key, with Test, which asks
+    `/v1/models`; `${env:NAME}` reads it where the program runs, blank is
+    `ANTHROPIC_API_KEY`), never asked of the person using the app; with
+    none, the chat says so in red and sends nothing. Answers stream in as Markdown; Instructions, Effort, MaxTokens,
+    MaxSteps. Requests ask for server-side fallbacks (`fallbacks:
+    "default"`): one a model's safety checks decline is retried on the
+    model Anthropic recommends; Haiku has none. Overloaded or rate-limited
+    requests are tried twice more. `ANTHROPIC_BASE_URL` points it at
+    another server (the tests' mock).
+  - **MediaPlayer:** sound or video through Qt Multimedia's FFmpeg: MP3,
+    WAV, FLAC, OGG, M4A, Opus; MP4, WebM, MKV, AVI, MOV. Win95's ▶ ❚❚ ■,
+    a position bar, the time and a speaker (ShowControls); AutoPlay,
+    Loop, Volume, Mute, FillMode. Its Source is a file (put inside the
+    program when it's made, unpacked to the program's cache to play;
+    Embed False plays it from where it is) or a web address; with a
+    DataField, the file a field holds. In code: `player1.play()`,
+    `pause()`, `stop()`, `seek(ms)`, `position`, `duration`; events
+    started, paused, stopped, finished, failed.
+  - **DateTimePicker:** a date, a date and a time, or a time (Mode). Type
+    it in, or pick it: ▼ (F4) drops a month calendar (today circled, the
+    days it can't be greyed, Today and None under it, and in Date and
+    Time a time to set with ▲▼); a time has ▲▼ of its own; Up and Down
+    step a day, or MinuteStep minutes. DateFormat and TimeFormat: the
+    computer's Short or Long way, a list of patterns (each shown with
+    today in it: `dd/MM/yyyy`, `MMMM d, yyyy`, `h:mm AP`, `HH:mm`...), or
+    Custom. EarliestDate and LatestDate limit the days (`2024-01-01`,
+    `today`, `today+90`; with a DataField, blank is the field's own
+    Earliest and Latest), EarliestTime and LatestTime the time of day
+    (`09:00` to `17:30`). TimeZone shows and picks the time in another
+    zone (the value stays the computer's). FirstDayOfWeek, AllowBlank.
+    With a DataField it edits a Date, Time or Date and Time field, and Add
+    Form for (a table) uses one for those. In code: `datePicker1.value`
+    (as the database keeps it; it can be set to `"today+7"`), `.text`
+    (as shown), `.date` (a JavaScript Date), `clear()`, `openCalendar()`,
+    and `AppDates.display()`, `read()`, `toZone()` for any date.
+  - **Menus and tool bars:** a Menu (the form's menu bar) and ToolBars sit
+    across the top of the form, the Menu first; adding one moves what's on
+    the form down to make room (and deleting it moves it back). Their
+    Menus or Buttons property (…, or F4) opens the Menu Editor: a list
+    with the menus all the way left and their items indented under them
+    (→ ←, ↑ ↓, Next, Insert, Separator, Delete), and for each one its
+    Caption (`&File`: Alt+F opens it), Name, Shortcut (`Ctrl+O`), or for a
+    button its symbol, picture and ToolTip, Enabled, Checked, and an
+    **Action**: Open a form (pick which: it opens, or comes to the front
+    if it's open already), Close this form, New record, Save the record,
+    Delete the record (asks first), First/Previous/Next/Last record, or
+    Quit the program. Then the element's `itemClicked` event runs, with
+    `menu1.item` (or `toolBar1.item`) the item's Name, for anything else:
+    `if (menu1.item === "fileOrders") App.openForm("Orders", { customer:
+    3 })`. Code changes items too: `menu1.setEnabled("fileSave", false)`,
+    `setChecked`, `setText`. An item that opens a form that isn't in the
+    project is a problem Start and Make Program name; renaming a form
+    renames it in the items that open it.
+  - **Properties:** everything about the selected element: its name (what
+    code calls it), caption, ForeColor and BackColor (a palette or any
+    `#rrggbb`), FontName, FontSize, bold/italic/underline, Visible,
+    Enabled, ToolTipText, position and size, and what's particular to its
+    kind. With several selected, a change goes to all that have that
+    property. A form has its Caption, BackColor, Picture, size and
+    DataTable.
+  - **Forms and data:** give a form a DataTable and its elements a
+    DataField and they show and edit one record: a ComboBox on a Choice
+    field lists the choices, on a Lookup the other table's records; a
+    CheckBox takes a Yes/No; a DataGrid lists the table and choosing a row
+    shows that record. Project > Add Form for (a table) draws all of that
+    for you: a label and an element for each field, the grid, and New,
+    Save and Delete.
+  - **Code** (double-click an element, or F7): JavaScript for each event
+    (a button's `clicked`, a text box's `changed`, a form's `load`,
+    `current`, `saved`, `validationFailed`...), one at a time, picked with
+    the Object and Procedure lists. It's coloured as Visual Basic's was
+    (keywords blue, comments green; strings red, numbers teal, and `form`,
+    `App`, `Db` and the form's elements purple), and a list offers what
+    can go at the cursor: after `form.`, `App.`, `Db.` or an element's
+    name and a dot, its functions and properties (with what each takes
+    and does, below the code); the DataTable's fields after `form.record.`
+    or in `form.setField("`; the tables in `Db.select("`; the forms in
+    `App.openForm("`; a Menu's items in `menu1.setEnabled("`; and after a
+    few letters of a name, the elements, your (General) functions and
+    properties, the event's variables and the keywords. Up and Down pick,
+    Enter or Tab puts it in (a function with its parentheses), Escape
+    closes it, Ctrl+Space opens it any time. In reach: `form` (`save()`,
+    `newRecord()`, `reset()` (the form as it opened: a new record of the
+    defaults, no errors marked, and the elements without a DataField as
+    the Properties window set them), `loadRecord(id)`, `deleteRecord()`, `first()`,
+    `next()`, `record`, `errors`, `setField()`, `msgBox()`, `close()`),
+    every element by name (`nameBox.text`, `saveButton.enabled`), `App`
+    (`openForm("Orders", { customer: 3 })`, `showForm("Orders")` to bring
+    an open one forward, `msgBox()`, `quit()`) and `Db`
+    (`select("Contacts", { where: { Age: { op: ">=", value: 18 } },
+    orderBy: "Name" })`, `get`, `insert`, `update`, `remove`, `validate`,
+    `count`). (General) holds a form's own functions and properties.
+  - **Start** (F5) saves, checks and runs the project; what it prints
+    (`console.log`) and what goes wrong in its code show in Output, named
+    by form, event and that event's line. Run > Check for Problems only
+    checks.
+  - **Make Program** writes the app out as one file that runs by itself
+    on any Wayland 95: the runner (`win95apprun`) with the compiled app
+    (each form as QML, the tables, the pictures) on its end, much as a
+    Visual Basic program needed its runtime. Its SQLite file is kept in
+    `~/.local/share/<its name>`.
+  - **The manual** ([docs/studio-manual/](docs/studio-manual/index.md)):
+    Help > Contents (F1) opens it in the Markdown Reader (below):
+    a tutorial that builds the Book Club app from an empty project, then
+    the Studio window, the Data Designer (every type and Validation
+    Rule), forms and every element, code, running and making programs,
+    and what the usual surprises mean, with pictures. Help > Open the
+    Book Club Sample copies the finished app to `~/Book Club`. It's
+    installed in `share/wayland95/studio-manual`; its pictures are made
+    by `docs/studio-manual/screenshots.sh` (the test desktop drives the
+    Studio and the sample, step by step), so they can be made again when
+    the Studio changes.
+  - **Adding an element:** write `apps/studio/runtime/App<Name>.qml` (its
+    root is `AppElement`, which brings colors, font, DataField and the
+    validation mark), list it in `apps/studio/CMakeLists.txt` and describe
+    its properties and events in `runtime/elements.json`: the Toolbox, the
+    Properties window, the code window and the compiler all read that.
+  - **Not yet:** elements inside a Frame move with it only if you select
+    them too (a Frame is drawn behind, not a container); submenus (a menu's
+    items are one level deep), timers and tab strips; a field's type can't be changed in a database that already
+    has it; a MySQL/PostgreSQL password is kept as plain text in the
+    project and in programs made from it.
+
 - **Notepad** (`win95notepad`, [apps/notepad/](apps/notepad/)): Start >
   Programs > Notepad, or double-click a text file in the file manager. It
   has File (New, Open, Save, Save As) with Win95-style Open/Save dialogs,
@@ -360,6 +612,16 @@ up next to the shell first, then on `$PATH`.
     a click opens a link); Markdown (Ctrl+M) shows and edits the Markdown
     itself. An unchanged file shows exactly as it is on disk; saved from
     there, it's kept as typed.
+  - **The Markdown Reader** (`win95markdown --reader FILE`, what Wayland
+    Studio's Help opens): the page only, to read. No format bar, nothing
+    to edit and no way to switch to editing (no Page or Markdown view, no
+    New, Open or Save); its menus are File (Close, Ctrl+W), Edit (Copy,
+    Select All, Find), View, Go and Help, and its toolbar is Back, Forward,
+    Home, Find and Copy. A click on a link to another `.md` file goes there;
+    Back (Alt+Left or Backspace) and Forward (Alt+Right) return, scrolled
+    to where you were; Home (Alt+Home) is the folder's `index.md`, a
+    manual's Contents. (`--read FILE` still opens the Editor in Reading
+    View.)
   - **Saving:** our own Markdown writer (Qt's loses code blocks, joins
     lists and re-wraps lines): `**bold**`, `*italic*`, `~~struck~~`,
     `<u>underline</u>`, `` `code` ``, fenced code blocks, `-`/`1.`/`- [ ]`

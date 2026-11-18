@@ -1,0 +1,14 @@
+#!/bin/sh
+# Stand-in nginx for tests/services/run.sh: -v gives a version; -t checks
+# the enabled sites the way the test needs (port 2: refused)
+root=${W95_FAKE_ROOT:?}
+echo "nginx $*" >>"$root/log"
+case "${1:-}" in
+    -v) echo "nginx version: nginx/1.26.3" >&2 ;;
+    -t)
+        if grep -qs "listen \(127.0.0.1:\)\?2 " "$root"/etc/nginx/sites-enabled/*; then
+            echo "nginx: [emerg] bind() to 0.0.0.0:2 failed" >&2; exit 1
+        fi
+        echo "nginx: configuration file /etc/nginx/nginx.conf test is successful" >&2 ;;
+esac
+exit 0

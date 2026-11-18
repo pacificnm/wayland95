@@ -3,6 +3,7 @@
 #include "software.h" // PkTransaction
 
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -182,6 +183,11 @@ ServiceManager::ServiceManager(QObject *parent)
                          "connections). Programs here, or on others if you allow it, keep their data in it."),
           QStringLiteral("mariadb"), QStringLiteral("MysqlSettings.qml"),
           { QStringLiteral("mariadb-server") }, {}, {} },
+        { QStringLiteral("nginx"), QStringLiteral("nginx Web Server"), QStringLiteral("server"),
+          QStringLiteral("A web server: shows a folder's pages to web browsers on this computer, or on others "
+                         "if you allow it. Settings chooses the folder."),
+          QStringLiteral("nginx"), QStringLiteral("NginxSettings.qml"),
+          { QStringLiteral("nginx") }, {}, {} },
         { QStringLiteral("wireguard"), QStringLiteral("WireGuard VPN"), QStringLiteral("server"),
           QStringLiteral("Private, encrypted tunnels to other computers and networks (a VPN). Each tunnel has "
                          "its own keys and peers; Settings shows the ones this computer has."),
@@ -433,6 +439,15 @@ void ServiceManager::turnOn(const QString &id)
                 nextStep();
             else
                 installStep({ QStringLiteral("npm") })();
+        };
+    }
+    if (id == QLatin1String("nginx")) {
+        // (setfacl: how nginx gets to read a website folder in your home)
+        steps << [this] {
+            if (QFileInfo::exists(QStringLiteral("/usr/bin/setfacl")))
+                nextStep();
+            else
+                installStep({ QStringLiteral("acl") })();
         };
     }
     QString done;
@@ -1080,4 +1095,75 @@ bool ServiceManager::moveToTrash(const QString &path)
     QDir().mkpath(trash + QStringLiteral("/files"));
     QDir().mkpath(trash + QStringLiteral("/info"));
     return QFile::moveToTrash(path);
+}
+
+// ---------------------------------------------------------------------------
+// nginx
+
+QVariantMap ServiceManager::nginxConfig() const
+{
+    if (QStandardPaths::findExecutable(QStringLiteral("nginx"), { QStringLiteral("/usr/sbin"), QStringLiteral("/usr/bin") }).isEmpty()
+        && QStandardPaths::findExecutable(QStringLiteral("nginx")).isEmpty())
+        return {};
+    QVariantMap out{
+        { QStringLiteral("listen"), QStringLiteral("all") },
+        { QStringLiteral("port"), 80 },
+        { QStringLiteral("root"), QStringLiteral("/var/www/html") },
+        { QStringLiteral("autoindex"), false },
+        { QStringLiteral("ours"), false },
+    };
+    // ours: its first line says what it was written with
+    QFile f(QStringLiteral("/etc/nginx/sites-enabled/wayland95"));
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        while (!f.atEnd()) {
+            const QString line = QString::fromUtf8(f.readLine()).trimmed();
+            if (!line.startsWith(QLatin1String("# wayland95: ")))
+                continue;
+            out.insert(QStringLiteral("ours"), true);
+            for (const QString &kv : line.mid(13).split(QLatin1Char('\t'))) {
+                const QString key = kv.section(QLatin1Char('='), 0, 0), value = kv.section(QLatin1Char('='), 1);
+                if (key == QLatin1String("listen") || key == QLatin1String("root"))
+                    out.insert(key, value);
+                else if (key == QLatin1String("port"))
+                    out.insert(key, value.toInt());
+                else if (key == QLatin1String("autoindex"))
+                    out.insert(key, value == QLatin1String("yes"));
+            }
+            break;
+        }
+    }
+    const QFileInfo root(out.value(QStringLiteral("root")).toString());
+    out.insert(QStringLiteral("rootExists"), root.isDir());
+    out.insert(QStringLiteral("rootWritable"), root.isDir() && root.isWritable());
+    QProcess p;
+    p.setProcessChannelMode(QProcess::MergedChannels);
+    p.start(QStringLiteral("nginx"), { QStringLiteral("-v") });
+    if (p.waitForFinished(5000)) {
+        static const QRegularExpression v(QStringLiteral("nginx/(\\d+(?:\\.\\d+)+)"));
+        out.insert(QStringLiteral("version"), v.match(QString::fromUtf8(p.readAll())).captured(1));
+    }
+    return out;
+}
+
+QString ServiceManager::makeWebsite()
+{
+    const QString dir = QDir::homePath() + QStringLiteral("/Website");
+    QDir().mkpath(dir);
+    const QString index = dir + QStringLiteral("/index.html");
+    if (!QFileInfo::exists(index)) {
+        QSaveFile f(index);
+        if (f.open(QIODevice::WriteOnly)) {
+            f.write(QStringLiteral(
+                "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>My Website</title>\n</head>\n<body>\n"
+                "<h1>It works!</h1>\n<p>This page is %1/index.html. Change it, or add more pages beside it.</p>\n"
+                "</body>\n</html>\n").arg(dir.toHtmlEscaped()).toUtf8());
+            f.commit();
+        }
+    }
+    return dir;
+}
+
+void ServiceManager::openUrl(const QString &url) const
+{
+    QDesktopServices::openUrl(QUrl(url));
 }

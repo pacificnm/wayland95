@@ -13,6 +13,11 @@
 #   my-role NAME [admin]  a MySQL account for NAME, logging on as that user
 #   my-password NAME      < a password for NAME's logons over the network
 #                           (none: no network logons)
+#   unit ... nginx
+#   nginx-config          < listen= port= root= autoindex=  (the website's
+#                           folder: in /var/www, /srv or the caller's home,
+#                           which nginx is then let into, read-only)
+#   www-own               /var/www/html becomes the caller's, to edit
 #   update-source         Wayland 95's update repository, for apt
 #   unit ... wireguard | wireguard:NAME   every tunnel, or one (wg-quick@NAME)
 #   wg-list               the tunnels (/etc/wireguard/NAME.conf): NAME enabled active
@@ -297,6 +302,7 @@ unit)
         ssh) units=$(ssh_units) ;;
         postgresql) units=postgresql.service ;;
         mysql) units=""; systemctl cat mariadb.service >/dev/null 2>&1 && units=mariadb.service ;;
+        nginx) units=""; systemctl cat nginx.service >/dev/null 2>&1 && units=nginx.service ;;
         wireguard|wireguard:*)
             command -v wg-quick >/dev/null || die "WireGuard isn't installed."
             if [ "$2" = wireguard ]; then names=$(wg_names); else names=${2#wireguard:}; wg_name "$names"; fi
@@ -508,6 +514,128 @@ my-password)
     } | my_sql || die "MySQL didn't take the password."
     ;;
 
+nginx-config)
+    # who asked (pkexec says): a website folder may be in their home
+    uid=${PKEXEC_UID:-}
+    case "$uid" in ''|*[!0-9]*) die "Run this through pkexec." ;; esac
+    home=$(getent passwd "$uid" | cut -d: -f6)
+    [ -n "$home" ] && [ "$home" != / ] || die "No home folder for user $uid."
+    command -v nginx >/dev/null && [ -d /etc/nginx ] || die "nginx isn't installed."
+    listen=all port=80 root=/var/www/html autoindex=no
+    while IFS='=' read -r key value; do
+        case "$key" in
+            '') continue ;;
+            listen) case "$value" in localhost|all) listen=$value ;; *) die "listen: localhost or all";; esac ;;
+            port) number port "$value" 1 65535; port=$value ;;
+            root) root=$value ;;
+            autoindex) yesno autoindex "$value"; autoindex=$value ;;
+            *) die "Unknown nginx setting: $key" ;;
+        esac
+    done
+    # the folder: a real one, by its own name, where websites belong
+    case "$root" in
+        /*) ;; *) die "The website's folder must be a full path." ;;
+    esac
+    case "$root" in *[\"\$\\\;\{\}\'\`]*|*'
+'*) die "The website's folder can't have \" \$ \\ ; { } ' or \` in its name." ;; esac
+    [ -d "$root" ] || die "There's no folder $root."
+    real=$(realpath -e -- "$root") || die "There's no folder $root."
+    [ "$real" = "${root%/}" ] || die "Give the folder by its own name, not a link ($root is $real)."
+    root=$real
+    case "/$root/" in */.*) die "A hidden folder can't be the website." ;; esac
+    inhome=no
+    case "$root" in
+        /var/www|/var/www/*|/srv|/srv/*) ;;
+        "$home") die "Your whole home folder can't be the website: choose a folder in it." ;;
+        "$home"/*) inhome=yes ;;
+        *) die "The website's folder must be in /var/www, /srv or your home folder." ;;
+    esac
+    conf=/etc/nginx/sites-available/wayland95
+    link=/etc/nginx/sites-enabled/wayland95
+    old_root=""
+    [ -f "$conf" ] && old_root=$(sed -n 's/^# wayland95: .*\troot=\([^\t]*\).*/\1/p' "$conf" | head -n 1)
+    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+    backup=""
+    if [ -e "$conf" ]; then
+        backup=$(mktemp "$conf.old.XXXXXX")
+        cp -p "$conf" "$backup"
+    fi
+    default_was=no
+    [ -L /etc/nginx/sites-enabled/default ] && default_was=yes
+    {
+        printf '# wayland95: listen=%s\tport=%s\troot=%s\tautoindex=%s\n' "$listen" "$port" "$root" "$autoindex"
+        echo "# Written by the Wayland 95 Services control panel; changes here are overwritten."
+        echo "server {"
+        if [ "$listen" = all ]; then
+            echo "    listen $port default_server;"
+            echo "    listen [::]:$port default_server;"
+        else
+            echo "    listen 127.0.0.1:$port default_server;"
+            echo "    listen [::1]:$port default_server;"
+        fi
+        echo "    server_name _;"
+        echo "    root \"$root\";"
+        echo "    index index.html index.htm;"
+        echo "    autoindex $( [ "$autoindex" = yes ] && echo on || echo off );"
+        echo "    # (no following links to files their owner doesn't own)"
+        echo "    disable_symlinks if_not_owner;"
+        echo "    location ~ /\\. { deny all; }"
+        echo "    location / { try_files \$uri \$uri/ =404; }"
+        echo "}"
+    } | put "$conf"
+    ln -sfn ../sites-available/wayland95 "$link"
+    # (Debian's own site would be in the way)
+    rm -f /etc/nginx/sites-enabled/default
+    restore() {
+        if [ -n "$backup" ]; then mv -f "$backup" "$conf"; else rm -f "$conf" "$link"; fi
+        [ "$default_was" = no ] || ln -sfn ../sites-available/default /etc/nginx/sites-enabled/default
+    }
+    if ! check=$(nginx -t 2>&1); then
+        restore
+        die "nginx didn't accept these settings: $check"
+    fi
+    if systemctl is-active -q nginx.service 2>/dev/null; then
+        if ! systemctl reload-or-restart nginx.service; then
+            restore
+            systemctl restart nginx.service || true
+            die "nginx didn't start with these settings, so they were put back."
+        fi
+    fi
+    [ -z "$backup" ] || rm -f "$backup"
+    # a folder in your home: nginx (www-data) may go through the folders on
+    # the way, and read this one (and what's put in it later), nothing else
+    if [ "$inhome" = yes ]; then
+        command -v setfacl >/dev/null || die "Settings saved, but nginx can't read your folder: install acl (setfacl)."
+        d=$(dirname "$root")
+        while :; do
+            setfacl -m u:www-data:x "$d"
+            [ "$d" = "$home" ] && break
+            d=$(dirname "$d")
+        done
+        setfacl -R -m u:www-data:rX "$root"
+        setfacl -R -d -m u:www-data:rX "$root"
+    fi
+    # the folder before, if it was one of yours: nginx can't read it now
+    if [ -n "$old_root" ] && [ "$old_root" != "$root" ] && [ -d "$old_root" ]; then
+        case "$old_root" in
+            "$home"/*) command -v setfacl >/dev/null && setfacl -R -x u:www-data "$old_root" 2>/dev/null \
+                           && setfacl -R -d -x u:www-data "$old_root" 2>/dev/null || true ;;
+        esac
+    fi
+    ;;
+
+www-own)
+    # /var/www/html becomes the user's (pkexec's caller), so they can edit it
+    uid=${PKEXEC_UID:-}
+    case "$uid" in ''|*[!0-9]*) die "Run this through pkexec." ;; esac
+    [ "$uid" != 0 ] || die "It's root's already."
+    gid=$(getent passwd "$uid" | cut -d: -f4)
+    [ -n "$gid" ] || die "No such user: $uid."
+    [ -d /var/www/html ] && [ ! -L /var/www/html ] || die "There's no /var/www/html."
+    chown -R --no-dereference "$uid:$gid" /var/www/html
+    chmod u+rwX,go+rX -R /var/www/html
+    ;;
+
 wg-list)
     for n in $(wg_names); do
         e=no a=no
@@ -583,6 +711,6 @@ update-source)
     ;;
 
 *)
-    die "usage: wayland95-services unit|ssh-config|pg-config|pg-role|my-config|my-role|my-password|wg-list|wg-show|wg-save|wg-import|wg-delete|update-source ..."
+    die "usage: wayland95-services unit|ssh-config|pg-config|pg-role|my-config|my-role|my-password|nginx-config|www-own|wg-list|wg-show|wg-save|wg-import|wg-delete|update-source ..."
     ;;
 esac

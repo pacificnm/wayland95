@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stand-in nginx for the Services windows' test: its version
+[ "${1:-}" = -v ] && echo "nginx version: nginx/1.26.3" >&2
+exit 0

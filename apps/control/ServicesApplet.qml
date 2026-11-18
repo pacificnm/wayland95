@@ -2,7 +2,7 @@ import QtQuick
 import Win95Ui
 import Win95Control
 
-// Services: servers (SSH, PostgreSQL, MySQL, WireGuard), programming
+// Services: servers (SSH, PostgreSQL, MySQL, nginx, WireGuard), programming
 // languages (Python, Node.js) and tools (SQLite) turned on and off with a check box, like Windows Setup's list
 // of components. Turning one on installs it first if it isn't there;
 // Settings... opens its own property sheet.
@@ -12,7 +12,7 @@ PropertySheet {
     title: "Services Properties"
     titles: ["Services"]
     canApply: false
-    height: 472
+    height: 492
 
     readonly property var items: Services.services.map(function (s) {
         return Object.assign({ key: s.id }, s);
@@ -130,7 +130,7 @@ PropertySheet {
             id: list
             y: 62
             width: parent.width
-            height: 148
+            height: 168
             model: sheet.items
             checkable: true
             checked: sheet.checkedMap

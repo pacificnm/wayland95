@@ -109,6 +109,14 @@ public:
     // to the Recycle Bin (the desktop's trash)
     Q_INVOKABLE bool moveToTrash(const QString &path);
 
+    // nginx: version, listen ("localhost"/"all"), port, root (the website's
+    // folder), autoindex, ours (its site is the one in use), rootExists,
+    // rootWritable (by you); empty if it isn't installed
+    Q_INVOKABLE QVariantMap nginxConfig() const;
+    // ~/Website, made with a first page if it isn't there: its path
+    Q_INVOKABLE QString makeWebsite();
+    Q_INVOKABLE void openUrl(const QString &url) const;
+
 signals:
     void servicesChanged();
     void taskChanged();

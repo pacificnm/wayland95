@@ -17,9 +17,10 @@ command -v wg >/dev/null || { echo "Missing wg (sudo apt install wireguard-tools
 
 ROOT=$(mktemp -d /tmp/wayland95-services.XXXXXX)
 export W95_FAKE_ROOT=$ROOT
-mkdir -p "$ROOT/etc" "$ROOT/sys/class/net"
+mkdir -p "$ROOT/etc" "$ROOT/sys/class/net" "$ROOT/var/www/html" "$ROOT/srv" "$ROOT/home/user"
 sed -e "s|^PATH=.*|PATH=$HERE/fakes:/usr/sbin:/usr/bin:/sbin:/bin|" \
     -e "s|/etc/|$ROOT/etc/|g" -e "s|/sys/class/net|$ROOT/sys/class/net|g" \
+    -e "s|/var/www|$ROOT/var/www|g" -e "s|/srv|$ROOT/srv|g" \
     "$REPO/session/wayland95-services" >"$ROOT/helper"
 chmod +x "$ROOT/helper"
 if [ "${1:-}" = --setup ]; then
@@ -229,6 +230,80 @@ grep -qF "GRANT ALL PRIVILEGES ON *.* TO 'jo'@'%' WITH GRANT OPTION;" "$MYLOG"; 
 out=$(printf '' | helper my-password jo 2>&1)
 [ $? -eq 0 ] && grep -qF "DROP USER IF EXISTS 'jo'@'%';" "$MYLOG"; expect $? "my-password with none: no network logons" "$out $(cat "$MYLOG")"
 out=$(printf '%0201d\n' 0 | helper my-password jo 2>&1); [ $? -ne 0 ]; expect $? "my-password refuses one that's too long" "$out"
+
+echo
+echo "== wayland95-services: nginx"
+NG=$ROOT/etc/nginx
+SITE=$NG/sites-available/wayland95
+ACL=$ROOT/acl.log
+UHOME=$ROOT/home/user
+asme() { PKEXEC_UID=$(id -u) "$ROOT/helper" "$@"; }
+out=$(printf 'listen=all\n' | asme nginx-config 2>&1); [ $? -ne 0 ]; expect $? "not installed: nginx-config refuses" "$out"
+out=$(helper unit enable nginx 2>&1); [ $? -ne 0 ]; expect $? "not installed: unit enable nginx refuses" "$out"
+mkdir -p "$NG/sites-available" "$NG/sites-enabled"
+echo "server { listen 80 default_server; }" >"$NG/sites-available/default"
+ln -s ../sites-available/default "$NG/sites-enabled/default"
+: >"$ROOT/units/nginx.service"
+out=$(helper unit enable nginx 2>&1)
+[ $? -eq 0 ] && [ -e "$ROOT/enabled/nginx.service" ] && [ -e "$ROOT/active/nginx.service" ]
+expect $? "unit enable nginx: started, and at boot" "$out"
+out=$(printf 'listen=all\n' | helper nginx-config 2>&1); [ $? -ne 0 ] && [ ! -e "$SITE" ]
+expect $? "nginx-config without pkexec's caller (PKEXEC_UID): refused" "$out"
+
+: >"$ROOT/log"
+out=$(printf 'listen=all\nport=80\nroot=%s\nautoindex=no\n' "$ROOT/var/www/html" | asme nginx-config 2>&1)
+[ $? -eq 0 ] && grep -qx "    listen 80 default_server;" "$SITE" && grep -qx "    listen \[::\]:80 default_server;" "$SITE" \
+    && grep -qx "    root \"$ROOT/var/www/html\";" "$SITE" && grep -qx "    autoindex off;" "$SITE" \
+    && [ "$(readlink "$NG/sites-enabled/wayland95")" = ../sites-available/wayland95 ] && [ ! -e "$NG/sites-enabled/default" ] \
+    && [ -e "$NG/sites-available/default" ] && grep -q "^nginx -t" "$ROOT/log" && grep -q "reload-or-restart nginx.service" "$ROOT/log" \
+    && head -n 1 "$SITE" | grep -q "^# wayland95: listen=all	port=80	root=$ROOT/var/www/html	autoindex=no$"
+expect $? "nginx-config: its own site (/var/www/html), enabled in place of Debian's, checked (nginx -t), reloaded" "$out $(cat "$SITE")"
+grep -qx '    location ~ /\\. { deny all; }' "$SITE" && grep -qx "    disable_symlinks if_not_owner;" "$SITE"
+expect $? "(hidden files are never served, nor links to others' files)" "$(cat "$SITE")"
+printf 'listen=localhost\nport=8080\nroot=%s\nautoindex=yes\n' "$ROOT/var/www/html" | asme nginx-config >/dev/null 2>&1
+grep -qx "    listen 127.0.0.1:8080 default_server;" "$SITE" && grep -qx "    listen \[::1\]:8080 default_server;" "$SITE" && grep -qx "    autoindex on;" "$SITE"
+expect $? "nginx-config listen=localhost, port 8080, folder lists: this computer only" "$(cat "$SITE")"
+
+# a folder in the caller's home: nginx gets in, read-only, there only
+mkdir -p "$UHOME/Sites/my site" "$UHOME/.ssh" "$UHOME/.hidden"
+ln -s "$ROOT/etc" "$UHOME/etclink"
+: >"$ACL"
+out=$(printf 'listen=all\nport=80\nroot=%s\n' "$UHOME/Sites/my site" | asme nginx-config 2>&1)
+[ $? -eq 0 ] && grep -qx "    root \"$UHOME/Sites/my site\";" "$SITE" \
+    && grep -qxF "setfacl -m u:www-data:x $UHOME/Sites" "$ACL" && grep -qxF "setfacl -m u:www-data:x $UHOME" "$ACL" \
+    && grep -qxF "setfacl -R -m u:www-data:rX $UHOME/Sites/my site" "$ACL" && grep -qxF "setfacl -R -d -m u:www-data:rX $UHOME/Sites/my site" "$ACL" \
+    && ! grep -q "x $ROOT/home$" "$ACL"
+expect $? "a folder in your home: nginx may pass through the folders to it (not list them) and read it, and nothing above home" "$out $(cat "$ACL")"
+before=$(md5sum <"$SITE")
+for bad in "/etc" "$UHOME" "$UHOME/.ssh" "$UHOME/.hidden" "$UHOME/etclink" "$ROOT/home" "relative/folder" "$UHOME/nothere" \
+           "$UHOME/Sites/my site;" "/" "$ROOT/var/www/../../etc"; do
+    [ "$bad" = "$UHOME/Sites/my site;" ] && mkdir -p "$bad"
+    out=$(printf 'root=%s\n' "$bad" | asme nginx-config 2>&1)
+    [ $? -ne 0 ] && [ "$(md5sum <"$SITE")" = "$before" ]
+    expect $? "refused as the website: $bad (and the site stays as it was)" "$out"
+done
+for bad in 'listen=everywhere' 'port=70000' 'port=8o' 'autoindex=maybe' 'server_name=evil' "root=$ROOT/var/www/html
+include=/etc/shadow"; do
+    out=$(printf '%s\n' "$bad" | asme nginx-config 2>&1); [ $? -ne 0 ] && [ "$(md5sum <"$SITE")" = "$before" ]
+    expect $? "nginx-config refuses: $(echo "$bad" | tr '\n' ' ')" "$out"
+done
+out=$(printf 'listen=all\nport=2\nroot=%s\n' "$ROOT/var/www/html" | asme nginx-config 2>&1)
+[ $? -ne 0 ] && [ "$(md5sum <"$SITE")" = "$before" ] && ! ls "$SITE".* >/dev/null 2>&1
+expect $? "settings nginx -t won't take: put back" "$out"
+
+# from the home folder to /var/www/html: nginx is let out of it again
+: >"$ACL"
+printf 'listen=all\nport=80\nroot=%s\n' "$ROOT/var/www/html" | asme nginx-config >/dev/null 2>&1
+grep -qxF "setfacl -R -x u:www-data $UHOME/Sites/my site" "$ACL"
+expect $? "a website folder in your home no longer used: nginx can't read it any more" "$(cat "$ACL")"
+
+# /var/www/html made yours
+out=$(helper www-own 2>&1); [ $? -ne 0 ]; expect $? "www-own without pkexec's caller: refused" "$out"
+out=$(PKEXEC_UID=0 "$ROOT/helper" www-own 2>&1); [ $? -ne 0 ]; expect $? "www-own for root: refused" "$out"
+echo hi >"$ROOT/var/www/html/index.html"
+out=$(asme www-own 2>&1)
+[ $? -eq 0 ] && [ "$(stat -c %u "$ROOT/var/www/html/index.html")" = "$(id -u)" ]
+expect $? "www-own: /var/www/html becomes yours" "$out"
 
 # --- the other services still work ------------------------------------------------------
 out=$(helper unit start nosuch 2>&1); [ $? -ne 0 ]; expect $? "(an unknown service is still refused)" "$out"

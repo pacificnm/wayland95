@@ -732,7 +732,7 @@ up next to the shell first, then on `$PATH`.
       system's default through systemd-localed (it asks for a password).
   - **Services:** servers, programming languages and tools, each turned
     on and off with a check box: **SSH Server**, **PostgreSQL**, **MySQL
-    (MariaDB)**, **WireGuard VPN**, **Python**, **Node.js** and **SQLite**. Checking one that isn't installed installs it first
+    (MariaDB)**, **nginx Web Server**, **WireGuard VPN**, **Python**, **Node.js** and **SQLite**. Checking one that isn't installed installs it first
     (PackageKit), then starts it and has it start with the computer.
     Unchecking a server stops it but keeps it, with its settings and data;
     unchecking a language removes it. **Settings...** opens each one's own
@@ -756,6 +756,18 @@ up next to the shell first, then on `$PATH`.
       ones named `YOU_...`. It lists, creates and deletes them, opens one
       in `mariadb`, and sets a separate password for logons from other
       computers (empty: none).
+    - **nginx Web Server:** shows a folder's pages to web browsers on
+      this computer only or the network too, on the port you choose
+      (**Open in Web Browser** goes to it). **Website** picks the folder:
+      nginx's own `/var/www/html` (**Make It Yours** lets you edit it), or
+      one in your home (**Use my Website folder** makes `~/Website` with a
+      first page). Your home is private, so nginx is let in just far
+      enough (ACLs: it may pass through the folders on the way and read
+      that one, and loses it again when you choose another); files whose
+      names start with a dot are never shown. Optionally a folder with no
+      `index.html` lists its files. Written as its own site
+      (`sites-available/wayland95`, in place of Debian's default one),
+      checked with `nginx -t` first and put back if nginx won't take it.
     - **SQLite:** a database in a single file, with no server. Turning it
       on installs the `sqlite3` command; **DB Browser for SQLite** is an
       extra. **Databases** lists the SQLite files in `~/Databases` (or a
@@ -790,7 +802,10 @@ up next to the shell first, then on `$PATH`.
       `conf.d/50-wayland95.conf` and a marked block in `pg_hba.conf`, and
       creates your PostgreSQL account, writes MariaDB's
       `99-wayland95.cnf` and creates your MySQL account and network
-      password (sent as hex for the server to quote), and reads, writes and removes
+      password (sent as hex for the server to quote), writes nginx's
+      site and lets it into a website folder in your home (only in
+      `/var/www`, `/srv` or the caller's home, never the home itself or a
+      hidden folder, by its own name and not a link), and reads, writes and removes
       WireGuard's tunnel files and starts and stops `wg-quick@NAME`
       (`wg-quick strip` checks a file first; one a connected tunnel can't
       start with is put back). It checks every value it's given

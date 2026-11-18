@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games find repos markdown startup drives backup calc email web dbservices monitors screen
+#                                  games find repos markdown startup drives backup calc email web dbservices nginx monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -3539,7 +3539,7 @@ CLEAR_COOKIES=378,436; CLEAR_BUTTON=561,460
 # real, in the test's home.
 start_services_applet() {
     FS=$WORK/services-$SUITE; rm -rf "$FS"; mkdir -p "$FS"
-    printf '%s\n' mariadb-server sqlite3 >"$FS/installed"; echo mariadb.service >"$FS/active"
+    printf '%s\n' mariadb-server sqlite3 nginx >"$FS/installed"; printf '%s\n' mariadb.service nginx.service >"$FS/active"
     PATH=$HERE/fakes-services:$PATH W95_FAKE_SERVICES=$FS HOME=$WORK/home-$SUITE XDG_DATA_HOME=$WORK/data-$SUITE \
         XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
         W95_SERVICES_DEBUG=1 "$BUILD/win95control" --applet services >>"$WORK/$SUITE-control.log" 2>&1 &
@@ -3551,7 +3551,7 @@ svsaid() { grep -qF -- "services: $1" "$WORK/$SUITE-control.log"; }
 svwait() { local i; for i in $(seq 40); do svsaid "$1" && return 0; sleep 0.25; done; return 1; }
 fslog() { grep -qF -- "$1" "$FS/log"; }
 # (the property sheets open at 73,85; their tabs, buttons and lists)
-SV_ROW_MYSQL=150,206; SV_ROW_SQLITE=150,286; SV_TAB2=170,103; SV_APPLY=433,496; SV_CANCEL=352,496
+SV_ROW_MYSQL=150,206; SV_ROW_NGINX=150,226; SV_ROW_SQLITE=150,306; SV_TAB1=108,103; SV_TAB2=170,103; SV_APPLY=433,496; SV_CANCEL=352,496
 MY_ALL=111,234; MY_CREATE=217,237; MY_ROW2=200,174; MY_NEW=228,342; MY_DELETE=309,342; MY_PASSWORD=167,374
 SQ_ROW1=200,162; SQ_ROW2=200,182; SQ_NEW=194,357; SQ_TRASH=403,357
 suite_dbservices() {
@@ -3627,7 +3627,34 @@ suite_dbservices() {
     expect_true $? "Move to Recycle Bin: it's in the Recycle Bin (to be put back from), not deleted" "$(find "$WORK/data-$SUITE" 2>&1)"
 }
 
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup calc email web dbservices monitors screen classic vscode)
+suite_nginx() {
+    say "nginx: Control Panel > Services > nginx Web Server, with stand-ins"
+    fresh
+    start_shell || return
+    mkdir -p "$WORK/home-$SUITE"
+    start_services_applet
+    svwait "nginx Running"; expect_true $? "Services lists the nginx Web Server (running)" "$(grep services: "$WORK/$SUITE-control.log" | tail -8)"
+    away; shot list
+    pointer click:$SV_ROW_NGINX wait:0.4 key:Return wait:2
+    query list | grep -q "^nginx Properties|win95control|"; expect_true $? "its Settings: nginx Properties" "$(query list | tr '\n' ' ')"
+    away; shot general
+    # Website: /var/www/html made yours; or ~/Website, with its files listed
+    pointer click:$SV_TAB2 wait:1
+    away; shot website
+    pointer click:$NG_MAKE_YOURS wait:1
+    fslog "helper www-own"; expect_true $? "Make It Yours: the helper's www-own" "$(cat "$FS/log")"
+    pointer click:$NG_MY_WEBSITE wait:0.6 click:$NG_LIST wait:0.3
+    away; shot my-website
+    grep -q "It works" "$WORK/home-$SUITE/Website/index.html" 2>/dev/null; expect_true $? "Use my Website folder: ~/Website, with a first page" "$(ls -la "$WORK/home-$SUITE/Website" 2>&1)"
+    # General: this computer only; Apply
+    pointer click:$SV_TAB1 wait:0.6 click:$NG_LOCAL wait:0.3 click:$SV_APPLY wait:1
+    fslog "helper nginx-config" && fslog "< listen=localhost" && fslog "< port=80" && fslog "< root=$WORK/home-$SUITE/Website" && fslog "< autoindex=yes"
+    expect_true $? "this computer only, Apply: the helper's nginx-config with that folder, its files listed" "$(cat "$FS/log")"
+    away; shot applied
+}
+NG_LOCAL=111,244; NG_MAKE_YOURS=167,329; NG_MY_WEBSITE=162,183; NG_LIST=95,214
+
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup calc email web dbservices nginx monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

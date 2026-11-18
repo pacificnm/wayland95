@@ -1,0 +1,3 @@
+#!/bin/sh
+# Stand-in setfacl for tests/services/run.sh: logs what it was asked
+echo "setfacl $*" >>"${W95_FAKE_ROOT:?}/acl.log"

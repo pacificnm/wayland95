@@ -328,6 +328,24 @@ Canvas {
             frame(14, 26, 10, 3, "#ffd800");
             rect(15, 28, 2, 3, "#ffd800"); rect(19, 28, 2, 3, "#ffd800");
             break;
+        case "nginx":
+            // a server box with the world in front of it: a web server
+            frame(2, 2, 18, 26, "#c0c0c0");
+            rect(4, 5, 14, 3, "#808080"); rect(4, 10, 14, 3, "#808080");
+            rect(15, 6, 2, 1, "#00ff00"); rect(15, 11, 2, 1, "#00ff00");
+            ctx.save();
+            ctx.beginPath(); ctx.arc(21, 21, 9, 0, Math.PI * 2); ctx.clip();
+            rect(12, 12, 18, 18, "#3a7bd5");
+            ctx.fillStyle = "#3c9a3c";
+            ctx.beginPath(); ctx.ellipse(12, 13, 9, 8); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(21, 21, 8, 9); ctx.fill();
+            ctx.restore();
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(21, 21, 9, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(16.5, 12, 9, 18); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(12, 21); ctx.lineTo(30, 21); ctx.stroke();
+            break;
         case "sqlite":
             // a page with a small database drum on it: a database in a file
             frame(5, 1, 20, 28, "#ffffff");

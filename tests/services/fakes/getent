@@ -1,0 +1,10 @@
+#!/bin/sh
+# Stand-in getent for tests/services/run.sh: user 4321 ("user") lives in
+# $W95_FAKE_ROOT/home/user; the one running the test is themselves, there
+root=${W95_FAKE_ROOT:?}
+[ "$1" = passwd ] || exit 2
+case "$2" in
+    4321) echo "user:x:4321:4321::$root/home/user:/bin/sh" ;;
+    "$(id -u)") echo "$(id -un):x:$(id -u):$(id -g)::$root/home/user:/bin/sh" ;;
+    *) exit 2 ;;
+esac

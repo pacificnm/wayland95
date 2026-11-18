@@ -1,0 +1,5294 @@
+{
+ "format": 1,
+ "app": {
+  "name": "money",
+  "title": "Wayland Money",
+  "version": "1.0",
+  "startForm": "HomeForm"
+ },
+ "database": {
+  "driver": "sqlite",
+  "file": "money.db"
+ },
+ "tables": [
+  {
+   "name": "Accounts",
+   "label": "Accounts",
+   "fields": [
+    {
+     "name": "Name",
+     "type": "text",
+     "required": true,
+     "unique": true,
+     "maxLength": 60
+    },
+    {
+     "name": "Type",
+     "type": "choice",
+     "choices": [
+      "Checking",
+      "Savings",
+      "Credit Card",
+      "Cash",
+      "Investment",
+      "Retirement",
+      "Loan",
+      "Asset",
+      "Liability"
+     ],
+     "default": "Checking",
+     "required": true
+    },
+    {
+     "name": "Institution",
+     "type": "text",
+     "maxLength": 60
+    },
+    {
+     "name": "AccountNumber",
+     "type": "text",
+     "label": "Account Number",
+     "maxLength": 40
+    },
+    {
+     "name": "OpeningBalance",
+     "type": "currency",
+     "label": "Opening Balance",
+     "default": "0"
+    },
+    {
+     "name": "OpeningDate",
+     "type": "date",
+     "label": "Opening Date",
+     "default": "today"
+    },
+    {
+     "name": "CreditLimit",
+     "type": "currency",
+     "label": "Credit Limit",
+     "validator": "not_negative"
+    },
+    {
+     "name": "InterestRate",
+     "type": "decimal",
+     "label": "Interest Rate",
+     "decimals": 3,
+     "validator": "percentage"
+    },
+    {
+     "name": "Closed",
+     "type": "boolean"
+    },
+    {
+     "name": "SchwabHash",
+     "type": "text",
+     "label": "Schwab Link"
+    },
+    {
+     "name": "LastSync",
+     "type": "datetime",
+     "label": "Last Download"
+    },
+    {
+     "name": "Notes",
+     "type": "memo"
+    }
+   ]
+  },
+  {
+   "name": "Categories",
+   "label": "Categories",
+   "fields": [
+    {
+     "name": "Name",
+     "type": "text",
+     "required": true,
+     "unique": true,
+     "maxLength": 60
+    },
+    {
+     "name": "Kind",
+     "type": "choice",
+     "choices": [
+      "Expense",
+      "Income"
+     ],
+     "default": "Expense",
+     "required": true
+    },
+    {
+     "name": "TaxRelated",
+     "type": "boolean",
+     "label": "Tax-related"
+    },
+    {
+     "name": "Notes",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "name": "Payees",
+   "label": "Payees",
+   "fields": [
+    {
+     "name": "Name",
+     "type": "text",
+     "required": true,
+     "unique": true,
+     "maxLength": 80
+    },
+    {
+     "name": "Category",
+     "type": "lookup",
+     "label": "Usual Category",
+     "lookupTable": "Categories"
+    },
+    {
+     "name": "Phone",
+     "type": "phone"
+    },
+    {
+     "name": "Email",
+     "type": "email",
+     "label": "E-mail"
+    },
+    {
+     "name": "Website",
+     "type": "url"
+    },
+    {
+     "name": "Address",
+     "type": "memo"
+    },
+    {
+     "name": "Notes",
+     "type": "memo"
+    }
+   ]
+  },
+  {
+   "name": "Securities",
+   "label": "Securities",
+   "fields": [
+    {
+     "name": "Symbol",
+     "type": "text",
+     "required": true,
+     "unique": true,
+     "maxLength": 32,
+     "pattern": "[A-Z0-9 ./$-]+",
+     "message": "A symbol is capitals and digits: AAPL, BRK/B."
+    },
+    {
+     "name": "Company",
+     "type": "text",
+     "maxLength": 120
+    },
+    {
+     "name": "Type",
+     "type": "choice",
+     "choices": [
+      "Stock",
+      "ETF",
+      "Mutual Fund",
+      "Bond",
+      "Option",
+      "Money Market",
+      "Other"
+     ],
+     "default": "Stock",
+     "required": true
+    },
+    {
+     "name": "LastPrice",
+     "type": "decimal",
+     "label": "Last Price",
+     "decimals": 4,
+     "validator": "not_negative"
+    },
+    {
+     "name": "Change",
+     "type": "decimal",
+     "decimals": 4
+    },
+    {
+     "name": "ChangePercent",
+     "type": "decimal",
+     "label": "Change %",
+     "decimals": 2
+    },
+    {
+     "name": "PriceTime",
+     "type": "datetime",
+     "label": "Price As Of"
+    },
+    {
+     "name": "Watch",
+     "type": "boolean",
+     "label": "On Watch List"
+    }
+   ]
+  },
+  {
+   "name": "Transactions",
+   "label": "Transactions",
+   "fields": [
+    {
+     "name": "Account",
+     "type": "lookup",
+     "lookupTable": "Accounts",
+     "required": true
+    },
+    {
+     "name": "Date",
+     "type": "date",
+     "required": true,
+     "default": "today"
+    },
+    {
+     "name": "Number",
+     "type": "text",
+     "label": "Num",
+     "maxLength": 12
+    },
+    {
+     "name": "Payee",
+     "type": "lookup",
+     "lookupTable": "Payees"
+    },
+    {
+     "name": "Category",
+     "type": "lookup",
+     "lookupTable": "Categories"
+    },
+    {
+     "name": "Memo",
+     "type": "text",
+     "maxLength": 120
+    },
+    {
+     "name": "Amount",
+     "type": "currency",
+     "required": true,
+     "validator": "expression",
+     "rule": "value !== 0 || record.Action",
+     "message": "Amount can't be 0."
+    },
+    {
+     "name": "Cleared",
+     "type": "choice",
+     "label": "Status",
+     "choices": [
+      "Unreconciled",
+      "Cleared",
+      "Reconciled"
+     ],
+     "default": "Unreconciled"
+    },
+    {
+     "name": "TransferAccount",
+     "type": "lookup",
+     "label": "Transfer Account",
+     "lookupTable": "Accounts",
+     "validator": "different_from",
+     "validatorArg": "Account",
+     "message": "A transfer goes to another account."
+    },
+    {
+     "name": "TransferId",
+     "type": "integer",
+     "label": "Transfer's Other Half"
+    },
+    {
+     "name": "IsSplit",
+     "type": "boolean",
+     "label": "Split"
+    },
+    {
+     "name": "Action",
+     "type": "choice",
+     "choices": [
+      "Buy",
+      "Sell",
+      "Dividend",
+      "Interest",
+      "Reinvest",
+      "Add Shares",
+      "Remove Shares",
+      "Fee"
+     ]
+    },
+    {
+     "name": "Security",
+     "type": "lookup",
+     "lookupTable": "Securities",
+     "validator": "only_if",
+     "validatorArg": "Action"
+    },
+    {
+     "name": "Quantity",
+     "type": "decimal",
+     "label": "Shares",
+     "decimals": 4,
+     "validator": "not_negative"
+    },
+    {
+     "name": "Price",
+     "type": "decimal",
+     "decimals": 4,
+     "validator": "not_negative"
+    },
+    {
+     "name": "Commission",
+     "type": "currency",
+     "validator": "not_negative"
+    },
+    {
+     "name": "Source",
+     "type": "choice",
+     "choices": [
+      "Manual",
+      "Schwab",
+      "Bill"
+     ],
+     "default": "Manual"
+    },
+    {
+     "name": "SchwabId",
+     "type": "text",
+     "label": "Schwab Id",
+     "unique": true
+    }
+   ]
+  },
+  {
+   "name": "Splits",
+   "label": "Splits",
+   "fields": [
+    {
+     "name": "Transaction",
+     "type": "lookup",
+     "lookupTable": "Transactions",
+     "required": true
+    },
+    {
+     "name": "Category",
+     "type": "lookup",
+     "lookupTable": "Categories",
+     "required": true
+    },
+    {
+     "name": "Memo",
+     "type": "text",
+     "maxLength": 120
+    },
+    {
+     "name": "Amount",
+     "type": "currency",
+     "required": true,
+     "validator": "not_zero"
+    }
+   ]
+  },
+  {
+   "name": "Bills",
+   "label": "Bills and Deposits",
+   "fields": [
+    {
+     "name": "Name",
+     "type": "text",
+     "required": true,
+     "maxLength": 80
+    },
+    {
+     "name": "Kind",
+     "type": "choice",
+     "choices": [
+      "Bill",
+      "Deposit",
+      "Transfer"
+     ],
+     "default": "Bill",
+     "required": true
+    },
+    {
+     "name": "Account",
+     "type": "lookup",
+     "lookupTable": "Accounts",
+     "required": true
+    },
+    {
+     "name": "ToAccount",
+     "type": "lookup",
+     "label": "To Account",
+     "lookupTable": "Accounts",
+     "validator": "different_from",
+     "validatorArg": "Account",
+     "message": "A transfer goes to another account."
+    },
+    {
+     "name": "Payee",
+     "type": "lookup",
+     "lookupTable": "Payees"
+    },
+    {
+     "name": "Category",
+     "type": "lookup",
+     "lookupTable": "Categories"
+    },
+    {
+     "name": "Amount",
+     "type": "currency",
+     "required": true,
+     "validator": "positive"
+    },
+    {
+     "name": "Frequency",
+     "type": "choice",
+     "choices": [
+      "Once",
+      "Weekly",
+      "Every two weeks",
+      "Twice a month",
+      "Monthly",
+      "Every three months",
+      "Every six months",
+      "Yearly"
+     ],
+     "default": "Monthly",
+     "required": true
+    },
+    {
+     "name": "NextDue",
+     "type": "date",
+     "label": "Next Due",
+     "required": true,
+     "default": "today"
+    },
+    {
+     "name": "EndDate",
+     "type": "date",
+     "label": "Ends",
+     "validator": "on_or_after_field",
+     "validatorArg": "NextDue"
+    },
+    {
+     "name": "RemindDays",
+     "type": "integer",
+     "label": "Remind Days",
+     "min": 0,
+     "max": 60,
+     "default": "7"
+    },
+    {
+     "name": "AutoEnter",
+     "type": "boolean",
+     "label": "Enter By Itself"
+    },
+    {
+     "name": "Active",
+     "type": "boolean",
+     "default": "yes"
+    },
+    {
+     "name": "Memo",
+     "type": "text",
+     "maxLength": 120
+    }
+   ]
+  },
+  {
+   "name": "Budgets",
+   "label": "Budgets",
+   "fields": [
+    {
+     "name": "Category",
+     "type": "lookup",
+     "lookupTable": "Categories",
+     "required": true,
+     "unique": true
+    },
+    {
+     "name": "Amount",
+     "type": "currency",
+     "label": "Monthly Amount",
+     "required": true,
+     "validator": "positive"
+    },
+    {
+     "name": "Notes",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "name": "Holdings",
+   "label": "Holdings",
+   "fields": [
+    {
+     "name": "Account",
+     "type": "lookup",
+     "lookupTable": "Accounts",
+     "required": true
+    },
+    {
+     "name": "Security",
+     "type": "lookup",
+     "lookupTable": "Securities",
+     "required": true
+    },
+    {
+     "name": "Quantity",
+     "type": "decimal",
+     "label": "Shares",
+     "decimals": 4
+    },
+    {
+     "name": "CostBasis",
+     "type": "currency",
+     "label": "Cost Basis"
+    },
+    {
+     "name": "MarketValue",
+     "type": "currency",
+     "label": "Market Value"
+    },
+    {
+     "name": "AsOf",
+     "type": "datetime",
+     "label": "As Of"
+    }
+   ]
+  },
+  {
+   "name": "Prices",
+   "label": "Prices",
+   "fields": [
+    {
+     "name": "Security",
+     "type": "lookup",
+     "lookupTable": "Securities",
+     "required": true
+    },
+    {
+     "name": "Day",
+     "type": "date",
+     "required": true
+    },
+    {
+     "name": "Open",
+     "type": "decimal",
+     "decimals": 4
+    },
+    {
+     "name": "High",
+     "type": "decimal",
+     "decimals": 4,
+     "validator": "at_least_field",
+     "validatorArg": "Low"
+    },
+    {
+     "name": "Low",
+     "type": "decimal",
+     "decimals": 4
+    },
+    {
+     "name": "Close",
+     "type": "decimal",
+     "decimals": 4,
+     "required": true
+    },
+    {
+     "name": "Volume",
+     "type": "integer",
+     "min": 0
+    }
+   ]
+  },
+  {
+   "name": "WorthHistory",
+   "label": "Net Worth History",
+   "fields": [
+    {
+     "name": "Day",
+     "type": "date",
+     "required": true,
+     "unique": true
+    },
+    {
+     "name": "Assets",
+     "type": "currency"
+    },
+    {
+     "name": "Liabilities",
+     "type": "currency"
+    },
+    {
+     "name": "Worth",
+     "type": "currency",
+     "label": "Net Worth"
+    }
+   ]
+  },
+  {
+   "name": "Settings",
+   "label": "Settings",
+   "fields": [
+    {
+     "name": "Name",
+     "type": "text",
+     "required": true,
+     "unique": true,
+     "maxLength": 40
+    },
+    {
+     "name": "Value",
+     "type": "memo"
+    }
+   ]
+  },
+  {
+   "name": "Listing",
+   "label": "Listing (column headings)",
+   "fields": [
+    {
+     "name": "Date",
+     "type": "text"
+    },
+    {
+     "name": "Num",
+     "type": "text"
+    },
+    {
+     "name": "Payee",
+     "type": "text"
+    },
+    {
+     "name": "Category",
+     "type": "text"
+    },
+    {
+     "name": "Memo",
+     "type": "text"
+    },
+    {
+     "name": "C",
+     "type": "text"
+    },
+    {
+     "name": "Account",
+     "type": "text"
+    },
+    {
+     "name": "Type",
+     "type": "text"
+    },
+    {
+     "name": "Item",
+     "type": "text"
+    },
+    {
+     "name": "Symbol",
+     "type": "text"
+    },
+    {
+     "name": "Name",
+     "type": "text"
+    },
+    {
+     "name": "Payment",
+     "type": "currency"
+    },
+    {
+     "name": "Deposit",
+     "type": "currency"
+    },
+    {
+     "name": "Balance",
+     "type": "currency"
+    },
+    {
+     "name": "Amount",
+     "type": "currency"
+    },
+    {
+     "name": "Income",
+     "type": "currency"
+    },
+    {
+     "name": "Expenses",
+     "type": "currency"
+    },
+    {
+     "name": "Budget",
+     "type": "currency"
+    },
+    {
+     "name": "Spent",
+     "type": "currency"
+    },
+    {
+     "name": "Left",
+     "type": "currency"
+    },
+    {
+     "name": "Shares",
+     "type": "currency"
+    },
+    {
+     "name": "Price",
+     "type": "currency"
+    },
+    {
+     "name": "Value",
+     "type": "currency"
+    },
+    {
+     "name": "Cost",
+     "type": "currency"
+    },
+    {
+     "name": "Gain",
+     "type": "currency"
+    },
+    {
+     "name": "Percent",
+     "type": "currency",
+     "label": "Gain %"
+    },
+    {
+     "name": "Principal",
+     "type": "currency"
+    },
+    {
+     "name": "Interest",
+     "type": "currency"
+    }
+   ]
+  }
+ ],
+ "forms": [
+  {
+   "name": "HomeForm",
+   "width": 760,
+   "height": 560,
+   "props": {
+    "title": "Wayland Money"
+   },
+   "controls": [
+    {
+     "type": "Menu",
+     "name": "menu1",
+     "x": 0,
+     "y": 0,
+     "width": 760,
+     "height": 20,
+     "props": {
+      "menus": [
+       {
+        "text": "&File",
+        "name": "fileMenu",
+        "items": [
+         {
+          "text": "&Find Transactions...",
+          "name": "fileFind",
+          "shortcut": "Ctrl+F",
+          "action": "openForm",
+          "form": "FindForm"
+         },
+         {
+          "separator": true
+         },
+         {
+          "text": "E&xit",
+          "name": "fileExit",
+          "action": "quit"
+         }
+        ]
+       },
+       {
+        "text": "&Accounts",
+        "name": "accountsMenu",
+        "items": [
+         {
+          "text": "&Account List...",
+          "name": "accountsList",
+          "shortcut": "Ctrl+Shift+A",
+          "action": "openForm",
+          "form": "AccountsForm"
+         },
+         {
+          "text": "Open &Register",
+          "name": "accountsRegister",
+          "shortcut": "Ctrl+R"
+         },
+         {
+          "text": "&Balance an Account...",
+          "name": "accountsBalance"
+         },
+         {
+          "separator": true
+         },
+         {
+          "text": "&Payees...",
+          "name": "accountsPayees",
+          "action": "openForm",
+          "form": "PayeesForm"
+         },
+         {
+          "text": "&Categories...",
+          "name": "accountsCategories",
+          "action": "openForm",
+          "form": "CategoriesForm"
+         }
+        ]
+       },
+       {
+        "text": "&Bills",
+        "name": "billsMenu",
+        "items": [
+         {
+          "text": "&Bills && Deposits...",
+          "name": "billsList",
+          "shortcut": "Ctrl+B",
+          "action": "openForm",
+          "form": "BillsForm"
+         },
+         {
+          "text": "B&udget...",
+          "name": "billsBudget",
+          "action": "openForm",
+          "form": "BudgetForm"
+         }
+        ]
+       },
+       {
+        "text": "&Investing",
+        "name": "investMenu",
+        "items": [
+         {
+          "text": "&Portfolio...",
+          "name": "investPortfolio",
+          "shortcut": "Ctrl+P",
+          "action": "openForm",
+          "form": "PortfolioForm"
+         },
+         {
+          "text": "Record a &Trade...",
+          "name": "investTrade"
+         },
+         {
+          "text": "&Securities && Prices...",
+          "name": "investSecurities",
+          "action": "openForm",
+          "form": "SecuritiesForm"
+         }
+        ]
+       },
+       {
+        "text": "&Reports",
+        "name": "reportsMenu",
+        "items": [
+         {
+          "text": "&Reports && Charts...",
+          "name": "reportsList",
+          "action": "openForm",
+          "form": "ReportsForm"
+         },
+         {
+          "text": "&Loan Planner...",
+          "name": "reportsPlanner",
+          "action": "openForm",
+          "form": "PlannerForm"
+         }
+        ]
+       },
+       {
+        "text": "&Online",
+        "name": "onlineMenu",
+        "items": [
+         {
+          "text": "&Download from Schwab",
+          "name": "onlineSync",
+          "shortcut": "F9"
+         },
+         {
+          "text": "Schwab &Setup...",
+          "name": "onlineSetup",
+          "action": "openForm",
+          "form": "SchwabForm"
+         }
+        ]
+       },
+       {
+        "text": "&Help",
+        "name": "helpMenu",
+        "items": [
+         {
+          "text": "Ask the &Advisor...",
+          "name": "helpAdvisor",
+          "shortcut": "F2",
+          "action": "openForm",
+          "form": "AdvisorForm"
+         },
+         {
+          "separator": true
+         },
+         {
+          "text": "&About Wayland Money",
+          "name": "helpAbout",
+          "action": "openForm",
+          "form": "AboutForm"
+         }
+        ]
+       }
+      ]
+     },
+     "events": {
+      "itemClicked": "if (menu1.item === \"accountsRegister\")\n    openRegister();\nelse if (menu1.item === \"accountsBalance\" && accountGrid.currentId !== null)\n    App.openForm(\"ReconcileForm\", { account: accountGrid.currentId });\nelse if (menu1.item === \"accountsBalance\")\n    form.msgBox(\"Click an account in the list first.\", \"Balance an Account\");\nelse if (menu1.item === \"investTrade\")\n    App.openForm(\"TradeForm\", { account: accountGrid.currentId });\nelse if (menu1.item === \"onlineSync\")\n    App.showForm(\"SchwabForm\").syncAll();"
+     }
+    },
+    {
+     "type": "ToolBar",
+     "name": "toolBar1",
+     "x": 0,
+     "y": 20,
+     "width": 760,
+     "height": 28,
+     "props": {
+      "buttons": [
+       {
+        "text": "Accounts",
+        "name": "accountsTool",
+        "glyph": "▤",
+        "toolTip": "The list of accounts",
+        "action": "openForm",
+        "form": "AccountsForm"
+       },
+       {
+        "text": "Register",
+        "name": "registerTool",
+        "glyph": "✎",
+        "toolTip": "The selected account's register"
+       },
+       {
+        "text": "Find",
+        "name": "findTool",
+        "glyph": "⌕",
+        "toolTip": "Find transactions",
+        "action": "openForm",
+        "form": "FindForm"
+       },
+       {
+        "separator": true
+       },
+       {
+        "text": "Bills",
+        "name": "billsTool",
+        "glyph": "✉",
+        "toolTip": "Bills and deposits",
+        "action": "openForm",
+        "form": "BillsForm"
+       },
+       {
+        "text": "Budget",
+        "name": "budgetTool",
+        "glyph": "◔",
+        "toolTip": "The budget",
+        "action": "openForm",
+        "form": "BudgetForm"
+       },
+       {
+        "separator": true
+       },
+       {
+        "text": "Portfolio",
+        "name": "portfolioTool",
+        "glyph": "▲",
+        "toolTip": "What the investment accounts hold",
+        "action": "openForm",
+        "form": "PortfolioForm"
+       },
+       {
+        "text": "Reports",
+        "name": "reportsTool",
+        "glyph": "▥",
+        "toolTip": "Reports and charts",
+        "action": "openForm",
+        "form": "ReportsForm"
+       },
+       {
+        "separator": true
+       },
+       {
+        "text": "Download",
+        "name": "syncTool",
+        "glyph": "⇩",
+        "toolTip": "Download from Schwab (F9)"
+       },
+       {
+        "text": "Advisor",
+        "name": "advisorTool",
+        "glyph": "✦",
+        "toolTip": "Ask the Advisor",
+        "action": "openForm",
+        "form": "AdvisorForm"
+       }
+      ]
+     },
+     "events": {
+      "itemClicked": "if (toolBar1.item === \"registerTool\")\n    openRegister();\nelse if (toolBar1.item === \"syncTool\")\n    App.showForm(\"SchwabForm\").syncAll();"
+     }
+    },
+    {
+     "type": "Frame",
+     "name": "accountsFrame",
+     "x": 8,
+     "y": 56,
+     "width": 372,
+     "height": 270,
+     "props": {
+      "text": "Accounts"
+     },
+     "events": {}
+    },
+    {
+     "type": "Frame",
+     "name": "billsFrame",
+     "x": 388,
+     "y": 56,
+     "width": 364,
+     "height": 124,
+     "props": {
+      "text": "Bills coming up"
+     },
+     "events": {}
+    },
+    {
+     "type": "DataGrid",
+     "name": "accountGrid",
+     "x": 16,
+     "y": 76,
+     "width": 356,
+     "height": 188,
+     "props": {
+      "table": "Listing",
+      "columns": [
+       "Account",
+       "Type",
+       "Balance"
+      ]
+     },
+     "events": {
+      "rowActivated": "openRegister();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "assetsCaption",
+     "x": 16,
+     "y": 272,
+     "width": 48,
+     "height": 17,
+     "props": {
+      "text": "Assets:"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "assetsLabel",
+     "x": 64,
+     "y": 272,
+     "width": 96,
+     "height": 17,
+     "props": {
+      "text": "",
+      "alignment": "Right"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "owedCaption",
+     "x": 176,
+     "y": 272,
+     "width": 40,
+     "height": 17,
+     "props": {
+      "text": "Owed:"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "owedLabel",
+     "x": 216,
+     "y": 272,
+     "width": 96,
+     "height": 17,
+     "props": {
+      "text": "",
+      "alignment": "Right",
+      "foreColor": "#c00000"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "worthCaption",
+     "x": 16,
+     "y": 298,
+     "width": 72,
+     "height": 17,
+     "props": {
+      "text": "Net worth:",
+      "fontBold": true
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "worthLabel",
+     "x": 88,
+     "y": 298,
+     "width": 120,
+     "height": 17,
+     "props": {
+      "text": "",
+      "fontBold": true
+     },
+     "events": {}
+    },
+    {
+     "type": "ListBox",
+     "name": "billList",
+     "x": 396,
+     "y": 76,
+     "width": 348,
+     "height": 96,
+     "props": {},
+     "events": {
+      "doubleClicked": "App.showForm(\"BillsForm\");"
+     }
+    },
+    {
+     "type": "Graph",
+     "name": "spendingGraph",
+     "x": 388,
+     "y": 188,
+     "width": 364,
+     "height": 240,
+     "props": {
+      "graph": {
+       "type": "Pie",
+       "source": "code",
+       "title": "Spending this month",
+       "legend": "Right",
+       "prefix": "$"
+      }
+     },
+     "events": {
+      "clicked": "App.openForm(\"ReportsForm\", { report: \"Spending by Category\" });"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "syncButton",
+     "x": 388,
+     "y": 436,
+     "width": 150,
+     "height": 24,
+     "props": {
+      "text": "Download from Schwab"
+     },
+     "events": {
+      "clicked": "App.showForm(\"SchwabForm\").syncAll();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "syncLabel",
+     "x": 546,
+     "y": 440,
+     "width": 206,
+     "height": 17,
+     "props": {
+      "text": ""
+     },
+     "events": {}
+    },
+    {
+     "type": "Graph",
+     "name": "worthGraph",
+     "x": 8,
+     "y": 334,
+     "width": 372,
+     "height": 188,
+     "props": {
+      "graph": {
+       "type": "Line",
+       "table": "WorthHistory",
+       "labelField": "Day",
+       "groupDates": "day",
+       "series": [
+        {
+         "field": "Worth",
+         "aggregate": "sum",
+         "name": "Net worth"
+        }
+       ],
+       "title": "Net worth",
+       "legend": "None",
+       "prefix": "$"
+      }
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "statusLabel",
+     "x": 8,
+     "y": 530,
+     "width": 744,
+     "height": 21,
+     "props": {
+      "text": "",
+      "borderStyle": "Sunken"
+     },
+     "events": {}
+    }
+   ],
+   "code": {
+    "general": "// ---- Wayland Money's library -------------------------------------------\n// Every other form reaches these through App.form(\"HomeForm\").\n\n// money as text: 1,234.50 (blank for nothing)\nfunction fmt(n) {\n    if (n === null || n === undefined || n === \"\" || isNaN(n))\n        return \"\";\n    var v = Math.round(Number(n) * 100) / 100;\n    return (v === 0 ? 0 : v).toLocaleString(Qt.locale(\"en_US\"), \"f\", 2);\n}\n// what was typed, as a number: \"1,234.50\", \"$12\", \"(5.00)\"; null if it isn't one\nfunction parseMoney(text) {\n    var s = String(text === null || text === undefined ? \"\" : text).replace(/[$,\\s]/g, \"\");\n    var negative = /^\\(.*\\)$/.test(s);\n    if (negative)\n        s = s.substring(1, s.length - 1);\n    if (s === \"\" || isNaN(Number(s)))\n        return null;\n    return Math.round((negative ? -Number(s) : Number(s)) * 100) / 100;\n}\n\n// days: kept as 2026-11-18, shown as 11/18/2026\nfunction today() { return AppDates.stored(\"today\", \"Date\"); }\nfunction rightNow() { return AppDates.stored(\"now\", \"Date and Time\"); }\nfunction showDate(day) { return day ? AppDates.display(String(day).substring(0, 10), \"Date\", \"MM/dd/yyyy\", \"\") : \"\"; }\nfunction two(n) { return (n < 10 ? \"0\" : \"\") + n; }\nfunction iso(d) { return d.getFullYear() + \"-\" + two(d.getMonth() + 1) + \"-\" + two(d.getDate()); }\nfunction toDate(day) {\n    var p = String(day).substring(0, 10).split(\"-\");\n    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));\n}\nfunction addDays(day, n) {\n    var d = toDate(day);\n    d.setDate(d.getDate() + n);\n    return iso(d);\n}\nfunction addMonths(day, n) {\n    var d = toDate(day), wanted = d.getDate();\n    d.setDate(1);\n    d.setMonth(d.getMonth() + n);\n    var last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();\n    d.setDate(Math.min(wanted, last));\n    return iso(d);\n}\nfunction monthStart(day) { return String(day).substring(0, 8) + \"01\"; }\nfunction daysBetween(from, to) { return Math.round((toDate(to) - toDate(from)) / 86400000); }\n\n// a setting, kept in the Settings table\nfunction setting(name, fallback) {\n    var rows = Db.select(\"Settings\", { where: { Name: name } });\n    if (rows.length > 0 && rows[0].Value !== null && rows[0].Value !== \"\")\n        return rows[0].Value;\n    return fallback === undefined ? \"\" : fallback;\n}\nfunction setSetting(name, value) {\n    var rows = Db.select(\"Settings\", { where: { Name: name } });\n    if (rows.length > 0)\n        Db.update(\"Settings\", rows[0].id, { Value: String(value) });\n    else\n        Db.insert(\"Settings\", { Name: name, Value: String(value) });\n}\n\n// a table's records' names, by id: names(\"Payees\")[3]\nfunction names(table) {\n    var out = {};\n    Db.lookupChoices(table).forEach(function (c) { out[c.id] = c.label; });\n    return out;\n}\n\n// the kinds of account\nfunction isDebt(type) { return type === \"Credit Card\" || type === \"Loan\" || type === \"Liability\"; }\nfunction isInvestment(type) { return type === \"Investment\" || type === \"Retirement\"; }\n\n// every account's money: { id: { cash, holdings, value } }\nfunction balances() {\n    var out = {};\n    Db.select(\"Accounts\").forEach(function (a) {\n        out[a.id] = { cash: a.OpeningBalance || 0, holdings: 0, value: 0 };\n    });\n    Db.select(\"Transactions\").forEach(function (t) {\n        if (out[t.Account])\n            out[t.Account].cash += t.Amount || 0;\n    });\n    Db.select(\"Holdings\").forEach(function (h) {\n        if (out[h.Account])\n            out[h.Account].holdings += h.MarketValue || 0;\n    });\n    Object.keys(out).forEach(function (k) { out[k].value = out[k].cash + out[k].holdings; });\n    return out;\n}\nfunction netWorth() {\n    var b = balances(), assets = 0, owed = 0;\n    Db.select(\"Accounts\").forEach(function (a) {\n        if (a.Closed)\n            return;\n        if (isDebt(a.Type))\n            owed -= b[a.id].value;\n        else\n            assets += b[a.id].value;\n    });\n    return { assets: assets, liabilities: owed, net: assets - owed };\n}\n// today's line of the net worth history (the graph at the bottom reads it)\nfunction snapshot() {\n    var w = netWorth(), rows = Db.select(\"WorthHistory\", { where: { Day: today() } });\n    var line = { Day: today(), Assets: w.assets, Liabilities: w.liabilities, Worth: w.net };\n    if (rows.length === 0)\n        Db.insert(\"WorthHistory\", line);\n    else if (fmt(rows[0].Worth) !== fmt(w.net) || fmt(rows[0].Assets) !== fmt(w.assets))\n        Db.update(\"WorthHistory\", rows[0].id, line);\n}\n\n// income or spending? (a transfer or a trade only moves money)\nfunction isFlow(t) {\n    return !t.TransferAccount && [\"Buy\", \"Sell\", \"Reinvest\", \"Add Shares\", \"Remove Shares\"].indexOf(t.Action) < 0;\n}\n\n// what came in and went out between two days, by category:\n// [{ category, name, kind, total }], the biggest spending first.\nfunction totalsByCategory(from, to) {\n    var cats = {}, sums = {}, splits = {};\n    Db.select(\"Categories\").forEach(function (c) { cats[c.id] = c; });\n    Db.select(\"Splits\").forEach(function (s) {\n        if (!splits[s.Transaction])\n            splits[s.Transaction] = [];\n        splits[s.Transaction].push(s);\n    });\n    function add(category, amount) {\n        var k = category || 0;\n        sums[k] = (sums[k] || 0) + (amount || 0);\n    }\n    Db.select(\"Transactions\").forEach(function (t) {\n        if (t.Date < from || t.Date > to || !isFlow(t))\n            return;\n        if (t.IsSplit && splits[t.id])\n            splits[t.id].forEach(function (s) { add(s.Category, s.Amount); });\n        else\n            add(t.Category, t.Amount);\n    });\n    return Object.keys(sums).map(function (k) {\n        var c = cats[k];\n        return { category: c ? c.id : null, name: c ? c.Name : \"(no category)\",\n                 kind: c ? c.Kind : (sums[k] < 0 ? \"Expense\" : \"Income\"), total: sums[k] };\n    }).sort(function (a, b) { return a.total - b.total; });\n}\n\n// ---- the Home page itself ----------------------------------------------\n\nproperty var billIds: []\n\n// (a change anywhere: the page is read again, a moment later, once)\nTimer { id: soon; interval: 300; onTriggered: refreshHome() }\nConnections {\n    target: Db\n    function onChanged(table) {\n        if (table !== \"WorthHistory\" && table !== \"Settings\" && table !== \"Prices\")\n            soon.restart();\n    }\n}\n\nfunction refreshHome() {\n    var b = balances(), rows = [];\n    Db.select(\"Accounts\", { orderBy: \"Name\" }).forEach(function (a) {\n        if (!a.Closed)\n            rows.push({ id: a.id, Account: a.Name, Type: a.Type, Balance: fmt(b[a.id].value) });\n    });\n    accountGrid.rows = rows;\n    var w = netWorth();\n    assetsLabel.text = fmt(w.assets);\n    owedLabel.text = fmt(w.liabilities);\n    worthLabel.text = fmt(w.net);\n    snapshot();\n\n    var spent = totalsByCategory(monthStart(today()), today()).filter(function (c) { return c.total < 0; });\n    spendingGraph.setData(spent.map(function (c) { return c.name; }),\n                          [{ name: \"Spent\", values: spent.map(function (c) { return Math.round(-c.total * 100) / 100; }) }]);\n    showBills();\n    var last = setting(\"SchwabLastSync\");\n    syncLabel.text = last === \"\" ? \"Never downloaded.\"\n                   : \"Last: \" + AppDates.display(last, \"Date and Time\", \"MM/dd/yyyy\", \"h:mm AP\");\n}\n\nfunction openRegister() {\n    if (accountGrid.currentId === null)\n        form.msgBox(\"Click an account in the list first.\", \"Register\");\n    else\n        App.openForm(\"RegisterForm\", { account: accountGrid.currentId });\n}\n\n// the categories a new file starts with\nfunction seed() {\n    if (Db.count(\"Categories\") > 0)\n        return;\n    var income = [\"Salary\", \"Interest Income\", \"Investment Income : Dividends\", \"Investment Income : Interest\",\n                  \"Other Income\"];\n    var expense = [\"Automobile : Fuel\", \"Automobile : Maintenance\", \"Bank Charges\", \"Clothing\", \"Dining Out\",\n                   \"Education\", \"Entertainment\", \"Gifts\", \"Groceries\", \"Healthcare\", \"Housing : Rent\",\n                   \"Housing : Mortgage Interest\", \"Insurance\", \"Investment Expense : Fees\", \"Taxes : Federal\",\n                   \"Taxes : State\", \"Travel\", \"Utilities : Electric\", \"Utilities : Internet\", \"Utilities : Water\"];\n    var taxed = [\"Salary\", \"Interest Income\", \"Investment Income : Dividends\", \"Investment Income : Interest\",\n                 \"Housing : Mortgage Interest\", \"Taxes : Federal\", \"Taxes : State\"];\n    income.forEach(function (n) { Db.insert(\"Categories\", { Name: n, Kind: \"Income\", TaxRelated: taxed.indexOf(n) >= 0 }); });\n    expense.forEach(function (n) { Db.insert(\"Categories\", { Name: n, Kind: \"Expense\", TaxRelated: taxed.indexOf(n) >= 0 }); });\n}\n\n// ---- transactions ------------------------------------------------------\n\n// keep a transfer's other half in step with it (or take it away)\nfunction matchTransfer(id) {\n    var t = Db.get(\"Transactions\", id);\n    if (t.id === undefined)\n        return;\n    var twin = t.TransferId ? Db.get(\"Transactions\", t.TransferId) : ({});\n    if (!t.TransferAccount) {\n        if (twin.id !== undefined)\n            Db.remove(\"Transactions\", twin.id);\n        if (t.TransferId)\n            Db.update(\"Transactions\", t.id, { TransferId: null });\n        return;\n    }\n    var other = { Account: t.TransferAccount, Date: t.Date, Number: t.Number, Payee: t.Payee, Memo: t.Memo,\n                  Amount: -t.Amount, TransferAccount: t.Account, TransferId: t.id, Source: t.Source };\n    if (twin.id !== undefined) {\n        Db.update(\"Transactions\", twin.id, other);\n    } else {\n        var r = Db.insert(\"Transactions\", other);\n        if (r.ok)\n            Db.update(\"Transactions\", t.id, { TransferId: r.id });\n    }\n}\n\n// delete a transaction: its splits and a transfer's other half go with it\nfunction removeTransaction(id) {\n    var t = Db.get(\"Transactions\", id);\n    if (t.id === undefined)\n        return true;\n    Db.select(\"Splits\", { where: { Transaction: id } }).forEach(function (s) { Db.remove(\"Splits\", s.id); });\n    if (t.TransferId && Db.get(\"Transactions\", t.TransferId).id !== undefined)\n        Db.remove(\"Transactions\", t.TransferId);\n    var r = Db.remove(\"Transactions\", id);\n    if (r.ok && t.Security)\n        rebuildHoldings(t.Account);\n    return r.ok;\n}\n\n// ---- bills and deposits --------------------------------------------------\n\nfunction nextDue(day, frequency) {\n    switch (frequency) {\n    case \"Weekly\": return addDays(day, 7);\n    case \"Every two weeks\": return addDays(day, 14);\n    case \"Twice a month\": return addDays(day, 15);\n    case \"Monthly\": return addMonths(day, 1);\n    case \"Every three months\": return addMonths(day, 3);\n    case \"Every six months\": return addMonths(day, 6);\n    case \"Yearly\": return addMonths(day, 12);\n    }\n    return \"\";      // Once\n}\n\n// the bills inside their own reminder days, the soonest first: [{ bill, days }]\nfunction billsDue() {\n    var out = [];\n    Db.select(\"Bills\", { where: { Active: true }, orderBy: \"NextDue\" }).forEach(function (b) {\n        var days = daysBetween(today(), b.NextDue);\n        if (days <= (b.RemindDays === null ? 7 : b.RemindDays))\n            out.push({ bill: b, days: days });\n    });\n    return out;\n}\n\n// move a bill on to its next day (after it's paid, or to skip one)\nfunction skipBill(id) {\n    var b = Db.get(\"Bills\", id), next = nextDue(b.NextDue, b.Frequency);\n    if (next === \"\" || (b.EndDate && next > b.EndDate))\n        Db.update(\"Bills\", id, { Active: false });\n    else\n        Db.update(\"Bills\", id, { NextDue: next });\n}\n\n// put a bill in its account's register, then move it on\nfunction enterBill(id) {\n    var b = Db.get(\"Bills\", id);\n    if (b.id === undefined)\n        return false;\n    var transfer = b.Kind === \"Transfer\";\n    var r = Db.insert(\"Transactions\", {\n        Account: b.Account, Date: b.NextDue, Payee: b.Payee, Category: transfer ? null : b.Category,\n        Memo: b.Memo || b.Name, Amount: (b.Kind === \"Deposit\" ? 1 : -1) * b.Amount,\n        TransferAccount: transfer ? b.ToAccount : null, Source: \"Bill\" });\n    if (!r.ok) {\n        form.msgBox(b.Name + \" wasn't entered:\\n\" + r.messages.join(\"\\n\"), \"Bills\", \"warning\");\n        return false;\n    }\n    matchTransfer(r.id);\n    skipBill(id);\n    return true;\n}\n\nfunction showBills() {\n    var due = billsDue();\n    billIds = due.map(function (d) { return d.bill.id; });\n    billList.items = due.map(function (d) {\n        var when = d.days < 0 ? \"OVERDUE \" + showDate(d.bill.NextDue) : d.days === 0 ? \"Today\" : showDate(d.bill.NextDue);\n        return when + \"   \" + d.bill.Name + \"   \" + fmt(d.bill.Amount);\n    });\n    billsFrame.text = due.length === 0 ? \"Bills coming up: none\" : \"Bills coming up: \" + due.length;\n}\n\n// once a minute, and when the program starts: the bills that enter themselves\nTimer { id: startup; interval: 600; onTriggered: everyMinute() }\nTimer { id: minute; interval: 60000; repeat: true; running: true; onTriggered: everyMinute() }\nfunction everyMinute() {\n    var entered = 0;\n    Db.select(\"Bills\", { where: { Active: true, AutoEnter: true } }).forEach(function (b) {\n        // (a bill that fell behind catches up, a payment at a time)\n        for (var i = 0; i < 24 && b.Active && b.NextDue <= today(); ++i) {\n            if (!enterBill(b.id))\n                break;\n            entered += 1;\n            b = Db.get(\"Bills\", b.id);\n        }\n    });\n    if (entered > 0)\n        statusLabel.text = entered + (entered === 1 ? \" bill was\" : \" bills were\") + \" entered by itself.\";\n}\n\n// ---- investments ---------------------------------------------------------\n\n// the security with this symbol (made, if it's new): its id\nfunction findSecurity(symbol, company, type) {\n    var s = String(symbol).trim().toUpperCase();\n    var rows = Db.select(\"Securities\", { where: { Symbol: s } });\n    if (rows.length > 0)\n        return rows[0].id;\n    var r = Db.insert(\"Securities\", { Symbol: s, Company: company || \"\", Type: type || \"Stock\" });\n    return r.ok ? r.id : null;\n}\n\n// every holding's market value, from its security's last price\nfunction revalue() {\n    var secs = {};\n    Db.select(\"Securities\").forEach(function (s) { secs[s.id] = s; });\n    Db.select(\"Holdings\").forEach(function (h) {\n        var s = secs[h.Security];\n        if (!s || s.LastPrice === null)\n            return;\n        var v = Math.round(h.Quantity * s.LastPrice * (s.Type === \"Option\" ? 100 : 1) * 100) / 100;\n        if (v !== h.MarketValue)\n            Db.update(\"Holdings\", h.id, { MarketValue: v });\n    });\n}\n\n// an account's holdings, worked out from its trades (average cost).\n// A Schwab account's holdings are Schwab's own positions instead.\nfunction rebuildHoldings(accountId) {\n    var account = Db.get(\"Accounts\", accountId);\n    if (account.id === undefined || account.SchwabHash)\n        return;\n    var have = {};\n    Db.select(\"Transactions\", { where: { Account: accountId }, orderBy: \"Date\" }).forEach(function (t) {\n        if (!t.Security || !t.Action)\n            return;\n        var h = have[t.Security] || (have[t.Security] = { shares: 0, cost: 0 });\n        var q = t.Quantity || 0;\n        if (t.Action === \"Buy\" || t.Action === \"Reinvest\" || t.Action === \"Add Shares\") {\n            h.shares += q;\n            h.cost += q * (t.Price || 0) + (t.Commission || 0);\n        } else if (t.Action === \"Sell\" || t.Action === \"Remove Shares\") {\n            h.cost -= h.shares > 0 ? h.cost * Math.min(1, q / h.shares) : 0;\n            h.shares -= q;\n        }\n    });\n    Db.select(\"Holdings\", { where: { Account: accountId } }).forEach(function (h) { Db.remove(\"Holdings\", h.id); });\n    Object.keys(have).forEach(function (k) {\n        if (Math.abs(have[k].shares) > 0.00005)\n            Db.insert(\"Holdings\", { Account: accountId, Security: Number(k), Quantity: have[k].shares,\n                                    CostBasis: Math.round(have[k].cost * 100) / 100, AsOf: rightNow() });\n    });\n    revalue();\n}\n\n// a security's price for a day, into its price history\nfunction keepPrice(securityId, day, bar) {\n    var rows = Db.select(\"Prices\", { where: { Security: securityId, Day: day } });\n    var line = { Security: securityId, Day: day, Open: bar.open, High: bar.high, Low: bar.low,\n                 Close: bar.close, Volume: bar.volume === undefined ? null : Math.round(bar.volume) };\n    if (rows.length > 0)\n        Db.update(\"Prices\", rows[0].id, line);\n    else\n        Db.insert(\"Prices\", line);\n}\n\n// ---- Charles Schwab ------------------------------------------------------\n// Requests don't wait: each takes a function to call with the answer.\n\nfunction schwabBase() { return setting(\"SchwabBase\", \"https://api.schwabapi.com\"); }\n\n// one request: done(ok, data, status)\nfunction httpRequest(method, url, headers, body, done) {\n    var xhr = new XMLHttpRequest();\n    xhr.onreadystatechange = function () {\n        if (xhr.readyState !== XMLHttpRequest.DONE)\n            return;\n        var data = xhr.responseText;\n        try { data = JSON.parse(xhr.responseText); } catch (e) { }\n        done(xhr.status >= 200 && xhr.status < 300, data, xhr.status);\n    };\n    xhr.open(method, url);\n    Object.keys(headers).forEach(function (h) { xhr.setRequestHeader(h, headers[h]); });\n    if (body)\n        xhr.send(body);\n    else\n        xhr.send();\n}\n\n// what went wrong, in words\nfunction schwabError(data, status) {\n    if (status === 0)\n        return \"No answer from Schwab. Is the internet there?\";\n    if (data && typeof data === \"object\") {\n        if (data.error_description || data.message || data.error)\n            return String(data.error_description || data.message || data.error);\n        if (data.errors && data.errors.length > 0)\n            return String(data.errors[0].detail || data.errors[0].title || data.errors[0].message || \"Schwab said \" + status);\n    }\n    return \"Schwab said \" + status + \".\";\n}\n\n// ask Schwab's token address for tokens, and keep them: done(ok, why)\nfunction schwabTokens(formBody, done) {\n    var basic = Qt.btoa(setting(\"SchwabKey\") + \":\" + setting(\"SchwabSecret\"));\n    httpRequest(\"POST\", schwabBase() + \"/v1/oauth/token\",\n                { \"Authorization\": \"Basic \" + basic, \"Content-Type\": \"application/x-www-form-urlencoded\" },\n                formBody, function (ok, data, status) {\n        if (!ok || !data || !data.access_token) {\n            done(false, schwabError(data, status));\n            return;\n        }\n        setSetting(\"SchwabAccess\", data.access_token);\n        // (a minute early, so one never runs out on the way)\n        setSetting(\"SchwabAccessUntil\", Date.now() + ((data.expires_in || 1800) - 60) * 1000);\n        if (data.refresh_token)\n            setSetting(\"SchwabRefresh\", data.refresh_token);\n        done(true, \"\");\n    });\n}\n\n// a token Schwab takes: the one kept, or a new one from the refresh token\nfunction schwabToken(done) {\n    if (setting(\"SchwabAccess\") !== \"\" && Date.now() < Number(setting(\"SchwabAccessUntil\", 0))) {\n        done(true, setting(\"SchwabAccess\"));\n        return;\n    }\n    if (setting(\"SchwabRefresh\") === \"\") {\n        done(false, \"Not signed in to Schwab yet: Online > Schwab Setup.\");\n        return;\n    }\n    schwabTokens(\"grant_type=refresh_token&refresh_token=\" + encodeURIComponent(setting(\"SchwabRefresh\")),\n                 function (ok, why) {\n        if (ok) {\n            done(true, setting(\"SchwabAccess\"));\n        } else {\n            setSetting(\"SchwabRefresh\", \"\");\n            done(false, \"Schwab wants a new sign-in (\" + why + \"): Online > Schwab Setup.\");\n        }\n    });\n}\n\n// GET something from Schwab, signed in: done(ok, data or why)\nfunction schwabGet(path, done) {\n    schwabToken(function (ok, token) {\n        if (!ok) {\n            done(false, token);\n            return;\n        }\n        httpRequest(\"GET\", schwabBase() + path, { \"Authorization\": \"Bearer \" + token, \"Accept\": \"application/json\" },\n                    null, function (ok2, data, status) {\n            done(ok2, ok2 ? data : schwabError(data, status));\n        });\n    });\n}\n\n// the latest prices of these securities (rows of Securities): done(ok, how many or why)\nfunction updateQuotes(securities, done) {\n    var list = securities.filter(function (s) { return s.Type !== \"Option\" && s.Type !== \"Bond\"; });\n    if (list.length === 0) {\n        done(true, 0);\n        return;\n    }\n    var symbols = list.map(function (s) { return s.Symbol; }).join(\",\");\n    schwabGet(\"/marketdata/v1/quotes?fields=quote,reference&symbols=\" + encodeURIComponent(symbols), function (ok, data) {\n        if (!ok) {\n            done(false, data);\n            return;\n        }\n        var got = 0;\n        list.forEach(function (s) {\n            var q = data[s.Symbol] ? data[s.Symbol].quote : null;\n            if (!q)\n                return;\n            var price = q.lastPrice || q.mark || q.nAV || q.closePrice;\n            if (!price)\n                return;\n            var change = { LastPrice: price, Change: q.netChange === undefined ? null : q.netChange,\n                           ChangePercent: q.netPercentChange === undefined ? null : q.netPercentChange,\n                           PriceTime: rightNow() };\n            var ref = data[s.Symbol].reference;\n            if (!s.Company && ref && ref.description)\n                change.Company = ref.description;\n            Db.update(\"Securities\", s.id, change);\n            got += 1;\n        });\n        revalue();\n        done(true, got);\n    });\n}\n\n// when the program starts: a download, if Schwab Setup says so\nTimer {\n    interval: 1500\n    running: true\n    onTriggered: {\n        if (setting(\"SchwabAuto\") === \"yes\" && setting(\"SchwabRefresh\") !== \"\")\n            App.showForm(\"SchwabForm\").syncAll();\n    }\n}",
+    "load": "seed();\nrefreshHome();\nstatusLabel.text = \"Welcome to Wayland Money.\";\nstartup.start();",
+    "unload": "App.quit();"
+   }
+  },
+  {
+   "name": "AccountsForm",
+   "width": 644,
+   "height": 456,
+   "props": {
+    "title": "Accounts",
+    "table": "Accounts"
+   },
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")",
+    "current": "if (form.isNew)\n    balanceLabel.text = \"A new account: fill it in and press Save.\";\nelse\n    balanceLabel.text = \"Balance today: \" + home.fmt(home.balances()[form.recordId].value);",
+    "saved": "balanceLabel.text = \"Saved \" + form.record.Name + \".\";"
+   },
+   "controls": [
+    {
+     "type": "Label",
+     "name": "nameLabel",
+     "x": 12,
+     "y": 14,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Name:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "nameBox",
+     "x": 108,
+     "y": 12,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Name"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "typeLabel",
+     "x": 12,
+     "y": 42,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Type:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "typeCombo",
+     "x": 108,
+     "y": 40,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Type"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "institutionLabel",
+     "x": 12,
+     "y": 70,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Institution:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "institutionBox",
+     "x": 108,
+     "y": 68,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Institution"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "accountNumberLabel",
+     "x": 12,
+     "y": 98,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Account Number:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "accountNumberBox",
+     "x": 108,
+     "y": 96,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "AccountNumber"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "openingBalanceLabel",
+     "x": 12,
+     "y": 126,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Opening Balance:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "openingBalanceBox",
+     "x": 108,
+     "y": 124,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "OpeningBalance"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "openingDateLabel",
+     "x": 12,
+     "y": 154,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Opening Date:"
+     },
+     "events": {}
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "openingDatePicker",
+     "x": 108,
+     "y": 152,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "OpeningDate",
+      "mode": "Date"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "creditLimitLabel",
+     "x": 12,
+     "y": 182,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Credit Limit:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "creditLimitBox",
+     "x": 108,
+     "y": 180,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "CreditLimit"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "interestRateLabel",
+     "x": 12,
+     "y": 210,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Interest Rate:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "interestRateBox",
+     "x": 108,
+     "y": 208,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "InterestRate"
+     },
+     "events": {}
+    },
+    {
+     "type": "CheckBox",
+     "name": "closedCheck",
+     "x": 108,
+     "y": 236,
+     "width": 180,
+     "height": 17,
+     "props": {
+      "field": "Closed",
+      "text": "Closed"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "schwabHashLabel",
+     "x": 12,
+     "y": 266,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Schwab Link:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "schwabHashBox",
+     "x": 108,
+     "y": 264,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "SchwabHash",
+      "enabled": false
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "lastSyncLabel",
+     "x": 12,
+     "y": 294,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Last Download:"
+     },
+     "events": {}
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "lastSyncPicker",
+     "x": 108,
+     "y": 292,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "LastSync",
+      "mode": "Date and Time",
+      "enabled": false
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "notesLabel",
+     "x": 12,
+     "y": 322,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Notes:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "notesBox",
+     "x": 108,
+     "y": 320,
+     "width": 180,
+     "height": 60,
+     "props": {
+      "field": "Notes",
+      "multiLine": true
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "newButton",
+     "x": 12,
+     "y": 392,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "New"
+     },
+     "events": {
+      "clicked": "form.newRecord();\nnameBox.forceActiveFocus();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "saveButton",
+     "x": 104,
+     "y": 392,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Save",
+      "isDefault": true
+     },
+     "events": {
+      "clicked": "form.save();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "deleteButton",
+     "x": 196,
+     "y": 392,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Delete"
+     },
+     "events": {
+      "clicked": "if (form.isNew)\n    return;\nif (Db.count(\"Transactions\", { Account: form.recordId }) > 0) {\n    form.msgBox(\"This account has transactions, so it can't be deleted.\\nTick Closed instead: it leaves the lists and keeps its history.\",\n                \"Accounts\", \"info\");\n    return;\n}\nform.msgBox(\"Delete this account?\", \"Accounts\", \"question\", [\"Yes\", \"No\"], function (answer) {\n    if (answer === 0)\n        form.deleteRecord();\n});"
+     }
+    },
+    {
+     "type": "DataGrid",
+     "name": "grid",
+     "x": 304,
+     "y": 12,
+     "width": 328,
+     "height": 404,
+     "props": {
+      "columns": [
+       "Name",
+       "Type",
+       "Institution"
+      ]
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "registerButton",
+     "x": 12,
+     "y": 420,
+     "width": 120,
+     "height": 24,
+     "props": {
+      "text": "Open Register"
+     },
+     "events": {
+      "clicked": "if (form.isNew)\n    form.msgBox(\"Save the account first.\", \"Accounts\");\nelse\n    App.openForm(\"RegisterForm\", { account: form.recordId });"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "balanceLabel",
+     "x": 144,
+     "y": 424,
+     "width": 488,
+     "height": 17,
+     "props": {
+      "text": "",
+      "fontBold": true
+     },
+     "events": {}
+    }
+   ]
+  },
+  {
+   "name": "PayeesForm",
+   "width": 644,
+   "height": 327,
+   "props": {
+    "title": "Payees",
+    "table": "Payees"
+   },
+   "code": {},
+   "controls": [
+    {
+     "type": "Label",
+     "name": "nameLabel",
+     "x": 12,
+     "y": 14,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Name:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "nameBox",
+     "x": 108,
+     "y": 12,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Name"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "categoryLabel",
+     "x": 12,
+     "y": 42,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Usual Category:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "categoryCombo",
+     "x": 108,
+     "y": 40,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Category"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "phoneLabel",
+     "x": 12,
+     "y": 70,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Phone:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "phoneBox",
+     "x": 108,
+     "y": 68,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Phone"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "emailLabel",
+     "x": 12,
+     "y": 98,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "E-mail:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "emailBox",
+     "x": 108,
+     "y": 96,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Email"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "websiteLabel",
+     "x": 12,
+     "y": 126,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Website:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "websiteBox",
+     "x": 108,
+     "y": 124,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Website"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "addressLabel",
+     "x": 12,
+     "y": 154,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Address:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "addressBox",
+     "x": 108,
+     "y": 152,
+     "width": 180,
+     "height": 60,
+     "props": {
+      "field": "Address",
+      "multiLine": true
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "notesLabel",
+     "x": 12,
+     "y": 221,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Notes:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "notesBox",
+     "x": 108,
+     "y": 219,
+     "width": 180,
+     "height": 60,
+     "props": {
+      "field": "Notes",
+      "multiLine": true
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "newButton",
+     "x": 12,
+     "y": 291,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "New"
+     },
+     "events": {
+      "clicked": "form.newRecord();\nnameBox.forceActiveFocus();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "saveButton",
+     "x": 104,
+     "y": 291,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Save",
+      "isDefault": true
+     },
+     "events": {
+      "clicked": "form.save();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "deleteButton",
+     "x": 196,
+     "y": 291,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Delete"
+     },
+     "events": {
+      "clicked": "if (form.isNew)\n    return;\nform.msgBox(\"Delete this record?\", \"Delete\", \"question\", [\"Yes\", \"No\"], function (answer) {\n    if (answer === 0)\n        form.deleteRecord();\n});"
+     }
+    },
+    {
+     "type": "DataGrid",
+     "name": "grid",
+     "x": 304,
+     "y": 12,
+     "width": 328,
+     "height": 303,
+     "props": {},
+     "events": {}
+    }
+   ]
+  },
+  {
+   "name": "CategoriesForm",
+   "width": 644,
+   "height": 184,
+   "props": {
+    "title": "Categories",
+    "table": "Categories"
+   },
+   "code": {},
+   "controls": [
+    {
+     "type": "Label",
+     "name": "nameLabel",
+     "x": 12,
+     "y": 14,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Name:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "nameBox",
+     "x": 108,
+     "y": 12,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Name"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "kindLabel",
+     "x": 12,
+     "y": 42,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Kind:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "kindCombo",
+     "x": 108,
+     "y": 40,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Kind"
+     },
+     "events": {}
+    },
+    {
+     "type": "CheckBox",
+     "name": "taxRelatedCheck",
+     "x": 108,
+     "y": 68,
+     "width": 180,
+     "height": 17,
+     "props": {
+      "field": "TaxRelated",
+      "text": "Tax-related"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "notesLabel",
+     "x": 12,
+     "y": 98,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Notes:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "notesBox",
+     "x": 108,
+     "y": 96,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Notes"
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "newButton",
+     "x": 12,
+     "y": 129,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "New"
+     },
+     "events": {
+      "clicked": "form.newRecord();\nnameBox.forceActiveFocus();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "saveButton",
+     "x": 104,
+     "y": 129,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Save",
+      "isDefault": true
+     },
+     "events": {
+      "clicked": "form.save();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "deleteButton",
+     "x": 196,
+     "y": 129,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Delete"
+     },
+     "events": {
+      "clicked": "if (form.isNew)\n    return;\nform.msgBox(\"Delete this record?\", \"Delete\", \"question\", [\"Yes\", \"No\"], function (answer) {\n    if (answer === 0)\n        form.deleteRecord();\n});"
+     }
+    },
+    {
+     "type": "DataGrid",
+     "name": "grid",
+     "x": 304,
+     "y": 12,
+     "width": 328,
+     "height": 160,
+     "props": {},
+     "events": {}
+    }
+   ]
+  },
+  {
+   "name": "RegisterForm",
+   "width": 780,
+   "height": 540,
+   "props": {
+    "title": "Register",
+    "table": "Transactions"
+   },
+   "controls": [
+    {
+     "type": "Frame",
+     "name": "entryFrame",
+     "x": 8,
+     "y": 344,
+     "width": 764,
+     "height": 188,
+     "props": {
+      "text": "Transaction"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "accountLabel",
+     "x": 8,
+     "y": 12,
+     "width": 56,
+     "height": 17,
+     "props": {
+      "text": "Account:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "accountCombo",
+     "x": 64,
+     "y": 8,
+     "width": 200,
+     "height": 21,
+     "props": {},
+     "events": {
+      "changed": "if (accountIds[accountCombo.currentIndex] !== accountId)\n    showAccount(accountIds[accountCombo.currentIndex]);"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "findLabel",
+     "x": 280,
+     "y": 12,
+     "width": 32,
+     "height": 17,
+     "props": {
+      "text": "Find:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "findBox",
+     "x": 312,
+     "y": 8,
+     "width": 160,
+     "height": 21,
+     "props": {
+      "toolTip": "Only the transactions with this text in them"
+     },
+     "events": {
+      "changed": "fill();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "balanceLabel",
+     "x": 480,
+     "y": 12,
+     "width": 292,
+     "height": 17,
+     "props": {
+      "text": "",
+      "alignment": "Right",
+      "fontBold": true
+     },
+     "events": {}
+    },
+    {
+     "type": "DataGrid",
+     "name": "grid",
+     "x": 8,
+     "y": 36,
+     "width": 764,
+     "height": 300,
+     "props": {
+      "table": "Listing",
+      "columns": [
+       "Date",
+       "Num",
+       "Payee",
+       "Category",
+       "Memo",
+       "C",
+       "Payment",
+       "Deposit",
+       "Balance"
+      ]
+     },
+     "events": {
+      "rowSelected": "form.loadRecord(grid.currentId);"
+     }
+    },
+    {
+     "type": "OptionButton",
+     "name": "optWithdrawal",
+     "x": 20,
+     "y": 364,
+     "width": 96,
+     "height": 17,
+     "props": {
+      "text": "Withdrawal",
+      "group": "kind",
+      "checked": true
+     },
+     "events": {
+      "clicked": "kindChanged();"
+     }
+    },
+    {
+     "type": "OptionButton",
+     "name": "optDeposit",
+     "x": 124,
+     "y": 364,
+     "width": 76,
+     "height": 17,
+     "props": {
+      "text": "Deposit",
+      "group": "kind"
+     },
+     "events": {
+      "clicked": "kindChanged();"
+     }
+    },
+    {
+     "type": "OptionButton",
+     "name": "optTransfer",
+     "x": 208,
+     "y": 364,
+     "width": 76,
+     "height": 17,
+     "props": {
+      "text": "Transfer",
+      "group": "kind"
+     },
+     "events": {
+      "clicked": "kindChanged();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "dateLabel",
+     "x": 20,
+     "y": 394,
+     "width": 60,
+     "height": 17,
+     "props": {
+      "text": "Date:"
+     },
+     "events": {}
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "dateBox",
+     "x": 84,
+     "y": 392,
+     "width": 120,
+     "height": 21,
+     "props": {
+      "field": "Date"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "numLabel",
+     "x": 220,
+     "y": 394,
+     "width": 52,
+     "height": 17,
+     "props": {
+      "text": "Number:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "numBox",
+     "x": 276,
+     "y": 392,
+     "width": 80,
+     "height": 21,
+     "props": {
+      "field": "Number"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "statusLabel",
+     "x": 372,
+     "y": 394,
+     "width": 48,
+     "height": 17,
+     "props": {
+      "text": "Status:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "statusCombo",
+     "x": 424,
+     "y": 392,
+     "width": 120,
+     "height": 21,
+     "props": {
+      "field": "Cleared"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "payeeLabel",
+     "x": 20,
+     "y": 422,
+     "width": 60,
+     "height": 17,
+     "props": {
+      "text": "Payee:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "payeeCombo",
+     "x": 84,
+     "y": 420,
+     "width": 240,
+     "height": 21,
+     "props": {
+      "field": "Payee"
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "payeesButton",
+     "x": 328,
+     "y": 420,
+     "width": 24,
+     "height": 21,
+     "props": {
+      "text": "...",
+      "toolTip": "The list of payees: add a new one there"
+     },
+     "events": {
+      "clicked": "App.showForm(\"PayeesForm\");"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "amountLabel",
+     "x": 372,
+     "y": 422,
+     "width": 48,
+     "height": 17,
+     "props": {
+      "text": "Amount:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "amountBox",
+     "x": 424,
+     "y": 420,
+     "width": 120,
+     "height": 21,
+     "props": {
+      "alignment": "Right"
+     },
+     "events": {
+      "accepted": "if (enter())\n    startNew();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "categoryLabel",
+     "x": 20,
+     "y": 450,
+     "width": 60,
+     "height": 17,
+     "props": {
+      "text": "Category:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "categoryCombo",
+     "x": 84,
+     "y": 448,
+     "width": 240,
+     "height": 21,
+     "props": {
+      "field": "Category"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "toLabel",
+     "x": 372,
+     "y": 450,
+     "width": 64,
+     "height": 17,
+     "props": {
+      "text": "To account:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "toCombo",
+     "x": 440,
+     "y": 448,
+     "width": 208,
+     "height": 21,
+     "props": {
+      "field": "TransferAccount"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "memoLabel",
+     "x": 20,
+     "y": 478,
+     "width": 60,
+     "height": 17,
+     "props": {
+      "text": "Memo:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "memoBox",
+     "x": 84,
+     "y": 476,
+     "width": 460,
+     "height": 21,
+     "props": {
+      "field": "Memo"
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "newButton",
+     "x": 664,
+     "y": 364,
+     "width": 96,
+     "height": 24,
+     "props": {
+      "text": "New"
+     },
+     "events": {
+      "clicked": "startNew();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "enterButton",
+     "x": 664,
+     "y": 392,
+     "width": 96,
+     "height": 24,
+     "props": {
+      "text": "Enter",
+      "isDefault": true
+     },
+     "events": {
+      "clicked": "if (enter())\n    startNew();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "splitButton",
+     "x": 664,
+     "y": 420,
+     "width": 96,
+     "height": 24,
+     "props": {
+      "text": "Split..."
+     },
+     "events": {
+      "clicked": "if (form.isNew || form.dirty) {\n    if (!enter())\n        return;\n}\nApp.openForm(\"SplitForm\", { transaction: form.recordId });"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "deleteButton",
+     "x": 664,
+     "y": 448,
+     "width": 96,
+     "height": 24,
+     "props": {
+      "text": "Delete"
+     },
+     "events": {
+      "clicked": "if (form.isNew) {\n    startNew();\n    return;\n}\nform.msgBox(\"Delete this transaction?\", \"Register\", \"question\", [\"Yes\", \"No\"], function (answer) {\n    if (answer !== 0)\n        return;\n    home.removeTransaction(form.recordId);\n    form.newRecord();\n    fill();\n});"
+     }
+    }
+   ],
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")\nproperty var accountId: null\nproperty var accountIds: []\nproperty string lastDate: \"\"\n\n// the account's transactions into the grid, oldest first, with the balance after each\nfunction fill() {\n    var account = Db.get(\"Accounts\", accountId);\n    if (account.id === undefined)\n        return;\n    var payees = home.names(\"Payees\"), categories = home.names(\"Categories\"), accounts = home.names(\"Accounts\");\n    var find = findBox.text.trim().toLowerCase();\n    var balance = account.OpeningBalance || 0, cleared = balance, out = [];\n    Db.select(\"Transactions\", { where: { Account: accountId }, orderBy: \"Date\" }).forEach(function (t) {\n        balance += t.Amount;\n        if (t.Cleared !== \"Unreconciled\")\n            cleared += t.Amount;\n        var category = t.TransferAccount ? \"Transfer: \" + (accounts[t.TransferAccount] || \"?\")\n                     : t.IsSplit ? \"(split)\"\n                     : t.Action ? t.Action + (t.Category ? \", \" + categories[t.Category] : \"\")\n                     : (categories[t.Category] || \"\");\n        var line = { id: t.id, Date: home.showDate(t.Date), Num: t.Number || \"\", Payee: payees[t.Payee] || \"\",\n                     Category: category, Memo: t.Memo || \"\",\n                     C: t.Cleared === \"Reconciled\" ? \"R\" : t.Cleared === \"Cleared\" ? \"C\" : \"\",\n                     Payment: t.Amount < 0 ? home.fmt(-t.Amount) : \"\", Deposit: t.Amount >= 0 ? home.fmt(t.Amount) : \"\",\n                     Balance: home.fmt(balance) };\n        var text = (line.Date + \" \" + line.Num + \" \" + line.Payee + \" \" + line.Category + \" \" + line.Memo\n                    + \" \" + line.Payment + line.Deposit).toLowerCase();\n        if (find === \"\" || text.indexOf(find) >= 0)\n            out.push(line);\n    });\n    grid.rows = out;\n    grid.currentIndex = rowOf(form.recordId);\n    var holdings = home.balances()[accountId].holdings;\n    balanceLabel.text = \"Balance: \" + home.fmt(balance)\n        + (holdings !== 0 ? \"   Investments: \" + home.fmt(holdings) : \"\")\n        + \"   Cleared: \" + home.fmt(cleared);\n    form.title = account.Name + \" - Register\";\n}\n\n// where a transaction is in the grid (-1: it isn't)\nfunction rowOf(id) {\n    for (var i = 0; i < grid.rows.length; ++i) {\n        if (grid.rows[i].id === id)\n            return i;\n    }\n    return -1;\n}\n\nfunction showAccount(id) {\n    accountId = id;\n    accountCombo.currentIndex = accountIds.indexOf(id);\n    form.newRecord();\n    fill();\n    if (grid.rows.length > 0)\n        grid.select(grid.rows.length - 1, false);\n}\n\n// the amount box and the three options, from the record that's showing\nfunction showKind() {\n    var amount = form.record.Amount;\n    amountBox.text = amount ? home.fmt(Math.abs(amount)) : \"\";\n    optTransfer.checked = !!form.record.TransferAccount;\n    optDeposit.checked = !optTransfer.checked && amount > 0;\n    optWithdrawal.checked = !optTransfer.checked && !optDeposit.checked;\n    kindChanged();\n}\nfunction kindChanged() {\n    toLabel.visible = toCombo.visible = optTransfer.checked;\n    categoryLabel.visible = categoryCombo.visible = !optTransfer.checked;\n}\n\n// Enter: the record as the form has it, into the register\nfunction enter() {\n    var amount = home.parseMoney(amountBox.text);\n    if (amount === null || amount === 0) {\n        form.msgBox(\"Type the amount: 12.50\", \"Register\", \"warning\");\n        amountBox.forceActiveFocus();\n        return false;\n    }\n    if (optTransfer.checked && !form.record.TransferAccount) {\n        form.msgBox(\"Choose the account the money goes to.\", \"Register\", \"warning\");\n        return false;\n    }\n    form.setField(\"Account\", accountId);\n    form.setField(\"Amount\", (optDeposit.checked ? 1 : -1) * Math.abs(amount));\n    if (optTransfer.checked) {\n        form.setField(\"Category\", null);\n    } else {\n        form.setField(\"TransferAccount\", null);\n        // a payee's usual category, if none was chosen\n        if (form.record.Payee && !form.record.Category && !form.record.IsSplit) {\n            var payee = Db.get(\"Payees\", form.record.Payee);\n            if (payee.Category)\n                form.setField(\"Category\", payee.Category);\n        }\n    }\n    if (!form.save())\n        return false;\n    lastDate = form.record.Date;\n    // (a transfer's other half is written, and this one is read again with its link to it)\n    var id = form.recordId;\n    home.matchTransfer(id);\n    form.loadRecord(id);\n    fill();\n    return true;\n}\n\nfunction startNew() {\n    form.newRecord();\n    if (lastDate !== \"\")\n        form.setField(\"Date\", lastDate);\n    grid.currentIndex = -1;\n    dateBox.forceActiveFocus();\n}\n\n// (another form changed the transactions: a download, a bill, a split)\nTimer { id: soon; interval: 300; onTriggered: fill() }\nConnections {\n    target: Db\n    function onChanged(table) {\n        if (table === \"Transactions\" || table === \"Splits\" || table === \"Holdings\")\n            soon.restart();\n    }\n}",
+    "load": "var accounts = Db.select(\"Accounts\", { orderBy: \"Name\" });\naccountIds = accounts.map(function (a) { return a.id; });\naccountCombo.items = accounts.map(function (a) { return a.Name; });\nif (accounts.length === 0) {\n    form.msgBox(\"There are no accounts yet: Accounts > Account List.\", \"Register\");\n    return;\n}\nshowAccount(form.args.account || accountIds[0]);\nif (form.args.transaction && form.loadRecord(form.args.transaction))\n    fill();",
+    "current": "showKind();"
+   }
+  },
+  {
+   "name": "SplitForm",
+   "width": 440,
+   "height": 310,
+   "props": {
+    "title": "Split a Transaction",
+    "table": "Splits",
+    "resizable": false
+   },
+   "controls": [
+    {
+     "type": "Label",
+     "name": "totalLabel",
+     "x": 8,
+     "y": 8,
+     "width": 424,
+     "height": 17,
+     "props": {
+      "text": "",
+      "fontBold": true
+     },
+     "events": {}
+    },
+    {
+     "type": "DataGrid",
+     "name": "grid",
+     "x": 8,
+     "y": 32,
+     "width": 424,
+     "height": 150,
+     "props": {
+      "table": "Listing",
+      "columns": [
+       "Category",
+       "Memo",
+       "Amount"
+      ]
+     },
+     "events": {
+      "rowSelected": "form.loadRecord(grid.currentId);"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "leftLabel",
+     "x": 8,
+     "y": 188,
+     "width": 424,
+     "height": 17,
+     "props": {
+      "text": ""
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "categoryLabel",
+     "x": 8,
+     "y": 216,
+     "width": 60,
+     "height": 17,
+     "props": {
+      "text": "Category:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "categoryCombo",
+     "x": 72,
+     "y": 214,
+     "width": 200,
+     "height": 21,
+     "props": {
+      "field": "Category"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "amountLabel",
+     "x": 284,
+     "y": 216,
+     "width": 48,
+     "height": 17,
+     "props": {
+      "text": "Amount:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "amountBox",
+     "x": 336,
+     "y": 214,
+     "width": 96,
+     "height": 21,
+     "props": {
+      "alignment": "Right"
+     },
+     "events": {
+      "accepted": "if (saveLine())\n    startNew();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "memoLabel",
+     "x": 8,
+     "y": 244,
+     "width": 60,
+     "height": 17,
+     "props": {
+      "text": "Memo:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "memoBox",
+     "x": 72,
+     "y": 242,
+     "width": 360,
+     "height": 21,
+     "props": {
+      "field": "Memo"
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "addButton",
+     "x": 8,
+     "y": 276,
+     "width": 90,
+     "height": 24,
+     "props": {
+      "text": "Save Part",
+      "isDefault": true
+     },
+     "events": {
+      "clicked": "if (saveLine())\n    startNew();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "deleteButton",
+     "x": 104,
+     "y": 276,
+     "width": 90,
+     "height": 24,
+     "props": {
+      "text": "Delete Part"
+     },
+     "events": {
+      "clicked": "if (!form.isNew) {\n    form.deleteRecord();\n    fill();\n}\nstartNew();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "doneButton",
+     "x": 342,
+     "y": 276,
+     "width": 90,
+     "height": 24,
+     "props": {
+      "text": "Done"
+     },
+     "events": {
+      "clicked": "if (left === 0 || grid.rows.length === 0) {\n    form.close();\n    return;\n}\nform.msgBox(\"The parts don't add up to the transaction (\" + home.fmt(Math.abs(left)) + \" is left).\\n\"\n            + \"Change the transaction's amount to what the parts come to?\", \"Split\", \"question\",\n            [\"Change It\", \"Keep Editing\"], function (answer) {\n    if (answer !== 0)\n        return;\n    var t = Db.get(\"Transactions\", transactionId);\n    Db.update(\"Transactions\", transactionId, { Amount: t.Amount - left });\n    home.matchTransfer(transactionId);\n    form.close();\n});"
+     }
+    }
+   ],
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")\nproperty var transactionId: null\nproperty real left: 0\n\nfunction fill() {\n    var t = Db.get(\"Transactions\", transactionId), categories = home.names(\"Categories\");\n    var sign = t.Amount < 0 ? -1 : 1, total = 0, out = [];\n    Db.select(\"Splits\", { where: { Transaction: transactionId } }).forEach(function (s) {\n        total += s.Amount;\n        out.push({ id: s.id, Category: categories[s.Category] || \"\", Memo: s.Memo || \"\", Amount: home.fmt(sign * s.Amount) });\n    });\n    grid.rows = out;\n    left = Math.round((t.Amount - total) * 100) / 100;\n    totalLabel.text = home.showDate(t.Date) + \"   \" + (t.Memo || \"\") + \"   \" + home.fmt(Math.abs(t.Amount))\n        + (t.Amount < 0 ? \" spent\" : \" received\");\n    leftLabel.text = left === 0 ? \"All of it has a category.\" : \"Still to give a category: \" + home.fmt(sign * left);\n    leftLabel.foreColor = left === 0 ? \"#008000\" : \"#c00000\";\n    // (the transaction is a split while it has any)\n    if (t.IsSplit !== (out.length > 0))\n        Db.update(\"Transactions\", transactionId, out.length > 0 ? { IsSplit: true, Category: null } : { IsSplit: false });\n}\n\nfunction startNew() {\n    form.newRecord();\n    amountBox.text = left !== 0 ? home.fmt(Math.abs(left)) : \"\";\n    grid.currentIndex = -1;\n    categoryCombo.forceActiveFocus();\n}\n\nfunction saveLine() {\n    var amount = home.parseMoney(amountBox.text);\n    if (amount === null || amount === 0) {\n        form.msgBox(\"Type this part's amount.\", \"Split\", \"warning\");\n        return false;\n    }\n    var t = Db.get(\"Transactions\", transactionId);\n    form.setField(\"Transaction\", transactionId);\n    form.setField(\"Amount\", (t.Amount < 0 ? -1 : 1) * Math.abs(amount));\n    if (!form.save())\n        return false;\n    fill();\n    return true;\n}",
+    "load": "transactionId = form.args.transaction;\nfill();\nstartNew();",
+    "current": "amountBox.text = form.record.Amount ? home.fmt(Math.abs(form.record.Amount)) : \"\";"
+   }
+  },
+  {
+   "name": "ReconcileForm",
+   "width": 560,
+   "height": 418,
+   "props": {
+    "title": "Balance an Account"
+   },
+   "controls": [
+    {
+     "type": "Label",
+     "name": "statementLabel",
+     "x": 8,
+     "y": 12,
+     "width": 90,
+     "height": 17,
+     "props": {
+      "text": "Statement date:"
+     },
+     "events": {}
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "statementPicker",
+     "x": 100,
+     "y": 8,
+     "width": 120,
+     "height": 21,
+     "props": {
+      "value": "today",
+      "allowBlank": false
+     },
+     "events": {
+      "changed": "fill();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "endingLabel",
+     "x": 236,
+     "y": 12,
+     "width": 90,
+     "height": 17,
+     "props": {
+      "text": "Ending balance:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "endingBox",
+     "x": 328,
+     "y": 8,
+     "width": 110,
+     "height": 21,
+     "props": {
+      "alignment": "Right"
+     },
+     "events": {
+      "changed": "fill();"
+     }
+    },
+    {
+     "type": "DataGrid",
+     "name": "grid",
+     "x": 8,
+     "y": 40,
+     "width": 544,
+     "height": 280,
+     "props": {
+      "table": "Listing",
+      "columns": [
+       "Date",
+       "Num",
+       "Payee",
+       "C",
+       "Payment",
+       "Deposit"
+      ]
+     },
+     "events": {
+      "rowActivated": "toggle();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "clearedCaption",
+     "x": 8,
+     "y": 330,
+     "width": 96,
+     "height": 17,
+     "props": {
+      "text": "Cleared balance:"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "clearedLabel",
+     "x": 108,
+     "y": 330,
+     "width": 110,
+     "height": 17,
+     "props": {
+      "text": "",
+      "alignment": "Right",
+      "fontBold": true
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "differenceCaption",
+     "x": 236,
+     "y": 330,
+     "width": 70,
+     "height": 17,
+     "props": {
+      "text": "Difference:"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "differenceLabel",
+     "x": 310,
+     "y": 330,
+     "width": 242,
+     "height": 17,
+     "props": {
+      "text": "",
+      "fontBold": true
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "toggleButton",
+     "x": 8,
+     "y": 360,
+     "width": 110,
+     "height": 24,
+     "props": {
+      "text": "Mark Cleared"
+     },
+     "events": {
+      "clicked": "toggle();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "finishButton",
+     "x": 350,
+     "y": 360,
+     "width": 96,
+     "height": 24,
+     "props": {
+      "text": "Finish",
+      "enabled": false
+     },
+     "events": {
+      "clicked": "var done = 0;\nDb.select(\"Transactions\", { where: { Account: accountId, Cleared: \"Cleared\" } }).forEach(function (t) {\n    Db.update(\"Transactions\", t.id, { Cleared: \"Reconciled\" });\n    done += 1;\n});\nform.msgBox(\"Balanced: \" + done + \" transactions are reconciled.\", \"Balance an Account\", \"info\", [\"OK\"], function () {\n    form.close();\n});"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "cancelButton",
+     "x": 456,
+     "y": 360,
+     "width": 96,
+     "height": 24,
+     "props": {
+      "text": "Close"
+     },
+     "events": {
+      "clicked": "form.close();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "helpLabel",
+     "x": 8,
+     "y": 394,
+     "width": 544,
+     "height": 17,
+     "props": {
+      "text": "Double-click each transaction that's on the statement, until the difference is 0.00."
+     },
+     "events": {}
+    }
+   ],
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")\nproperty var accountId: null\nproperty real difference: 0\n\n// the transactions not reconciled yet, up to the statement's day\nfunction fill() {\n    var account = Db.get(\"Accounts\", accountId), payees = home.names(\"Payees\");\n    var cleared = account.OpeningBalance || 0, out = [], day = statementPicker.value || home.today();\n    Db.select(\"Transactions\", { where: { Account: accountId }, orderBy: \"Date\" }).forEach(function (t) {\n        if (t.Cleared !== \"Unreconciled\")\n            cleared += t.Amount;\n        if (t.Cleared === \"Reconciled\" || t.Date > day)\n            return;\n        out.push({ id: t.id, Date: home.showDate(t.Date), Num: t.Number || \"\", Payee: payees[t.Payee] || t.Memo || \"\",\n                   C: t.Cleared === \"Cleared\" ? \"C\" : \"\", Payment: t.Amount < 0 ? home.fmt(-t.Amount) : \"\",\n                   Deposit: t.Amount >= 0 ? home.fmt(t.Amount) : \"\" });\n    });\n    var keep = grid.currentIndex;\n    grid.rows = out;\n    grid.currentIndex = Math.min(keep, out.length - 1);\n    var ending = home.parseMoney(endingBox.text);\n    clearedLabel.text = home.fmt(cleared);\n    difference = ending === null ? NaN : Math.round((ending - cleared) * 100) / 100;\n    differenceLabel.text = ending === null ? \"(type the statement's ending balance)\" : home.fmt(difference);\n    differenceLabel.foreColor = difference === 0 ? \"#008000\" : \"#c00000\";\n    finishButton.enabled = difference === 0;\n    form.title = \"Balance \" + account.Name;\n}\n\n// tick or untick the row that's selected\nfunction toggle() {\n    if (grid.currentId === null)\n        return;\n    var t = Db.get(\"Transactions\", grid.currentId);\n    Db.update(\"Transactions\", t.id, { Cleared: t.Cleared === \"Cleared\" ? \"Unreconciled\" : \"Cleared\" });\n    fill();\n}",
+    "load": "accountId = form.args.account;\nfill();"
+   }
+  },
+  {
+   "name": "FindForm",
+   "width": 720,
+   "height": 440,
+   "props": {
+    "title": "Find Transactions"
+   },
+   "controls": [
+    {
+     "type": "Label",
+     "name": "findLabel",
+     "x": 8,
+     "y": 12,
+     "width": 36,
+     "height": 17,
+     "props": {
+      "text": "Text:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "findBox",
+     "x": 48,
+     "y": 8,
+     "width": 160,
+     "height": 21,
+     "props": {},
+     "events": {
+      "changed": "find();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "accountLabel",
+     "x": 220,
+     "y": 12,
+     "width": 52,
+     "height": 17,
+     "props": {
+      "text": "Account:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "accountCombo",
+     "x": 276,
+     "y": 8,
+     "width": 180,
+     "height": 21,
+     "props": {},
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "fromLabel",
+     "x": 8,
+     "y": 40,
+     "width": 36,
+     "height": 17,
+     "props": {
+      "text": "From:"
+     },
+     "events": {}
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "fromPicker",
+     "x": 48,
+     "y": 36,
+     "width": 110,
+     "height": 21,
+     "props": {},
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "toLabel",
+     "x": 166,
+     "y": 40,
+     "width": 24,
+     "height": 17,
+     "props": {
+      "text": "To:"
+     },
+     "events": {}
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "toPicker",
+     "x": 192,
+     "y": 36,
+     "width": 110,
+     "height": 21,
+     "props": {},
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "leastLabel",
+     "x": 316,
+     "y": 40,
+     "width": 80,
+     "height": 17,
+     "props": {
+      "text": "Amount from:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "leastBox",
+     "x": 398,
+     "y": 36,
+     "width": 70,
+     "height": 21,
+     "props": {
+      "alignment": "Right"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "mostLabel",
+     "x": 474,
+     "y": 40,
+     "width": 20,
+     "height": 17,
+     "props": {
+      "text": "to:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "mostBox",
+     "x": 496,
+     "y": 36,
+     "width": 70,
+     "height": 21,
+     "props": {
+      "alignment": "Right"
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "findButton",
+     "x": 624,
+     "y": 34,
+     "width": 88,
+     "height": 24,
+     "props": {
+      "text": "Find",
+      "isDefault": true
+     },
+     "events": {
+      "clicked": "find();"
+     }
+    },
+    {
+     "type": "DataGrid",
+     "name": "grid",
+     "x": 8,
+     "y": 68,
+     "width": 704,
+     "height": 340,
+     "props": {
+      "table": "Listing",
+      "columns": [
+       "Date",
+       "Account",
+       "Num",
+       "Payee",
+       "Category",
+       "Memo",
+       "Amount"
+      ]
+     },
+     "events": {
+      "rowActivated": "var t = Db.get(\"Transactions\", grid.currentId);\nApp.openForm(\"RegisterForm\", { account: t.Account, transaction: t.id });"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "countLabel",
+     "x": 8,
+     "y": 416,
+     "width": 704,
+     "height": 17,
+     "props": {
+      "text": ""
+     },
+     "events": {}
+    }
+   ],
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")\nproperty var accountIds: []\n\nfunction find() {\n    var payees = home.names(\"Payees\"), categories = home.names(\"Categories\"), accounts = home.names(\"Accounts\");\n    var text = findBox.text.trim().toLowerCase();\n    var only = accountCombo.currentIndex > 0 ? accountIds[accountCombo.currentIndex - 1] : null;\n    var from = fromPicker.value, to = toPicker.value;\n    var least = home.parseMoney(leastBox.text), most = home.parseMoney(mostBox.text);\n    var out = [], total = 0;\n    Db.select(\"Transactions\", { where: only === null ? {} : { Account: only }, orderBy: \"Date\", descending: true }).forEach(function (t) {\n        if ((from && t.Date < from) || (to && t.Date > to))\n            return;\n        var size = Math.abs(t.Amount);\n        if ((least !== null && size < least) || (most !== null && size > most))\n            return;\n        var line = { id: t.id, Date: home.showDate(t.Date), Account: accounts[t.Account] || \"\", Num: t.Number || \"\",\n                     Payee: payees[t.Payee] || \"\", Category: t.TransferAccount ? \"Transfer\" : t.IsSplit ? \"(split)\" : (categories[t.Category] || \"\"),\n                     Memo: t.Memo || \"\", Amount: home.fmt(t.Amount) };\n        if (text !== \"\" && (line.Payee + \" \" + line.Category + \" \" + line.Memo + \" \" + line.Num + \" \" + line.Account)\n                .toLowerCase().indexOf(text) < 0)\n            return;\n        out.push(line);\n        total += t.Amount;\n    });\n    grid.rows = out;\n    countLabel.text = out.length + (out.length === 1 ? \" transaction\" : \" transactions\") + \", \" + home.fmt(total) + \" in all\";\n}",
+    "load": "var accounts = Db.select(\"Accounts\", { orderBy: \"Name\" });\naccountIds = accounts.map(function (a) { return a.id; });\naccountCombo.items = [\"(all accounts)\"].concat(accounts.map(function (a) { return a.Name; }));\naccountCombo.currentIndex = 0;\n// (a report's slice was clicked: its transactions)\nif (form.args.text)\n    findBox.text = form.args.text;\nif (form.args.from)\n    fromPicker.value = form.args.from;\nif (form.args.to)\n    toPicker.value = form.args.to;\nfind();"
+   }
+  },
+  {
+   "name": "BillsForm",
+   "width": 644,
+   "height": 473,
+   "props": {
+    "title": "Bills and Deposits",
+    "table": "Bills"
+   },
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")\n\nfunction check() {\n    if (form.record.Kind === \"Transfer\" && !form.record.ToAccount) {\n        form.msgBox(\"A transfer needs the account the money goes to.\", \"Bills\", \"warning\");\n        return false;\n    }\n    return true;\n}",
+    "current": "if (form.isNew) {\n    dueLabel.text = \"A new bill: fill it in and press Save.\";\n} else {\n    var days = home.daysBetween(home.today(), form.record.NextDue);\n    dueLabel.text = !form.record.Active ? \"This one is finished.\"\n                  : days < 0 ? \"Overdue by \" + (-days) + (days === -1 ? \" day.\" : \" days.\")\n                  : days === 0 ? \"Due today.\" : \"Due in \" + days + (days === 1 ? \" day.\" : \" days.\");\n}\ntoAccountLabel.visible = toAccountCombo.visible = form.record.Kind === \"Transfer\";"
+   },
+   "controls": [
+    {
+     "type": "Label",
+     "name": "nameLabel",
+     "x": 12,
+     "y": 14,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Name:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "nameBox",
+     "x": 108,
+     "y": 12,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Name"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "kindLabel",
+     "x": 12,
+     "y": 42,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Kind:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "kindCombo",
+     "x": 108,
+     "y": 40,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Kind"
+     },
+     "events": {
+      "changed": "toAccountLabel.visible = toAccountCombo.visible = form.record.Kind === \"Transfer\";"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "accountLabel",
+     "x": 12,
+     "y": 70,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Account:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "accountCombo",
+     "x": 108,
+     "y": 68,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Account"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "toAccountLabel",
+     "x": 12,
+     "y": 98,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "To Account:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "toAccountCombo",
+     "x": 108,
+     "y": 96,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "ToAccount"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "payeeLabel",
+     "x": 12,
+     "y": 126,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Payee:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "payeeCombo",
+     "x": 108,
+     "y": 124,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Payee"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "categoryLabel",
+     "x": 12,
+     "y": 154,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Category:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "categoryCombo",
+     "x": 108,
+     "y": 152,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Category"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "amountLabel",
+     "x": 12,
+     "y": 182,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Amount:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "amountBox",
+     "x": 108,
+     "y": 180,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Amount"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "frequencyLabel",
+     "x": 12,
+     "y": 210,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Frequency:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "frequencyCombo",
+     "x": 108,
+     "y": 208,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Frequency"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "nextDueLabel",
+     "x": 12,
+     "y": 238,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Next Due:"
+     },
+     "events": {}
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "nextDuePicker",
+     "x": 108,
+     "y": 236,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "NextDue",
+      "mode": "Date"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "endDateLabel",
+     "x": 12,
+     "y": 266,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Ends:"
+     },
+     "events": {}
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "endDatePicker",
+     "x": 108,
+     "y": 264,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "EndDate",
+      "mode": "Date"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "remindDaysLabel",
+     "x": 12,
+     "y": 294,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Remind Days:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "remindDaysBox",
+     "x": 108,
+     "y": 292,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "RemindDays"
+     },
+     "events": {}
+    },
+    {
+     "type": "CheckBox",
+     "name": "autoEnterCheck",
+     "x": 108,
+     "y": 320,
+     "width": 180,
+     "height": 17,
+     "props": {
+      "field": "AutoEnter",
+      "text": "Enter By Itself"
+     },
+     "events": {}
+    },
+    {
+     "type": "CheckBox",
+     "name": "activeCheck",
+     "x": 108,
+     "y": 348,
+     "width": 180,
+     "height": 17,
+     "props": {
+      "field": "Active",
+      "text": "Active"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "memoLabel",
+     "x": 12,
+     "y": 378,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Memo:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "memoBox",
+     "x": 108,
+     "y": 376,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Memo"
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "newButton",
+     "x": 12,
+     "y": 409,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "New"
+     },
+     "events": {
+      "clicked": "form.newRecord();\nnameBox.forceActiveFocus();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "saveButton",
+     "x": 104,
+     "y": 409,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Save",
+      "isDefault": true
+     },
+     "events": {
+      "clicked": "if (check())\n    form.save();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "deleteButton",
+     "x": 196,
+     "y": 409,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Delete"
+     },
+     "events": {
+      "clicked": "if (form.isNew)\n    return;\nform.msgBox(\"Delete this record?\", \"Delete\", \"question\", [\"Yes\", \"No\"], function (answer) {\n    if (answer === 0)\n        form.deleteRecord();\n});"
+     }
+    },
+    {
+     "type": "DataGrid",
+     "name": "grid",
+     "x": 304,
+     "y": 12,
+     "width": 328,
+     "height": 421,
+     "props": {
+      "columns": [
+       "Name",
+       "NextDue",
+       "Amount",
+       "Frequency"
+      ],
+      "orderBy": "NextDue"
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "enterButton",
+     "x": 12,
+     "y": 437,
+     "width": 130,
+     "height": 24,
+     "props": {
+      "text": "Enter in Register"
+     },
+     "events": {
+      "clicked": "if (form.isNew || form.dirty) {\n    if (!check() || !form.save())\n        return;\n}\nvar id = form.recordId;\nif (home.enterBill(id)) {\n    form.loadRecord(id);\n    dueLabel.text = \"Entered in the register. \" + dueLabel.text;\n}"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "skipButton",
+     "x": 150,
+     "y": 437,
+     "width": 110,
+     "height": 24,
+     "props": {
+      "text": "Skip This One"
+     },
+     "events": {
+      "clicked": "if (form.isNew)\n    return;\nvar id = form.recordId;\nhome.skipBill(id);\nform.loadRecord(id);"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "dueLabel",
+     "x": 272,
+     "y": 441,
+     "width": 360,
+     "height": 17,
+     "props": {
+      "text": "",
+      "fontBold": true
+     },
+     "events": {}
+    }
+   ]
+  },
+  {
+   "name": "BudgetForm",
+   "width": 700,
+   "height": 440,
+   "props": {
+    "title": "Budget",
+    "table": "Budgets"
+   },
+   "controls": [
+    {
+     "type": "Frame",
+     "name": "editFrame",
+     "x": 8,
+     "y": 316,
+     "width": 684,
+     "height": 116,
+     "props": {
+      "text": "A category's budget"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "monthLabel",
+     "x": 8,
+     "y": 12,
+     "width": 44,
+     "height": 17,
+     "props": {
+      "text": "Month:"
+     },
+     "events": {}
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "monthPicker",
+     "x": 56,
+     "y": 8,
+     "width": 130,
+     "height": 21,
+     "props": {
+      "value": "today",
+      "dateFormat": "Custom",
+      "customDateFormat": "MMMM yyyy",
+      "allowBlank": false
+     },
+     "events": {
+      "changed": "fill();"
+     }
+    },
+    {
+     "type": "DataGrid",
+     "name": "grid",
+     "x": 8,
+     "y": 36,
+     "width": 340,
+     "height": 250,
+     "props": {
+      "table": "Listing",
+      "columns": [
+       "Category",
+       "Budget",
+       "Spent",
+       "Left"
+      ]
+     },
+     "events": {
+      "rowSelected": "form.loadRecord(grid.currentId);"
+     }
+    },
+    {
+     "type": "Graph",
+     "name": "graph1",
+     "x": 356,
+     "y": 8,
+     "width": 336,
+     "height": 278,
+     "props": {
+      "graph": {
+       "type": "Column",
+       "source": "code",
+       "legend": "Bottom",
+       "prefix": "$"
+      }
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "totalLabel",
+     "x": 8,
+     "y": 292,
+     "width": 684,
+     "height": 17,
+     "props": {
+      "text": "",
+      "fontBold": true
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "categoryLabel",
+     "x": 20,
+     "y": 340,
+     "width": 60,
+     "height": 17,
+     "props": {
+      "text": "Category:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "categoryCombo",
+     "x": 84,
+     "y": 338,
+     "width": 220,
+     "height": 21,
+     "props": {
+      "field": "Category"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "amountLabel",
+     "x": 320,
+     "y": 340,
+     "width": 56,
+     "height": 17,
+     "props": {
+      "text": "A month:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "amountBox",
+     "x": 380,
+     "y": 338,
+     "width": 100,
+     "height": 21,
+     "props": {
+      "field": "Amount",
+      "alignment": "Right"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "notesLabel",
+     "x": 20,
+     "y": 368,
+     "width": 60,
+     "height": 17,
+     "props": {
+      "text": "Notes:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "notesBox",
+     "x": 84,
+     "y": 366,
+     "width": 396,
+     "height": 21,
+     "props": {
+      "field": "Notes"
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "newButton",
+     "x": 500,
+     "y": 336,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "New"
+     },
+     "events": {
+      "clicked": "form.newRecord();\ngrid.currentIndex = -1;\ncategoryCombo.forceActiveFocus();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "saveButton",
+     "x": 592,
+     "y": 336,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Save",
+      "isDefault": true
+     },
+     "events": {
+      "clicked": "form.save();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "deleteButton",
+     "x": 592,
+     "y": 366,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Delete"
+     },
+     "events": {
+      "clicked": "if (!form.isNew)\n    form.deleteRecord();"
+     }
+    }
+   ],
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")\n\n// each budget beside what was spent in the month the picker shows\nfunction fill() {\n    var day = monthPicker.value || home.today();\n    var from = home.monthStart(day), to = home.addDays(home.addMonths(from, 1), -1);\n    var spent = {}, names = home.names(\"Categories\");\n    home.totalsByCategory(from, to).forEach(function (c) { spent[c.category] = -c.total; });\n    var out = [], labels = [], budgeted = [], used = [], totalBudget = 0, totalSpent = 0;\n    Db.select(\"Budgets\").forEach(function (b) {\n        var s = Math.max(0, spent[b.Category] || 0);\n        out.push({ id: b.id, Category: names[b.Category] || \"\", Budget: home.fmt(b.Amount), Spent: home.fmt(s),\n                   Left: home.fmt(b.Amount - s) });\n        labels.push(names[b.Category] || \"\");\n        budgeted.push(b.Amount);\n        used.push(Math.round(s * 100) / 100);\n        totalBudget += b.Amount;\n        totalSpent += s;\n    });\n    grid.rows = out;\n    graph1.setData(labels, [{ name: \"Budget\", values: budgeted }, { name: \"Spent\", values: used }]);\n    graph1.title = AppDates.display(from, \"Date\", \"MMMM yyyy\", \"\");\n    totalLabel.text = \"Budget \" + home.fmt(totalBudget) + \"   Spent \" + home.fmt(totalSpent)\n        + \"   Left \" + home.fmt(totalBudget - totalSpent);\n    totalLabel.foreColor = totalSpent > totalBudget ? \"#c00000\" : \"#000000\";\n}\n\nTimer { id: soon; interval: 300; onTriggered: fill() }\nConnections {\n    target: Db\n    function onChanged(table) {\n        if (table === \"Budgets\" || table === \"Transactions\" || table === \"Splits\")\n            soon.restart();\n    }\n}",
+    "load": "fill();"
+   }
+  },
+  {
+   "name": "SecuritiesForm",
+   "width": 644,
+   "height": 612,
+   "props": {
+    "title": "Securities",
+    "table": "Securities"
+   },
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")\nproperty var ranges: [30, 91, 182, 365, 1826]\n\n// the security's price history as candles\nfunction showChart() {\n    if (form.isNew) {\n        chart.setData([], []);\n        return;\n    }\n    var from = home.addDays(home.today(), -ranges[Math.max(0, rangeCombo.currentIndex)]);\n    var labels = [], bars = { name: form.record.Symbol, open: [], high: [], low: [], close: [], volume: [] };\n    Db.select(\"Prices\", { where: { Security: form.recordId, Day: { op: \">=\", value: from } }, orderBy: \"Day\" }).forEach(function (p) {\n        labels.push(AppDates.display(p.Day, \"Date\", \"MMM d\", \"\"));\n        bars.open.push(p.Open === null ? p.Close : p.Open);\n        bars.high.push(p.High === null ? p.Close : p.High);\n        bars.low.push(p.Low === null ? p.Close : p.Low);\n        bars.close.push(p.Close);\n        bars.volume.push(p.Volume || 0);\n    });\n    chart.title = form.record.Symbol + (form.record.Company ? \"  \" + form.record.Company : \"\");\n    chart.setData(labels, [bars]);\n    showStudies();\n    statusLabel.text = labels.length === 0 ? \"No prices yet: Download Prices gets them from Schwab.\" : labels.length + \" days of prices.\";\n}\nfunction showStudies() {\n    var over = [], under = [];\n    if (averageCheck.checked)\n        over.push(\"SMA 20\");\n    if (bandsCheck.checked)\n        over.push(\"Bollinger 20 2\");\n    if (volumeCheck.checked)\n        under.push(\"Volume\");\n    if (rsiCheck.checked)\n        under.push(\"RSI 14\");\n    chart.overlays = over;\n    chart.studies = under;\n}\n\n// a year of daily prices from Schwab, into the Prices table\nfunction download() {\n    if (form.isNew)\n        return;\n    var id = form.recordId, symbol = form.record.Symbol;\n    statusLabel.text = \"Asking Schwab for \" + symbol + \"'s prices...\";\n    home.schwabGet(\"/marketdata/v1/pricehistory?symbol=\" + encodeURIComponent(symbol)\n                   + \"&periodType=year&period=5&frequencyType=daily&frequency=1\", function (ok, data) {\n        if (!ok) {\n            statusLabel.text = data;\n            return;\n        }\n        var have = {};\n        Db.select(\"Prices\", { where: { Security: id } }).forEach(function (p) { have[p.Day] = true; });\n        var added = 0, candles = data.candles || [];\n        candles.forEach(function (c, i) {\n            var day = home.iso(new Date(c.datetime));\n            // (the days it has already are left alone, but the last one, which may have moved)\n            if (have[day] && i < candles.length - 1)\n                return;\n            home.keepPrice(id, day, c);\n            added += 1;\n        });\n        // (a security with no price yet gets the last day's close)\n        if (candles.length > 0 && Db.get(\"Securities\", id).LastPrice === null)\n            Db.update(\"Securities\", id, { LastPrice: candles[candles.length - 1].close, PriceTime: home.rightNow() });\n        home.revalue();\n        if (form.recordId === id) {\n            form.loadRecord(id);\n            statusLabel.text = added + \" days of prices downloaded.\";\n        }\n    });\n}\n\n// the live price, every half minute while Live is ticked\nTimer {\n    id: live\n    interval: 30000\n    repeat: true\n    running: liveCheck.checked && !form.isNew\n    onTriggered: {\n        var id = form.recordId;\n        home.updateQuotes([Db.get(\"Securities\", id)], function (ok, result) {\n            if (!ok) {\n                statusLabel.text = result;\n                return;\n            }\n            var s = Db.get(\"Securities\", id);\n            if (form.recordId !== id || s.LastPrice === null)\n                return;\n            chart.tick(AppDates.display(home.today(), \"Date\", \"MMM d\", \"\"), s.LastPrice);\n            form.loadRecord(id);\n            statusLabel.text = s.Symbol + \" \" + home.fmt(s.LastPrice) + \" at \" + Qt.formatTime(new Date(), \"h:mm:ss AP\");\n        });\n    }\n}",
+    "load": "rangeCombo.currentIndex = 3;\nif (form.args.security)\n    form.loadRecord(form.args.security);\nelse if (!form.first())\n    showChart();",
+    "current": "showChart();",
+    "saved": "// a price typed in by hand is today's price\nif (form.record.LastPrice !== null && form.record.LastPrice !== undefined) {\n    var p = Number(form.record.LastPrice);\n    var rows = Db.select(\"Prices\", { where: { Security: form.recordId, Day: home.today() } });\n    if (rows.length === 0 || rows[0].Close !== p)\n        home.keepPrice(form.recordId, home.today(), rows.length === 0 ? { open: p, high: p, low: p, close: p }\n            : { open: rows[0].Open, high: Math.max(rows[0].High, p), low: Math.min(rows[0].Low, p), close: p, volume: rows[0].Volume || undefined });\n    home.revalue();\n    showChart();\n}"
+   },
+   "controls": [
+    {
+     "type": "Label",
+     "name": "symbolLabel",
+     "x": 12,
+     "y": 14,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Symbol:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "symbolBox",
+     "x": 108,
+     "y": 12,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Symbol"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "companyLabel",
+     "x": 12,
+     "y": 42,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Company:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "companyBox",
+     "x": 108,
+     "y": 40,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Company"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "typeLabel",
+     "x": 12,
+     "y": 70,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Type:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "typeCombo",
+     "x": 108,
+     "y": 68,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Type"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "lastPriceLabel",
+     "x": 12,
+     "y": 98,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Last Price:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "lastPriceBox",
+     "x": 108,
+     "y": 96,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "LastPrice"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "changeLabel",
+     "x": 12,
+     "y": 126,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Change:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "changeBox",
+     "x": 108,
+     "y": 124,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "Change"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "changePercentLabel",
+     "x": 12,
+     "y": 154,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Change %:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "changePercentBox",
+     "x": 108,
+     "y": 152,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "ChangePercent"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "priceTimeLabel",
+     "x": 12,
+     "y": 182,
+     "width": 92,
+     "height": 17,
+     "props": {
+      "text": "Price As Of:"
+     },
+     "events": {}
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "priceTimePicker",
+     "x": 108,
+     "y": 180,
+     "width": 180,
+     "height": 21,
+     "props": {
+      "field": "PriceTime",
+      "mode": "Date and Time",
+      "enabled": false
+     },
+     "events": {}
+    },
+    {
+     "type": "CheckBox",
+     "name": "watchCheck",
+     "x": 108,
+     "y": 208,
+     "width": 180,
+     "height": 17,
+     "props": {
+      "field": "Watch",
+      "text": "On Watch List"
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "newButton",
+     "x": 12,
+     "y": 241,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "New"
+     },
+     "events": {
+      "clicked": "form.newRecord();\nsymbolBox.forceActiveFocus();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "saveButton",
+     "x": 104,
+     "y": 241,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Save",
+      "isDefault": true
+     },
+     "events": {
+      "clicked": "form.save();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "deleteButton",
+     "x": 196,
+     "y": 241,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Delete"
+     },
+     "events": {
+      "clicked": "if (form.isNew)\n    return;\nform.msgBox(\"Delete this record?\", \"Delete\", \"question\", [\"Yes\", \"No\"], function (answer) {\n    if (answer === 0)\n        form.deleteRecord();\n});"
+     }
+    },
+    {
+     "type": "DataGrid",
+     "name": "grid",
+     "x": 304,
+     "y": 12,
+     "width": 328,
+     "height": 253,
+     "props": {
+      "columns": [
+       "Symbol",
+       "Company",
+       "LastPrice"
+      ]
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "rangeLabel",
+     "x": 12,
+     "y": 276,
+     "width": 40,
+     "height": 17,
+     "props": {
+      "text": "Show:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "rangeCombo",
+     "x": 56,
+     "y": 272,
+     "width": 100,
+     "height": 21,
+     "props": {
+      "items": [
+       "1 month",
+       "3 months",
+       "6 months",
+       "1 year",
+       "5 years"
+      ]
+     },
+     "events": {
+      "changed": "showChart();"
+     }
+    },
+    {
+     "type": "CheckBox",
+     "name": "averageCheck",
+     "x": 172,
+     "y": 274,
+     "width": 108,
+     "height": 17,
+     "props": {
+      "text": "20-day average"
+     },
+     "events": {
+      "clicked": "showStudies();"
+     }
+    },
+    {
+     "type": "CheckBox",
+     "name": "bandsCheck",
+     "x": 284,
+     "y": 274,
+     "width": 108,
+     "height": 17,
+     "props": {
+      "text": "Bollinger bands"
+     },
+     "events": {
+      "clicked": "showStudies();"
+     }
+    },
+    {
+     "type": "CheckBox",
+     "name": "volumeCheck",
+     "x": 396,
+     "y": 274,
+     "width": 70,
+     "height": 17,
+     "props": {
+      "text": "Volume",
+      "checked": true
+     },
+     "events": {
+      "clicked": "showStudies();"
+     }
+    },
+    {
+     "type": "CheckBox",
+     "name": "rsiCheck",
+     "x": 470,
+     "y": 274,
+     "width": 50,
+     "height": 17,
+     "props": {
+      "text": "RSI"
+     },
+     "events": {
+      "clicked": "showStudies();"
+     }
+    },
+    {
+     "type": "CheckBox",
+     "name": "liveCheck",
+     "x": 528,
+     "y": 274,
+     "width": 100,
+     "height": 17,
+     "props": {
+      "text": "Live price",
+      "toolTip": "Ask Schwab for the price every half minute"
+     },
+     "events": {}
+    },
+    {
+     "type": "Graph",
+     "name": "chart",
+     "x": 12,
+     "y": 300,
+     "width": 620,
+     "height": 270,
+     "props": {
+      "graph": {
+       "type": "Candlestick",
+       "source": "code",
+       "legend": "None",
+       "candleColors": "Green and red",
+       "studies": [
+        "Volume"
+       ],
+       "decimals": 2
+      }
+     },
+     "events": {
+      "clicked": "if (chart.clickedItem)\n    statusLabel.text = chart.clickedLabel + \":  open \" + home.fmt(chart.clickedItem.open) + \"  high \" + home.fmt(chart.clickedItem.high)\n        + \"  low \" + home.fmt(chart.clickedItem.low) + \"  close \" + home.fmt(chart.clickedItem.close);"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "downloadButton",
+     "x": 12,
+     "y": 578,
+     "width": 120,
+     "height": 24,
+     "props": {
+      "text": "Download Prices"
+     },
+     "events": {
+      "clicked": "download();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "statusLabel",
+     "x": 140,
+     "y": 580,
+     "width": 492,
+     "height": 21,
+     "props": {
+      "text": "",
+      "borderStyle": "Sunken"
+     },
+     "events": {}
+    }
+   ]
+  },
+  {
+   "name": "PortfolioForm",
+   "width": 760,
+   "height": 482,
+   "props": {
+    "title": "Portfolio"
+   },
+   "controls": [
+    {
+     "type": "Label",
+     "name": "accountLabel",
+     "x": 8,
+     "y": 12,
+     "width": 56,
+     "height": 17,
+     "props": {
+      "text": "Account:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "accountCombo",
+     "x": 68,
+     "y": 8,
+     "width": 240,
+     "height": 21,
+     "props": {},
+     "events": {
+      "changed": "fill();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "pricesButton",
+     "x": 424,
+     "y": 6,
+     "width": 104,
+     "height": 24,
+     "props": {
+      "text": "Update Prices"
+     },
+     "events": {
+      "clicked": "statusLabel.text = \"Asking Schwab for prices...\";\nhome.updateQuotes(Db.select(\"Securities\"), function (ok, result) {\n    statusLabel.text = ok ? result + \" prices updated at \" + Qt.formatTime(new Date(), \"h:mm AP\") + \".\" : result;\n});"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "tradeButton",
+     "x": 536,
+     "y": 6,
+     "width": 112,
+     "height": 24,
+     "props": {
+      "text": "Record a Trade..."
+     },
+     "events": {
+      "clicked": "App.openForm(\"TradeForm\", { account: accountCombo.currentIndex > 0 ? accountIds[accountCombo.currentIndex - 1] : null });"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "securityButton",
+     "x": 656,
+     "y": 6,
+     "width": 96,
+     "height": 24,
+     "props": {
+      "text": "Security..."
+     },
+     "events": {
+      "clicked": "App.openForm(\"SecuritiesForm\", { security: grid.currentId });"
+     }
+    },
+    {
+     "type": "DataGrid",
+     "name": "grid",
+     "x": 8,
+     "y": 36,
+     "width": 744,
+     "height": 220,
+     "props": {
+      "table": "Listing",
+      "columns": [
+       "Symbol",
+       "Name",
+       "Shares",
+       "Price",
+       "Value",
+       "Cost",
+       "Gain",
+       "Percent"
+      ]
+     },
+     "events": {
+      "rowActivated": "App.openForm(\"SecuritiesForm\", { security: grid.currentId });"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "totalLabel",
+     "x": 8,
+     "y": 262,
+     "width": 744,
+     "height": 17,
+     "props": {
+      "text": "",
+      "fontBold": true
+     },
+     "events": {}
+    },
+    {
+     "type": "Graph",
+     "name": "graph1",
+     "x": 8,
+     "y": 284,
+     "width": 744,
+     "height": 164,
+     "props": {
+      "graph": {
+       "type": "Pie",
+       "source": "code",
+       "legend": "Right",
+       "prefix": "$",
+       "title": "What it's in"
+      }
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "statusLabel",
+     "x": 8,
+     "y": 454,
+     "width": 744,
+     "height": 21,
+     "props": {
+      "text": "",
+      "borderStyle": "Sunken"
+     },
+     "events": {}
+    }
+   ],
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")\nproperty var accountIds: []\n\nfunction fill() {\n    var only = accountCombo.currentIndex > 0 ? accountIds[accountCombo.currentIndex - 1] : null;\n    var secs = {}, bySecurity = {}, order = [];\n    Db.select(\"Securities\").forEach(function (s) { secs[s.id] = s; });\n    Db.select(\"Holdings\", { where: only === null ? {} : { Account: only } }).forEach(function (h) {\n        var line = bySecurity[h.Security];\n        if (!line) {\n            line = bySecurity[h.Security] = { security: h.Security, shares: 0, value: 0, cost: 0 };\n            order.push(line);\n        }\n        line.shares += h.Quantity || 0;\n        line.value += h.MarketValue || 0;\n        line.cost += h.CostBasis || 0;\n    });\n    order.sort(function (a, b) { return b.value - a.value; });\n    var value = 0, cost = 0;\n    grid.rows = order.map(function (line) {\n        var s = secs[line.security] || {};\n        value += line.value;\n        cost += line.cost;\n        return { id: line.security, Symbol: s.Symbol || \"?\", Name: s.Company || \"\",\n                 Shares: String(Math.round(line.shares * 10000) / 10000),\n                 Price: s.LastPrice === null || s.LastPrice === undefined ? \"\" : home.fmt(s.LastPrice),\n                 Value: home.fmt(line.value), Cost: home.fmt(line.cost), Gain: home.fmt(line.value - line.cost),\n                 Percent: line.cost > 0 ? ((line.value - line.cost) / line.cost * 100).toFixed(1) + \"%\" : \"\" };\n    });\n    graph1.setData(order.map(function (line) { return (secs[line.security] || {}).Symbol || \"?\"; }),\n                   [{ name: \"Value\", values: order.map(function (line) { return Math.round(line.value * 100) / 100; }) }]);\n    totalLabel.text = \"Value \" + home.fmt(value) + \"   Cost \" + home.fmt(cost) + \"   Gain \" + home.fmt(value - cost);\n    totalLabel.foreColor = value - cost < 0 ? \"#c00000\" : \"#008000\";\n}\n\nTimer { id: soon; interval: 300; onTriggered: fill() }\nConnections {\n    target: Db\n    function onChanged(table) {\n        if (table === \"Holdings\" || table === \"Securities\")\n            soon.restart();\n    }\n}",
+    "load": "var accounts = Db.select(\"Accounts\", { orderBy: \"Name\" }).filter(function (a) { return home.isInvestment(a.Type); });\naccountIds = accounts.map(function (a) { return a.id; });\naccountCombo.items = [\"(all investment accounts)\"].concat(accounts.map(function (a) { return a.Name; }));\naccountCombo.currentIndex = 0;\nfill();"
+   }
+  },
+  {
+   "name": "TradeForm",
+   "width": 380,
+   "height": 328,
+   "props": {
+    "title": "Record a Trade",
+    "table": "Transactions",
+    "resizable": false
+   },
+   "controls": [
+    {
+     "type": "Label",
+     "name": "accountLabel",
+     "x": 12,
+     "y": 14,
+     "width": 84,
+     "height": 17,
+     "props": {
+      "text": "Account:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "accountCombo",
+     "x": 100,
+     "y": 12,
+     "width": 264,
+     "height": 21,
+     "props": {
+      "field": "Account"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "actionLabel",
+     "x": 12,
+     "y": 42,
+     "width": 84,
+     "height": 17,
+     "props": {
+      "text": "What happened:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "actionCombo",
+     "x": 100,
+     "y": 40,
+     "width": 140,
+     "height": 21,
+     "props": {
+      "field": "Action"
+     },
+     "events": {
+      "changed": "showTotal();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "dateLabel",
+     "x": 12,
+     "y": 70,
+     "width": 84,
+     "height": 17,
+     "props": {
+      "text": "Date:"
+     },
+     "events": {}
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "datePicker",
+     "x": 100,
+     "y": 68,
+     "width": 140,
+     "height": 21,
+     "props": {
+      "field": "Date"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "securityLabel",
+     "x": 12,
+     "y": 98,
+     "width": 84,
+     "height": 17,
+     "props": {
+      "text": "Security:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "securityCombo",
+     "x": 100,
+     "y": 96,
+     "width": 140,
+     "height": 21,
+     "props": {
+      "field": "Security"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "quantityLabel",
+     "x": 12,
+     "y": 126,
+     "width": 84,
+     "height": 17,
+     "props": {
+      "text": "Shares:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "quantityBox",
+     "x": 100,
+     "y": 124,
+     "width": 100,
+     "height": 21,
+     "props": {
+      "field": "Quantity",
+      "alignment": "Right"
+     },
+     "events": {
+      "changed": "showTotal();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "priceLabel",
+     "x": 12,
+     "y": 154,
+     "width": 84,
+     "height": 17,
+     "props": {
+      "text": "Price each:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "priceBox",
+     "x": 100,
+     "y": 152,
+     "width": 100,
+     "height": 21,
+     "props": {
+      "field": "Price",
+      "alignment": "Right"
+     },
+     "events": {
+      "changed": "showTotal();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "commissionLabel",
+     "x": 12,
+     "y": 182,
+     "width": 84,
+     "height": 17,
+     "props": {
+      "text": "Commission:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "commissionBox",
+     "x": 100,
+     "y": 180,
+     "width": 100,
+     "height": 21,
+     "props": {
+      "field": "Commission",
+      "alignment": "Right"
+     },
+     "events": {
+      "changed": "showTotal();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "amountLabel",
+     "x": 12,
+     "y": 210,
+     "width": 84,
+     "height": 17,
+     "props": {
+      "text": "Amount:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "amountBox",
+     "x": 100,
+     "y": 208,
+     "width": 100,
+     "height": 21,
+     "props": {
+      "alignment": "Right"
+     },
+     "events": {
+      "changed": "showTotal();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "memoLabel",
+     "x": 12,
+     "y": 238,
+     "width": 84,
+     "height": 17,
+     "props": {
+      "text": "Memo:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "memoBox",
+     "x": 100,
+     "y": 236,
+     "width": 264,
+     "height": 21,
+     "props": {
+      "field": "Memo"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "totalLabel",
+     "x": 12,
+     "y": 266,
+     "width": 352,
+     "height": 17,
+     "props": {
+      "text": "",
+      "fontBold": true
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "enterButton",
+     "x": 184,
+     "y": 292,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Enter",
+      "isDefault": true
+     },
+     "events": {
+      "clicked": "var account = form.record.Account ? Db.get(\"Accounts\", form.record.Account) : ({});\nif (!home.isInvestment(account.Type)) {\n    form.msgBox(\"Choose an Investment or Retirement account.\", \"Trade\", \"warning\");\n    return;\n}\nif (account.SchwabHash) {\n    form.msgBox(account.Name + \" is downloaded from Schwab: its trades come from there.\", \"Trade\", \"info\");\n    return;\n}\nvar action = form.record.Action;\nif (action !== \"Interest\" && action !== \"Fee\" && !form.record.Security) {\n    form.msgBox(\"Choose the security.\", \"Trade\", \"warning\");\n    return;\n}\nif ([\"Dividend\", \"Interest\", \"Fee\"].indexOf(action) < 0 && !(Number(form.record.Quantity) > 0)) {\n    form.msgBox(\"Type how many shares.\", \"Trade\", \"warning\");\n    return;\n}\nform.setField(\"Amount\", Math.round(cashFor() * 100) / 100);\nform.setField(\"Cleared\", \"Cleared\");\nif (!form.record.Memo)\n    form.setField(\"Memo\", action + (form.record.Security ? \" \" + Db.lookupLabel(\"Securities\", form.record.Security) : \"\"));\n// (income and fees get their categories; a buy or a sell isn't spending)\nvar wanted = action === \"Dividend\" || action === \"Reinvest\" ? \"Investment Income : Dividends\"\n           : action === \"Interest\" ? \"Investment Income : Interest\" : action === \"Fee\" ? \"Investment Expense : Fees\" : \"\";\nvar found = wanted === \"\" ? [] : Db.select(\"Categories\", { where: { Name: wanted } });\nform.setField(\"Category\", found.length > 0 ? found[0].id : null);\nvar accountId = form.record.Account;\nif (!form.save())\n    return;\nhome.rebuildHoldings(accountId);\nform.msgBox(\"Entered.\", \"Trade\", \"info\", [\"Another\", \"Close\"], function (answer) {\n    if (answer !== 0) {\n        form.close();\n        return;\n    }\n    form.newRecord();\n    form.setField(\"Account\", accountId);\n    form.setField(\"Action\", action);\n    amountBox.text = \"\";\n    showTotal();\n});"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "closeButton",
+     "x": 280,
+     "y": 292,
+     "width": 84,
+     "height": 24,
+     "props": {
+      "text": "Close"
+     },
+     "events": {
+      "clicked": "form.close();"
+     }
+    }
+   ],
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")\n\n// what the trade does to the account's cash\nfunction cashFor() {\n    var q = Number(form.record.Quantity) || 0, p = Number(form.record.Price) || 0, fee = Number(form.record.Commission) || 0;\n    var typed = home.parseMoney(amountBox.text) || 0;\n    switch (form.record.Action) {\n    case \"Buy\": return -(q * p + fee);\n    case \"Sell\": return q * p - fee;\n    case \"Dividend\":\n    case \"Interest\": return Math.abs(typed);\n    case \"Fee\": return -Math.abs(typed);\n    }\n    return 0;       // Reinvest, Add Shares, Remove Shares: shares move, cash doesn't\n}\nfunction showTotal() {\n    var action = form.record.Action || \"\";\n    var shares = [\"Buy\", \"Sell\", \"Reinvest\", \"Add Shares\", \"Remove Shares\"].indexOf(action) >= 0;\n    var typed = [\"Dividend\", \"Interest\", \"Fee\"].indexOf(action) >= 0;\n    quantityLabel.visible = quantityBox.visible = priceLabel.visible = priceBox.visible = shares;\n    commissionLabel.visible = commissionBox.visible = action === \"Buy\" || action === \"Sell\";\n    amountLabel.visible = amountBox.visible = typed;\n    var cash = Math.round(cashFor() * 100) / 100;\n    totalLabel.text = action === \"\" ? \"Choose what happened.\"\n                    : cash < 0 ? home.fmt(-cash) + \" leaves the account's cash.\"\n                    : cash > 0 ? home.fmt(cash) + \" comes into the account's cash.\"\n                    : \"The account's cash doesn't change.\";\n}",
+    "load": "if (form.args.account)\n    form.setField(\"Account\", form.args.account);\nform.setField(\"Action\", \"Buy\");\nshowTotal();"
+   }
+  },
+  {
+   "name": "SchwabForm",
+   "width": 560,
+   "height": 500,
+   "props": {
+    "title": "Schwab Setup",
+    "resizable": false
+   },
+   "controls": [
+    {
+     "type": "Frame",
+     "name": "setupFrame",
+     "x": 8,
+     "y": 8,
+     "width": 544,
+     "height": 130,
+     "props": {
+      "text": "Your app at developer.schwab.com"
+     },
+     "events": {}
+    },
+    {
+     "type": "Frame",
+     "name": "signFrame",
+     "x": 8,
+     "y": 146,
+     "width": 544,
+     "height": 126,
+     "props": {
+      "text": "Sign in (Schwab asks again every 7 days)"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "keyLabel",
+     "x": 20,
+     "y": 32,
+     "width": 90,
+     "height": 17,
+     "props": {
+      "text": "App Key:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "keyBox",
+     "x": 112,
+     "y": 30,
+     "width": 428,
+     "height": 21,
+     "props": {},
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "secretLabel",
+     "x": 20,
+     "y": 60,
+     "width": 90,
+     "height": 17,
+     "props": {
+      "text": "Secret:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "secretBox",
+     "x": 112,
+     "y": 58,
+     "width": 428,
+     "height": 21,
+     "props": {
+      "password": true
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "callbackLabel",
+     "x": 20,
+     "y": 88,
+     "width": 90,
+     "height": 17,
+     "props": {
+      "text": "Callback URL:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "callbackBox",
+     "x": 112,
+     "y": 86,
+     "width": 428,
+     "height": 21,
+     "props": {},
+     "events": {}
+    },
+    {
+     "type": "CheckBox",
+     "name": "autoCheck",
+     "x": 112,
+     "y": 114,
+     "width": 300,
+     "height": 17,
+     "props": {
+      "text": "Download when Wayland Money starts"
+     },
+     "events": {
+      "clicked": "home.setSetting(\"SchwabAuto\", autoCheck.checked ? \"yes\" : \"no\");"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "connectButton",
+     "x": 20,
+     "y": 168,
+     "width": 170,
+     "height": 24,
+     "props": {
+      "text": "1. Sign In at Schwab..."
+     },
+     "events": {
+      "clicked": "openSignIn();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "stateLabel",
+     "x": 200,
+     "y": 172,
+     "width": 340,
+     "height": 17,
+     "props": {
+      "text": "",
+      "fontBold": true
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "pasteLabel",
+     "x": 20,
+     "y": 200,
+     "width": 400,
+     "height": 17,
+     "props": {
+      "text": "2. Paste the address the browser ended on:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "pasteBox",
+     "x": 20,
+     "y": 220,
+     "width": 400,
+     "height": 21,
+     "props": {},
+     "events": {
+      "accepted": "finishSignIn();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "finishButton",
+     "x": 428,
+     "y": 218,
+     "width": 112,
+     "height": 24,
+     "props": {
+      "text": "Finish Sign-In"
+     },
+     "events": {
+      "clicked": "finishSignIn();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "noteLabel",
+     "x": 20,
+     "y": 248,
+     "width": 520,
+     "height": 17,
+     "props": {
+      "text": "Be quick: the address only works for about half a minute."
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "syncButton",
+     "x": 8,
+     "y": 280,
+     "width": 120,
+     "height": 24,
+     "props": {
+      "text": "Download Now"
+     },
+     "events": {
+      "clicked": "syncAll();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "signOutButton",
+     "x": 136,
+     "y": 280,
+     "width": 90,
+     "height": 24,
+     "props": {
+      "text": "Sign Out"
+     },
+     "events": {
+      "clicked": "home.setSetting(\"SchwabAccess\", \"\");\nhome.setSetting(\"SchwabRefresh\", \"\");\nhome.setSetting(\"SchwabAccessUntil\", 0);\nsay(\"Signed out: the tokens are forgotten.\");\nshowState();"
+     }
+    },
+    {
+     "type": "Button",
+     "name": "closeButton",
+     "x": 462,
+     "y": 280,
+     "width": 90,
+     "height": 24,
+     "props": {
+      "text": "Close"
+     },
+     "events": {
+      "clicked": "form.close();"
+     }
+    },
+    {
+     "type": "ListBox",
+     "name": "logList",
+     "x": 8,
+     "y": 312,
+     "width": 544,
+     "height": 180,
+     "props": {},
+     "events": {}
+    }
+   ],
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")\nproperty bool busy: false\n// (each account's cash, as Schwab has it, while a download is under way)\nproperty var cashNow: ({})\nreadonly property var kinds: ({ EQUITY: \"Stock\", COLLECTIVE_INVESTMENT: \"ETF\", MUTUAL_FUND: \"Mutual Fund\",\n                                FIXED_INCOME: \"Bond\", OPTION: \"Option\", CASH_EQUIVALENT: \"Money Market\" })\nreadonly property var allTypes: [\"TRADE\", \"RECEIVE_AND_DELIVER\", \"DIVIDEND_OR_INTEREST\", \"ACH_RECEIPT\",\n    \"ACH_DISBURSEMENT\", \"CASH_RECEIPT\", \"CASH_DISBURSEMENT\", \"ELECTRONIC_FUND\", \"WIRE_OUT\", \"WIRE_IN\",\n    \"JOURNAL\", \"MEMORANDUM\", \"MARGIN_CALL\", \"MONEY_MARKET\", \"SMA_ADJUSTMENT\"]\n\nfunction say(text) {\n    var lines = logList.items.slice();\n    lines.push(Qt.formatTime(new Date(), \"hh:mm:ss\") + \"  \" + text);\n    logList.items = lines;\n    logList.currentIndex = lines.length - 1;\n}\nfunction round2(n) { return Math.round(n * 100) / 100; }\n\nfunction showState() {\n    var signedIn = home.setting(\"SchwabRefresh\") !== \"\";\n    if (!signedIn) {\n        stateLabel.text = \"Not signed in.\";\n        stateLabel.foreColor = \"#c00000\";\n    } else {\n        // Schwab's sign-in lasts seven days\n        var until = new Date(Number(home.setting(\"SchwabSignedIn\", Date.now())) + 7 * 86400000);\n        stateLabel.text = \"Signed in until \" + Qt.formatDateTime(until, \"ddd MMM d, h:mm AP\") + \".\";\n        stateLabel.foreColor = \"#008000\";\n    }\n    syncButton.enabled = signedIn && !busy;\n    signOutButton.enabled = signedIn;\n}\n\n// ---- signing in -----------------------------------------------------------\n\nfunction keepSetup() {\n    home.setSetting(\"SchwabKey\", keyBox.text.trim());\n    home.setSetting(\"SchwabSecret\", secretBox.text.trim());\n    home.setSetting(\"SchwabCallback\", callbackBox.text.trim());\n    home.setSetting(\"SchwabAuto\", autoCheck.checked ? \"yes\" : \"no\");\n}\n\n// step 1: Schwab's own sign-in page, in the browser\nfunction openSignIn() {\n    if (keyBox.text.trim() === \"\" || secretBox.text.trim() === \"\" || callbackBox.text.trim() === \"\") {\n        form.msgBox(\"Type the App Key, the Secret and the Callback URL of your app at developer.schwab.com.\", \"Schwab\", \"warning\");\n        return;\n    }\n    keepSetup();\n    Qt.openUrlExternally(home.schwabBase() + \"/v1/oauth/authorize?client_id=\" + encodeURIComponent(keyBox.text.trim())\n                         + \"&redirect_uri=\" + encodeURIComponent(callbackBox.text.trim()));\n    say(\"The browser is opening Schwab. Sign in there, then copy the address it ends on and paste it below.\");\n    pasteBox.text = \"\";\n    pasteBox.forceActiveFocus();\n}\n\n// step 2: the address the browser ended on has the code; swap it for tokens\nfunction finishSignIn() {\n    var pasted = pasteBox.text.trim(), found = /[?&]code=([^&#]+)/.exec(pasted);\n    var code = found ? decodeURIComponent(found[1]) : decodeURIComponent(pasted);\n    if (code === \"\") {\n        form.msgBox(\"Paste the whole address the browser ended on: it starts with your Callback URL and has code= in it.\",\n                    \"Schwab\", \"warning\");\n        return;\n    }\n    keepSetup();\n    say(\"Finishing the sign-in...\");\n    home.schwabTokens(\"grant_type=authorization_code&code=\" + encodeURIComponent(code)\n                      + \"&redirect_uri=\" + encodeURIComponent(callbackBox.text.trim()), function (ok, why) {\n        if (!ok) {\n            say(\"The sign-in didn't work: \" + why);\n            say(\"(The code only lasts about 30 seconds: sign in again and paste it straight away.)\");\n            return;\n        }\n        home.setSetting(\"SchwabSignedIn\", Date.now());\n        pasteBox.text = \"\";\n        say(\"Signed in.\");\n        showState();\n        syncAll();\n    });\n}\n\n// ---- downloading ------------------------------------------------------------\n\nfunction finish(problem) {\n    busy = false;\n    if (problem)\n        say(problem);\n    else\n        home.setSetting(\"SchwabLastSync\", home.rightNow());\n    home.refreshHome();\n    showState();\n}\n\n// everything: the accounts, what they hold, their transactions, then prices\nfunction syncAll() {\n    if (busy)\n        return;\n    busy = true;\n    showState();\n    say(\"Downloading from Schwab...\");\n    home.schwabGet(\"/trader/v1/accounts/accountNumbers\", function (ok, numbers) {\n        if (!ok) {\n            finish(numbers);\n            return;\n        }\n        linkAccounts(numbers);\n        home.schwabGet(\"/trader/v1/accounts?fields=positions\", function (ok2, accounts) {\n            if (!ok2) {\n                finish(accounts);\n                return;\n            }\n            var ids = [];\n            cashNow = ({});\n            accounts.forEach(function (entry) {\n                var id = takeAccount(entry);\n                if (id !== null)\n                    ids.push(id);\n            });\n            takeTransactions(ids, 0, function () {\n                home.updateQuotes(Db.select(\"Securities\"), function (ok3, result) {\n                    say(ok3 ? result + \" prices updated.\" : \"Prices: \" + result);\n                    finish(\"\");\n                    say(\"Done.\");\n                });\n            });\n        });\n    });\n}\n\n// Schwab's accounts, matched to ours by account number (made, if they're new)\nfunction linkAccounts(numbers) {\n    numbers.forEach(function (n) {\n        var number = String(n.accountNumber);\n        var rows = Db.select(\"Accounts\", { where: { AccountNumber: number } });\n        if (rows.length > 0) {\n            if (rows[0].SchwabHash !== n.hashValue)\n                Db.update(\"Accounts\", rows[0].id, { SchwabHash: n.hashValue });\n            return;\n        }\n        var r = Db.insert(\"Accounts\", { Name: \"Schwab ...\" + number.slice(-4), Type: \"Investment\", Institution: \"Charles Schwab\",\n                                        AccountNumber: number, SchwabHash: n.hashValue, OpeningBalance: 0 });\n        say(r.ok ? \"New account: Schwab ...\" + number.slice(-4) + \" (rename it in Accounts > Account List).\"\n                 : \"Account ...\" + number.slice(-4) + \" wasn't added: \" + r.messages.join(\" \"));\n    });\n}\n\n// one account of Schwab's answer: its positions become our Holdings\nfunction takeAccount(entry) {\n    var sa = entry.securitiesAccount;\n    if (!sa)\n        return null;\n    var rows = Db.select(\"Accounts\", { where: { AccountNumber: String(sa.accountNumber) } });\n    if (rows.length === 0)\n        return null;\n    var account = rows[0], stamp = home.rightNow(), held = 0;\n    Db.select(\"Holdings\", { where: { Account: account.id } }).forEach(function (h) { Db.remove(\"Holdings\", h.id); });\n    (sa.positions || []).forEach(function (p) {\n        var ins = p.instrument || {}, shares = (p.longQuantity || 0) - (p.shortQuantity || 0);\n        if (!ins.symbol || shares === 0)\n            return;\n        var type = kinds[ins.assetType] || \"Other\", each = type === \"Option\" ? 100 : 1;\n        var security = home.findSecurity(ins.symbol, ins.description, type);\n        if (security === null) {\n            say(\"Skipped \" + ins.symbol + \": Securities won't take that symbol.\");\n            return;\n        }\n        Db.insert(\"Holdings\", { Account: account.id, Security: security, Quantity: shares,\n                                CostBasis: round2((p.averagePrice || 0) * shares * each),\n                                MarketValue: round2(p.marketValue || 0), AsOf: stamp });\n        if (p.marketValue)\n            Db.update(\"Securities\", security, { LastPrice: Math.round(p.marketValue / shares / each * 10000) / 10000, PriceTime: stamp });\n        held += p.marketValue || 0;\n    });\n    // its cash: what the account is worth, less what it holds\n    var now = sa.currentBalances || {}, start = sa.initialBalances || {}, all = entry.aggregatedBalance || {};\n    var worth = all.liquidationValue !== undefined ? all.liquidationValue\n              : now.liquidationValue !== undefined ? now.liquidationValue : start.liquidationValue;\n    var cash = worth !== undefined ? worth - held\n             : now.cashBalance !== undefined ? now.cashBalance\n             : now.totalCash !== undefined ? now.totalCash : (start.cashBalance || 0);\n    var kept = cashNow;\n    kept[account.id] = round2(cash);\n    cashNow = kept;\n    return account.id;\n}\n\n// each account's transactions, one account after another\nfunction takeTransactions(ids, i, done) {\n    if (i >= ids.length) {\n        done();\n        return;\n    }\n    var account = Db.get(\"Accounts\", ids[i]);\n    // from a week before the last download (the first time: as far back as Schwab goes, a year)\n    var from = account.LastSync ? home.addDays(account.LastSync, -7) : home.addDays(home.today(), -364);\n    var path = \"/trader/v1/accounts/\" + account.SchwabHash + \"/transactions?startDate=\"\n             + encodeURIComponent(home.toDate(from).toISOString()) + \"&endDate=\" + encodeURIComponent(new Date().toISOString())\n             + \"&types=\" + allTypes.join(\",\");\n    home.schwabGet(path, function (ok, list) {\n        if (!ok) {\n            say(account.Name + \": \" + list);\n        } else {\n            var added = 0, sum = 0;\n            list.forEach(function (t) {\n                if (takeTransaction(account, t))\n                    added += 1;\n            });\n            // the opening balance is whatever makes the cash come out as Schwab has it\n            Db.select(\"Transactions\", { where: { Account: account.id } }).forEach(function (t) { sum += t.Amount; });\n            Db.update(\"Accounts\", account.id, { OpeningBalance: round2(cashNow[account.id] - sum), LastSync: home.rightNow() });\n            say(account.Name + \": \" + added + \" new \" + (added === 1 ? \"transaction\" : \"transactions\")\n                + \", cash \" + home.fmt(cashNow[account.id]) + \".\");\n        }\n        takeTransactions(ids, i + 1, done);\n    });\n}\n\n// one of Schwab's transactions into our table (false: it's there already, or isn't one of ours)\nfunction takeTransaction(account, t) {\n    if (t.status && t.status !== \"VALID\")\n        return false;\n    var key = String(t.activityId);\n    if (Db.count(\"Transactions\", { SchwabId: key }) > 0)\n        return false;\n    var amount = round2(t.netAmount || 0), item = null, fees = 0;\n    (t.transferItems || []).forEach(function (it) {\n        var ins = it.instrument || {};\n        if (it.feeType)\n            fees += Math.abs(it.cost || it.amount || 0);\n        else if (ins.symbol && ins.assetType !== \"CURRENCY\" && item === null)\n            item = it;\n    });\n    var record = { Account: account.id, Date: String(t.tradeDate || t.time || home.today()).substring(0, 10),\n                   Memo: String(t.description || t.type || \"\").substring(0, 120), Amount: amount,\n                   Cleared: \"Cleared\", Source: \"Schwab\", SchwabId: key };\n    var action = \"\";\n    if (t.type === \"TRADE\" && item)\n        action = (amount !== 0 ? amount < 0 : item.amount > 0) ? \"Buy\" : \"Sell\";\n    else if (t.type === \"RECEIVE_AND_DELIVER\" && item)\n        action = item.amount >= 0 ? \"Add Shares\" : \"Remove Shares\";\n    else if (t.type === \"DIVIDEND_OR_INTEREST\")\n        action = /interest|\\bint\\b/i.test(t.description || \"\") ? \"Interest\" : \"Dividend\";\n    if (action === \"\" && amount === 0)\n        return false;\n    if (action !== \"\") {\n        record.Action = action;\n        if (item) {\n            var ins = item.instrument;\n            record.Security = home.findSecurity(ins.symbol, ins.description, kinds[ins.assetType] || \"Other\");\n            if (action !== \"Dividend\" && action !== \"Interest\") {\n                record.Quantity = Math.abs(item.amount || 0);\n                record.Price = item.price || 0;\n            }\n        }\n        if (fees > 0)\n            record.Commission = round2(fees);\n        var wanted = action === \"Dividend\" ? \"Investment Income : Dividends\" : action === \"Interest\" ? \"Investment Income : Interest\" : \"\";\n        var found = wanted === \"\" ? [] : Db.select(\"Categories\", { where: { Name: wanted } });\n        if (found.length > 0)\n            record.Category = found[0].id;\n    }\n    var r = Db.insert(\"Transactions\", record);\n    if (!r.ok)\n        say(\"Not taken: \" + record.Memo + \" (\" + r.messages.join(\" \") + \")\");\n    return r.ok;\n}",
+    "load": "keyBox.text = home.setting(\"SchwabKey\");\nsecretBox.text = home.setting(\"SchwabSecret\");\ncallbackBox.text = home.setting(\"SchwabCallback\", \"https://127.0.0.1\");\nautoCheck.checked = home.setting(\"SchwabAuto\") === \"yes\";\nshowState();"
+   }
+  },
+  {
+   "name": "ReportsForm",
+   "width": 780,
+   "height": 500,
+   "props": {
+    "title": "Reports and Charts"
+   },
+   "controls": [
+    {
+     "type": "ListBox",
+     "name": "reportList",
+     "x": 8,
+     "y": 8,
+     "width": 300,
+     "height": 116,
+     "props": {
+      "items": [
+       "Spending by Category",
+       "Income by Category",
+       "Income and Expenses by Month",
+       "Spending by Payee",
+       "Net Worth over Time",
+       "Account Balances",
+       "Tax-related Totals",
+       "Portfolio by Kind"
+      ]
+     },
+     "events": {
+      "changed": "run();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "periodLabel",
+     "x": 8,
+     "y": 136,
+     "width": 48,
+     "height": 17,
+     "props": {
+      "text": "Period:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "periodCombo",
+     "x": 60,
+     "y": 132,
+     "width": 248,
+     "height": 21,
+     "props": {
+      "items": [
+       "This month",
+       "Last month",
+       "This year",
+       "Last year",
+       "Last 12 months",
+       "All dates"
+      ]
+     },
+     "events": {
+      "changed": "setPeriod();\nrun();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "fromLabel",
+     "x": 8,
+     "y": 164,
+     "width": 48,
+     "height": 17,
+     "props": {
+      "text": "From:"
+     },
+     "events": {}
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "fromPicker",
+     "x": 60,
+     "y": 160,
+     "width": 120,
+     "height": 21,
+     "props": {},
+     "events": {
+      "changed": "run();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "toLabel",
+     "x": 192,
+     "y": 164,
+     "width": 20,
+     "height": 17,
+     "props": {
+      "text": "To:"
+     },
+     "events": {}
+    },
+    {
+     "type": "DateTimePicker",
+     "name": "toPicker",
+     "x": 216,
+     "y": 160,
+     "width": 92,
+     "height": 21,
+     "props": {},
+     "events": {
+      "changed": "run();"
+     }
+    },
+    {
+     "type": "DataGrid",
+     "name": "grid",
+     "x": 8,
+     "y": 192,
+     "width": 300,
+     "height": 276,
+     "props": {
+      "table": "Listing",
+      "columns": [
+       "Item",
+       "Amount"
+      ]
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "totalLabel",
+     "x": 8,
+     "y": 476,
+     "width": 300,
+     "height": 17,
+     "props": {
+      "text": "",
+      "fontBold": true
+     },
+     "events": {}
+    },
+    {
+     "type": "Graph",
+     "name": "graph1",
+     "x": 316,
+     "y": 8,
+     "width": 456,
+     "height": 484,
+     "props": {
+      "graph": {
+       "type": "Pie",
+       "source": "code",
+       "legend": "Bottom",
+       "prefix": "$",
+       "showValues": true
+      }
+     },
+     "events": {
+      "clicked": "// a slice or a bar: the transactions behind it\nif (graph1.clickedIndex >= 0 && (reportList.text === \"Spending by Category\" || reportList.text === \"Income by Category\"\n                                 || reportList.text === \"Spending by Payee\"))\n    App.openForm(\"FindForm\", { text: graph1.clickedLabel, from: fromPicker.value, to: toPicker.value });"
+     }
+    }
+   ],
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")\n\nfunction setPeriod() {\n    var t = home.today(), year = t.substring(0, 4), from = \"\", to = t;\n    switch (periodCombo.text) {\n    case \"This month\": from = home.monthStart(t); break;\n    case \"Last month\": from = home.addMonths(home.monthStart(t), -1); to = home.addDays(home.monthStart(t), -1); break;\n    case \"This year\": from = year + \"-01-01\"; break;\n    case \"Last year\": from = (Number(year) - 1) + \"-01-01\"; to = (Number(year) - 1) + \"-12-31\"; break;\n    case \"Last 12 months\": from = home.addMonths(t, -12); break;\n    default: to = \"\";       // All dates\n    }\n    fromPicker.value = from;\n    toPicker.value = to;\n}\n\nfunction run() {\n    var name = reportList.text, from = fromPicker.value || \"0000-01-01\", to = toPicker.value || \"9999-12-31\";\n    var rows = [], labels = [], values = [], series = null, type = \"Column\", columns = [\"Item\", \"Amount\"], total = 0;\n    function line(item, amount) {\n        rows.push({ id: rows.length + 1, Item: item, Amount: home.fmt(amount) });\n        labels.push(item);\n        values.push(Math.round(amount * 100) / 100);\n        total += amount;\n    }\n    if (name === \"Spending by Category\" || name === \"Income by Category\" || name === \"Tax-related Totals\") {\n        var taxed = {};\n        Db.select(\"Categories\", { where: { TaxRelated: true } }).forEach(function (c) { taxed[c.id] = true; });\n        var list = home.totalsByCategory(from, to);\n        if (name === \"Income by Category\")\n            list.reverse();\n        list.forEach(function (c) {\n            if (name === \"Spending by Category\" && c.total < 0)\n                line(c.name, -c.total);\n            else if (name === \"Income by Category\" && c.total > 0)\n                line(c.name, c.total);\n            else if (name === \"Tax-related Totals\" && taxed[c.category])\n                line(c.name, c.total);\n        });\n        type = name === \"Tax-related Totals\" ? \"Bar\" : \"Pie\";\n    } else if (name === \"Income and Expenses by Month\") {\n        var months = {}, order = [];\n        Db.select(\"Transactions\", { orderBy: \"Date\" }).forEach(function (t) {\n            if (t.Date < from || t.Date > to || !home.isFlow(t))\n                return;\n            var m = t.Date.substring(0, 7);\n            if (!months[m]) {\n                months[m] = { income: 0, spent: 0 };\n                order.push(m);\n            }\n            if (t.Amount > 0)\n                months[m].income += t.Amount;\n            else\n                months[m].spent -= t.Amount;\n        });\n        columns = [\"Item\", \"Income\", \"Expenses\", \"Amount\"];\n        series = [{ name: \"Income\", values: [] }, { name: \"Expenses\", values: [] }];\n        order.forEach(function (m) {\n            var label = AppDates.display(m + \"-01\", \"Date\", \"MMM yyyy\", \"\");\n            rows.push({ id: rows.length + 1, Item: label, Income: home.fmt(months[m].income), Expenses: home.fmt(months[m].spent),\n                        Amount: home.fmt(months[m].income - months[m].spent) });\n            labels.push(label);\n            series[0].values.push(Math.round(months[m].income * 100) / 100);\n            series[1].values.push(Math.round(months[m].spent * 100) / 100);\n            total += months[m].income - months[m].spent;\n        });\n    } else if (name === \"Spending by Payee\") {\n        var payees = home.names(\"Payees\"), sums = {};\n        Db.select(\"Transactions\").forEach(function (t) {\n            if (t.Date < from || t.Date > to || !home.isFlow(t) || t.Amount >= 0)\n                return;\n            var who = payees[t.Payee] || \"(no payee)\";\n            sums[who] = (sums[who] || 0) - t.Amount;\n        });\n        Object.keys(sums).sort(function (a, b) { return sums[b] - sums[a]; }).slice(0, 15).forEach(function (who) { line(who, sums[who]); });\n        type = \"Bar\";\n    } else if (name === \"Net Worth over Time\") {\n        Db.select(\"WorthHistory\", { orderBy: \"Day\" }).forEach(function (w) {\n            if (w.Day >= from && w.Day <= to)\n                line(home.showDate(w.Day), w.Worth);\n        });\n        total = values.length > 0 ? values[values.length - 1] : 0;\n        type = \"Line\";\n    } else if (name === \"Account Balances\") {\n        var b = home.balances();\n        Db.select(\"Accounts\", { orderBy: \"Name\" }).forEach(function (a) {\n            if (!a.Closed)\n                line(a.Name, b[a.id].value);\n        });\n        type = \"Bar\";\n    } else if (name === \"Portfolio by Kind\") {\n        var kindOf = {}, worth = {};\n        Db.select(\"Securities\").forEach(function (s) { kindOf[s.id] = s.Type; });\n        Db.select(\"Holdings\").forEach(function (h) {\n            var k = kindOf[h.Security] || \"Other\";\n            worth[k] = (worth[k] || 0) + (h.MarketValue || 0);\n        });\n        Object.keys(worth).sort(function (a, c) { return worth[c] - worth[a]; }).forEach(function (k) { line(k, worth[k]); });\n        type = \"Doughnut\";\n    }\n    grid.columns = columns;\n    grid.rows = rows;\n    graph1.graphType = type;\n    graph1.title = name;\n    graph1.setData(labels, series || [{ name: name, values: values }]);\n    totalLabel.text = (name === \"Net Worth over Time\" ? \"Latest: \" : \"Total: \") + home.fmt(total)\n        + \"   (\" + rows.length + (rows.length === 1 ? \" line)\" : \" lines)\");\n}",
+    "load": "periodCombo.currentIndex = 2;\nsetPeriod();\nvar wanted = reportList.items.indexOf(form.args.report || \"\");\nreportList.currentIndex = wanted >= 0 ? wanted : 0;\nrun();"
+   }
+  },
+  {
+   "name": "PlannerForm",
+   "width": 720,
+   "height": 460,
+   "props": {
+    "title": "Loan Planner"
+   },
+   "controls": [
+    {
+     "type": "Label",
+     "name": "accountLabel",
+     "x": 8,
+     "y": 12,
+     "width": 90,
+     "height": 17,
+     "props": {
+      "text": "A debt of yours:"
+     },
+     "events": {}
+    },
+    {
+     "type": "ComboBox",
+     "name": "accountCombo",
+     "x": 100,
+     "y": 8,
+     "width": 180,
+     "height": 21,
+     "props": {},
+     "events": {
+      "changed": "var a = Db.get(\"Accounts\", debtIds[accountCombo.currentIndex]);\namountBox.text = home.fmt(-home.balances()[a.id].value);\nrateBox.text = a.InterestRate === null ? \"\" : String(a.InterestRate);\nwork();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "amountLabel",
+     "x": 8,
+     "y": 40,
+     "width": 90,
+     "height": 17,
+     "props": {
+      "text": "Amount owed:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "amountBox",
+     "x": 100,
+     "y": 36,
+     "width": 100,
+     "height": 21,
+     "props": {
+      "alignment": "Right"
+     },
+     "events": {
+      "changed": "work();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "rateLabel",
+     "x": 8,
+     "y": 68,
+     "width": 90,
+     "height": 17,
+     "props": {
+      "text": "Interest rate %:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "rateBox",
+     "x": 100,
+     "y": 64,
+     "width": 60,
+     "height": 21,
+     "props": {
+      "alignment": "Right"
+     },
+     "events": {
+      "changed": "work();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "yearsLabel",
+     "x": 8,
+     "y": 96,
+     "width": 90,
+     "height": 17,
+     "props": {
+      "text": "Years:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "yearsBox",
+     "x": 100,
+     "y": 92,
+     "width": 60,
+     "height": 21,
+     "props": {
+      "text": "30",
+      "alignment": "Right"
+     },
+     "events": {
+      "changed": "work();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "extraLabel",
+     "x": 8,
+     "y": 124,
+     "width": 90,
+     "height": 17,
+     "props": {
+      "text": "Extra a month:"
+     },
+     "events": {}
+    },
+    {
+     "type": "TextBox",
+     "name": "extraBox",
+     "x": 100,
+     "y": 120,
+     "width": 100,
+     "height": 21,
+     "props": {
+      "alignment": "Right"
+     },
+     "events": {
+      "changed": "work();"
+     }
+    },
+    {
+     "type": "Label",
+     "name": "resultLabel",
+     "x": 8,
+     "y": 150,
+     "width": 280,
+     "height": 60,
+     "props": {
+      "text": "",
+      "wordWrap": true,
+      "borderStyle": "Sunken"
+     },
+     "events": {}
+    },
+    {
+     "type": "Graph",
+     "name": "graph1",
+     "x": 296,
+     "y": 8,
+     "width": 416,
+     "height": 202,
+     "props": {
+      "graph": {
+       "type": "Line",
+       "source": "code",
+       "legend": "None",
+       "title": "What's still owed",
+       "prefix": "$",
+       "markers": false
+      }
+     },
+     "events": {}
+    },
+    {
+     "type": "DataGrid",
+     "name": "grid",
+     "x": 8,
+     "y": 218,
+     "width": 704,
+     "height": 234,
+     "props": {
+      "table": "Listing",
+      "columns": [
+       "Num",
+       "Payment",
+       "Principal",
+       "Interest",
+       "Balance"
+      ]
+     },
+     "events": {}
+    }
+   ],
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")\nproperty var debtIds: []\n\nfunction work() {\n    var amount = home.parseMoney(amountBox.text), rate = Number(rateBox.text), years = Number(yearsBox.text);\n    var extra = home.parseMoney(extraBox.text) || 0;\n    if (amount === null || amount <= 0 || rateBox.text.trim() === \"\" || isNaN(rate) || rate < 0 || !(years > 0)) {\n        resultLabel.text = \"Type what's owed, the interest rate and how many years.\";\n        grid.rows = [];\n        graph1.setData([], []);\n        return;\n    }\n    var months = Math.round(years * 12), r = rate / 100 / 12;\n    var payment = r === 0 ? amount / months : amount * r / (1 - Math.pow(1 + r, -months));\n    var owed = amount, interest = 0, rows = [], labels = [], left = [], month = 0;\n    while (owed > 0.005 && month < 1200) {\n        month += 1;\n        var i = owed * r, p = Math.min(owed, payment + extra - i);\n        owed -= p;\n        interest += i;\n        rows.push({ id: month, Num: String(month), Payment: home.fmt(p + i), Principal: home.fmt(p), Interest: home.fmt(i),\n                    Balance: home.fmt(owed) });\n        if (month % 12 === 0 || owed <= 0.005) {\n            labels.push(\"Year \" + Math.ceil(month / 12));\n            left.push(Math.round(owed));\n        }\n    }\n    grid.rows = rows;\n    graph1.setData(labels, [{ name: \"Still owed\", values: left }]);\n    var plain = payment * months - amount;\n    resultLabel.text = home.fmt(payment + extra) + \" a month pays it off in \" + Math.floor(month / 12) + \" years\"\n        + (month % 12 ? \" and \" + (month % 12) + \" months\" : \"\") + \". Interest: \" + home.fmt(interest) + \" in all\"\n        + (extra > 0 ? \", \" + home.fmt(plain - interest) + \" less than without the extra.\" : \".\");\n}",
+    "load": "var b = home.balances(), names = [];\nDb.select(\"Accounts\", { orderBy: \"Name\" }).forEach(function (a) {\n    if (home.isDebt(a.Type) && !a.Closed) {\n        debtIds.push(a.id);\n        names.push(a.Name);\n    }\n});\naccountCombo.items = names;\nwork();"
+   }
+  },
+  {
+   "name": "AdvisorForm",
+   "width": 480,
+   "height": 460,
+   "props": {
+    "title": "Advisor"
+   },
+   "controls": [
+    {
+     "type": "AIChat",
+     "name": "chat1",
+     "x": 8,
+     "y": 8,
+     "width": 464,
+     "height": 412,
+     "props": {
+      "instructions": "You are the Advisor in Wayland Money, a personal finance program. You help the person understand their own money: what they spend, what they owe, what's due, how their investments are doing.\nUse the tools for figures instead of adding up records yourself: spending_by_category, account_balances and bills_due. Amounts are US dollars; in the Transactions table a negative Amount is money going out.\nKeep answers short and plain. Give figures, not investment recommendations: you are not a licensed adviser, and say so if asked what to buy or sell.",
+      "greeting": "Hello! Ask me about your spending, your balances or what's due.",
+      "formAccess": false
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "newButton",
+     "x": 8,
+     "y": 428,
+     "width": 130,
+     "height": 24,
+     "props": {
+      "text": "New Conversation"
+     },
+     "events": {
+      "clicked": "chat1.clear();"
+     }
+    }
+   ],
+   "code": {
+    "general": "readonly property var home: App.form(\"HomeForm\")",
+    "load": "chat1.addTool(\"spending_by_category\",\n    \"What was spent and earned in each category between two days (transfers and trades left out). \"\n    + \"Use it for any question about spending, income, or where the money went.\",\n    { from: { type: \"string\", description: \"The first day, as YYYY-MM-DD.\" },\n      to: { type: \"string\", description: \"The last day, as YYYY-MM-DD.\" } },\n    function (input) {\n        return home.totalsByCategory(input.from, input.to).map(function (c) {\n            return { category: c.name, kind: c.kind, total: Math.round(c.total * 100) / 100 };\n        });\n    });\nchat1.addTool(\"account_balances\",\n    \"Every open account with its type and what it's worth today, and the net worth. \"\n    + \"Use it for questions about balances, debts or net worth.\",\n    {},\n    function () {\n        var b = home.balances(), w = home.netWorth();\n        return { accounts: Db.select(\"Accounts\", { orderBy: \"Name\" }).filter(function (a) { return !a.Closed; }).map(function (a) {\n                     return { name: a.Name, type: a.Type, cash: Math.round(b[a.id].cash * 100) / 100,\n                              investments: Math.round(b[a.id].holdings * 100) / 100 };\n                 }),\n                 assets: Math.round(w.assets * 100) / 100, liabilities: Math.round(w.liabilities * 100) / 100,\n                 netWorth: Math.round(w.net * 100) / 100 };\n    });\nchat1.addTool(\"bills_due\",\n    \"The bills and deposits coming up (or overdue), the soonest first. Use it when asked what's due.\",\n    {},\n    function () {\n        return home.billsDue().map(function (d) {\n            return { name: d.bill.Name, kind: d.bill.Kind, amount: d.bill.Amount, due: d.bill.NextDue, daysFromToday: d.days };\n        });\n    });"
+   }
+  },
+  {
+   "name": "AboutForm",
+   "width": 300,
+   "height": 172,
+   "props": {
+    "title": "About Wayland Money",
+    "resizable": false
+   },
+   "controls": [
+    {
+     "type": "Shape",
+     "name": "banner",
+     "x": 0,
+     "y": 0,
+     "width": 300,
+     "height": 48,
+     "props": {
+      "backColor": "#000080",
+      "borderColor": "#000080"
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "titleLabel",
+     "x": 16,
+     "y": 12,
+     "width": 268,
+     "height": 24,
+     "props": {
+      "text": "Wayland Money",
+      "foreColor": "#ffffff",
+      "fontBold": true,
+      "fontSize": 18
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "versionLabel",
+     "x": 16,
+     "y": 60,
+     "width": 268,
+     "height": 17,
+     "props": {
+      "text": ""
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "madeLabel",
+     "x": 16,
+     "y": 82,
+     "width": 268,
+     "height": 17,
+     "props": {
+      "text": "Made in Wayland Studio."
+     },
+     "events": {}
+    },
+    {
+     "type": "Label",
+     "name": "noteLabel",
+     "x": 16,
+     "y": 102,
+     "width": 268,
+     "height": 30,
+     "props": {
+      "text": "Not made by or with Charles Schwab; it uses their Trader API with your own account.",
+      "wordWrap": true
+     },
+     "events": {}
+    },
+    {
+     "type": "Button",
+     "name": "okButton",
+     "x": 110,
+     "y": 140,
+     "width": 80,
+     "height": 24,
+     "props": {
+      "text": "OK",
+      "isDefault": true
+     },
+     "events": {
+      "clicked": "form.close();"
+     }
+    }
+   ],
+   "code": {
+    "load": "versionLabel.text = \"Version \" + App.version;"
+   }
+  }
+ ]
+}

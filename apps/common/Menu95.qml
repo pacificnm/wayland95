@@ -9,7 +9,9 @@ Item {
 
     anchors.fill: parent
     visible: false
-    z: 1000
+    // above the dialogs beside it (Dialog95 is 1500, MessageBox95 2000):
+    // a drop-down in a dialog opens over the dialog
+    z: 2100
 
     property var items: []
     property int current: -1
@@ -50,7 +52,8 @@ Item {
     function step(dir) {
         if (items.length === 0)
             return;
-        var i = current;
+        // (nothing chosen yet: Down starts at the first, Up at the last)
+        var i = current >= 0 ? current : dir > 0 ? -1 : items.length;
         for (var n = 0; n < items.length; ++n) {
             i = (i + dir + items.length) % items.length;
             if (!items[i].separator && items[i].enabled !== false) {
@@ -109,7 +112,16 @@ Item {
         onWheel: (wheel) => { wheel.accepted = true; }
     }
 
+    // open, Enter, Escape and the arrows are the menu's, not a Shortcut's
+    // (a form's default button takes Enter with one)
+    Keys.onShortcutOverride: (event) => {
+        event.accepted = menu.visible && [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Escape, Qt.Key_Up, Qt.Key_Down,
+                                          Qt.Key_Left, Qt.Key_Right].indexOf(event.key) >= 0;
+    }
     Keys.onPressed: (event) => {
+        // (closed, it can keep the keyboard: what's typed isn't for it)
+        if (!menu.visible)
+            return;
         switch (event.key) {
         case Qt.Key_Escape: menu.close(); break;
         case Qt.Key_Up: menu.step(-1); break;

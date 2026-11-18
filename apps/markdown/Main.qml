@@ -6,6 +6,10 @@ import Win95Markdown
 // The Markdown Editor: a WordPad-style window for Markdown files. The page
 // shows the document formatted (and is where you edit it, with the format
 // bar's buttons); View > Markdown shows the same text as Markdown.
+//
+// --reader FILE makes it the Markdown Reader: the page only, to read (a
+// manual): no editing, no format bar, a reader's menus, and Back, Forward
+// and Home for the links followed from page to page.
 Window {
     id: window
 
@@ -15,7 +19,14 @@ Window {
     minimumHeight: 240
     visible: true
     color: Theme.face
-    title: (documentPath ? Win95Fs.fileName(documentPath) : "Untitled") + " - Markdown Editor"
+    title: (documentPath ? Win95Fs.fileName(documentPath) : "Untitled") + (readerOnly ? " - Markdown Reader" : " - Markdown Editor")
+
+    // --reader: only to read (it never edits, and can't be switched to)
+    readonly property bool readerOnly: initialReader
+    // (the reader's history: { path, y } of the pages before and after this one)
+    property var backStack: []
+    property var forwardStack: []
+    property string homePath: ""
 
     property string documentPath: ""
     property bool sourceMode: false
@@ -47,8 +58,17 @@ Window {
     }
 
     Component.onCompleted: {
+        // (--read: a manual, to read and follow its links; before it's
+        // loaded, so it opens at its start)
+        if (initialReading || readerOnly)
+            readingView = true;
         if (initialFile)
             openFile(initialFile);
+        // Home: the folder's index.md (a manual's Contents), else the first page
+        if (readerOnly && documentPath) {
+            var index = Win95Fs.parentDir(documentPath) + "/index.md";
+            homePath = Win95Fs.isFile(index) ? index : documentPath;
+        }
         focusEditor();
         log("ready " + (documentPath || "untitled"));
     }
@@ -79,6 +99,8 @@ Window {
     function afterLoad() {
         if (sourceMode)
             fillSource();
+        // at the start, cursor and all (or focusing the editor scrolls to where the cursor was left)
+        editor.cursorPosition = 0;
         flick.contentY = 0;
         countWords();
     }
@@ -304,13 +326,56 @@ Window {
             if (path.charAt(0) !== "/")
                 path = (md.baseDir || Win95Fs.homePath()) + "/" + path;
             if (/\.(md|markdown|mdown|mkd)$/i.test(path) && Win95Fs.isFile(path)) {
-                confirmDiscard(function () { window.openFile(path); });
+                if (readerOnly)
+                    goTo(path);
+                else
+                    confirmDiscard(function () { window.openFile(path); });
                 return;
             }
             Qt.openUrlExternally("file://" + path);
             return;
         }
         Qt.openUrlExternally(url);
+    }
+
+    // --- the reader's history ---
+
+    // another page, after this one (Forward is forgotten)
+    function goTo(path) {
+        if (path === documentPath)
+            return;
+        backStack = backStack.concat([{ path: documentPath, y: flick.contentY }]);
+        forwardStack = [];
+        openFile(path);
+        log("go " + Win95Fs.fileName(path) + " back " + backStack.length);
+    }
+    function goBack() {
+        if (backStack.length === 0)
+            return;
+        var to = backStack[backStack.length - 1];
+        backStack = backStack.slice(0, -1);
+        forwardStack = forwardStack.concat([{ path: documentPath, y: flick.contentY }]);
+        showAgain(to);
+    }
+    function goForward() {
+        if (forwardStack.length === 0)
+            return;
+        var to = forwardStack[forwardStack.length - 1];
+        forwardStack = forwardStack.slice(0, -1);
+        backStack = backStack.concat([{ path: documentPath, y: flick.contentY }]);
+        showAgain(to);
+    }
+    function goHome() {
+        if (homePath)
+            goTo(homePath);
+    }
+    // a page from the history, scrolled to where it was
+    function showAgain(to) {
+        openFile(to.path);
+        log("go " + Win95Fs.fileName(to.path) + " back " + backStack.length + " forward " + forwardStack.length);
+        Qt.callLater(function () {
+            flick.contentY = Math.max(0, Math.min(to.y, flick.contentHeight - flick.height));
+        });
     }
 
     function showLinkDialog() {
@@ -571,7 +636,62 @@ Window {
                     "info", ["OK"], window.focusEditor);
     }
 
+    // the reader's menus
+    function readerFileMenu() {
+        return [
+            { text: "&Print...", enabled: false },
+            { separator: true },
+            { text: "&Close", shortcut: "Ctrl+W", action: window.close },
+        ];
+    }
+    function readerEditMenu() {
+        return [
+            { text: "&Copy", shortcut: "Ctrl+C", enabled: window.hasSelection, action: editor.copy },
+            { text: "Select &All", shortcut: "Ctrl+A", action: editor.selectAll },
+            { separator: true },
+            { text: "&Find...", shortcut: "Ctrl+F", action: function () { findDialog.open(false); } },
+            { text: "Find &Next", shortcut: "F3", action: window.findNext },
+        ];
+    }
+    function readerViewMenu() {
+        return [
+            { text: "&Toolbar", checked: window.showToolbar, action: function () { window.showToolbar = !window.showToolbar; } },
+            { text: "&Status Bar", checked: window.showStatusBar, action: function () { window.showStatusBar = !window.showStatusBar; } },
+        ];
+    }
+    function goMenu() {
+        return [
+            { text: "&Back", shortcut: "Alt+Left", enabled: window.backStack.length > 0, action: window.goBack },
+            { text: "&Forward", shortcut: "Alt+Right", enabled: window.forwardStack.length > 0, action: window.goForward },
+            { separator: true },
+            { text: "&Home", shortcut: "Alt+Home", enabled: !!window.homePath && window.homePath !== window.documentPath, action: window.goHome },
+        ];
+    }
+    function readerHelpMenu() {
+        return [
+            { text: "&About Markdown Reader", action: function () {
+                msgBox.show("About Markdown Reader",
+                            "Markdown Reader\n\nShows Markdown (.md) documents to read: click a link to go to another, "
+                            + "and Back (Alt+Left) to come back.",
+                            "info", ["OK"], window.focusEditor);
+            } },
+        ];
+    }
+
     function contextMenu() {
+        if (window.readerOnly) {
+            var r = [
+                { text: "&Back", enabled: window.backStack.length > 0, action: window.goBack },
+                { text: "&Forward", enabled: window.forwardStack.length > 0, action: window.goForward },
+                { separator: true },
+                { text: "&Copy", enabled: window.hasSelection, action: editor.copy },
+            ];
+            if (md.link)
+                r.push({ text: "&Open Link", action: function () { window.openLink(md.link); } });
+            r.push({ separator: true });
+            r.push({ text: "Select &All", action: editor.selectAll });
+            return r;
+        }
         var e = window.activeEdit;
         var editable = !window.readingView;
         var items = [
@@ -598,14 +718,18 @@ Window {
         return items;
     }
 
-    Shortcut { sequence: "Ctrl+N"; enabled: !window.modalOpen; onActivated: window.newFile() }
-    Shortcut { sequence: "Ctrl+O"; enabled: !window.modalOpen; onActivated: window.showOpen() }
-    Shortcut { sequence: "Ctrl+S"; enabled: !window.modalOpen; onActivated: window.save(null) }
+    Shortcut { sequence: "Ctrl+N"; enabled: !window.modalOpen && !window.readerOnly; onActivated: window.newFile() }
+    Shortcut { sequence: "Ctrl+O"; enabled: !window.modalOpen && !window.readerOnly; onActivated: window.showOpen() }
+    Shortcut { sequence: "Ctrl+S"; enabled: !window.modalOpen && !window.readerOnly; onActivated: window.save(null) }
     Shortcut { sequence: "Ctrl+F"; enabled: !window.modalOpen; onActivated: findDialog.open(false) }
+    Shortcut { sequence: "Ctrl+W"; enabled: !window.modalOpen && window.readerOnly; onActivated: window.close() }
+    Shortcut { sequences: ["Alt+Left", "Backspace"]; enabled: !window.modalOpen && window.readerOnly; onActivated: window.goBack() }
+    Shortcut { sequence: "Alt+Right"; enabled: !window.modalOpen && window.readerOnly; onActivated: window.goForward() }
+    Shortcut { sequence: "Alt+Home"; enabled: !window.modalOpen && window.readerOnly; onActivated: window.goHome() }
     Shortcut { sequence: "Ctrl+H"; enabled: !window.modalOpen && !window.readingView; onActivated: findDialog.open(true) }
     Shortcut { sequence: "F3"; enabled: !window.modalOpen; onActivated: window.findNext() }
-    Shortcut { sequence: "F1"; enabled: !window.modalOpen; onActivated: window.showHelp() }
-    Shortcut { sequence: "Ctrl+M"; enabled: !window.modalOpen; onActivated: window.setSourceMode(!window.sourceMode) }
+    Shortcut { sequence: "F1"; enabled: !window.modalOpen && !window.readerOnly; onActivated: window.showHelp() }
+    Shortcut { sequence: "Ctrl+M"; enabled: !window.modalOpen && !window.readerOnly; onActivated: window.setSourceMode(!window.sourceMode) }
     Shortcut { sequences: ["Ctrl+Y", "Ctrl+Shift+Z"]; enabled: !window.modalOpen && !window.readingView; onActivated: window.activeEdit.redo() }
     Shortcut { sequence: "Ctrl+B"; enabled: !window.modalOpen && window.canFormat; onActivated: window.format("bold") }
     Shortcut { sequence: "Ctrl+I"; enabled: !window.modalOpen && window.canFormat; onActivated: window.format("italic") }
@@ -626,7 +750,13 @@ Window {
         width: parent.width - 4
         height: 20
         popupMenu: popup
-        menus: [
+        menus: window.readerOnly ? [
+            { title: "File", items: window.readerFileMenu },
+            { title: "Edit", items: window.readerEditMenu },
+            { title: "View", items: window.readerViewMenu },
+            { title: "Go", items: window.goMenu },
+            { title: "Help", items: window.readerHelpMenu },
+        ] : [
             { title: "File", items: window.fileMenu },
             { title: "Edit", items: window.editMenu },
             { title: "View", items: window.viewMenu },
@@ -658,10 +788,27 @@ Window {
 
         Etch {}
 
+        // the reader's toolbar: back, forward, home, find, copy
+        Row {
+            id: readerBar
+            visible: window.showToolbar && window.readerOnly
+            x: 4
+            height: 28
+            topPadding: 3
+            spacing: 0
+
+            FormatButton { icon: "back"; tip: "Goes back to the page before (Alt+Left)."; enabled: window.backStack.length > 0; onClicked: window.goBack() }
+            FormatButton { icon: "forward"; tip: "Goes forward again (Alt+Right)."; enabled: window.forwardStack.length > 0; onClicked: window.goForward() }
+            FormatButton { icon: "home"; tip: "Goes to the first page: the Contents (Alt+Home)."; enabled: !!window.homePath && window.homePath !== window.documentPath; onClicked: window.goHome() }
+            BarSep {}
+            FormatButton { icon: "find"; tip: "Finds text."; onClicked: findDialog.open(false) }
+            FormatButton { icon: "copy"; tip: "Copies the selection to the Clipboard."; enabled: window.hasSelection; onClicked: editor.copy() }
+        }
+
         // the toolbar: files, find, clipboard, undo, date
         Row {
             id: toolbar
-            visible: window.showToolbar
+            visible: window.showToolbar && !window.readerOnly
             x: 4
             height: 28
             topPadding: 3
@@ -680,12 +827,12 @@ Window {
             BarSep {}
             FormatButton { icon: "datetime"; tip: "Inserts the date and time."; enabled: !window.readingView; onClicked: window.insertDateTime() }
         }
-        Etch { visible: window.showToolbar }
+        Etch { visible: window.showToolbar }  // (either toolbar)
 
         // the format bar: paragraph style, character formats, lists, insert
         Row {
             id: formatBar
-            visible: window.showFormatBar
+            visible: window.showFormatBar && !window.readerOnly
             x: 4
             height: 29
             topPadding: 3
@@ -725,7 +872,7 @@ Window {
             FormatButton { icon: "table"; tip: "Inserts a table."; enabled: window.canFormat; onClicked: window.showTableDialog() }
             FormatButton { icon: "rule"; tip: "Inserts a horizontal line."; enabled: window.canFormat; onClicked: window.format("rule") }
         }
-        Etch { visible: window.showFormatBar }
+        Etch { visible: window.showFormatBar && !window.readerOnly }
     }
 
     // the status bar shows what a button does while the mouse is over it
@@ -789,6 +936,20 @@ Window {
                 onLinkActivated: (link) => { if (window.readingView) window.openLink(link); }
 
                 Keys.onPressed: (event) => {
+                    // (the reader's history keys: the page would take them as cursor moves)
+                    if (window.readerOnly) {
+                        var alt = event.modifiers & Qt.AltModifier;
+                        if ((alt && event.key === Qt.Key_Left) || (event.key === Qt.Key_Backspace && !event.modifiers))
+                            window.goBack();
+                        else if (alt && event.key === Qt.Key_Right)
+                            window.goForward();
+                        else if (alt && event.key === Qt.Key_Home)
+                            window.goHome();
+                        else
+                            return;
+                        event.accepted = true;
+                        return;
+                    }
                     if (window.readingView)
                         return;
                     if (event.key === Qt.Key_Tab && !(event.modifiers & Qt.ControlModifier)) {
@@ -979,11 +1140,13 @@ Window {
         height: 22
 
         readonly property string hint: {
-            var t = window.buttonTip(toolbar) || window.buttonTip(formatBar);
+            var t = window.buttonTip(toolbar) || window.buttonTip(formatBar) || window.buttonTip(readerBar);
             if (t)
                 return t;
             if (!window.sourceMode && window.hoverLink)
                 return window.hoverLink + (window.readingView ? "" : "  (Ctrl+click to open)");
+            if (window.readerOnly)
+                return window.backStack.length > 0 ? "Click a link to go to it; Back (Alt+Left) comes back." : "Click a link to go to it.";
             if (window.readingView)
                 return "Reading View: click a link to open it.";
             if (window.sourceMode)

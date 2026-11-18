@@ -90,6 +90,23 @@ Item {
                     rect(4, 10, 8, 5, "#c0c0c0");
                     rect(9, 11, 2, 3, ink);
                     break;
+                case "back":
+                case "forward":
+                    // a blue arrow, left or right
+                    ctx.save();
+                    if (button.icon === "forward") { ctx.translate(16, 0); ctx.scale(-1, 1); }
+                    ctx.fillStyle = blue;
+                    ctx.beginPath(); ctx.moveTo(1, 8); ctx.lineTo(8, 1); ctx.lineTo(8, 5); ctx.lineTo(15, 5);
+                    ctx.lineTo(15, 11); ctx.lineTo(8, 11); ctx.lineTo(8, 15); ctx.closePath(); ctx.fill();
+                    ctx.restore();
+                    break;
+                case "home":
+                    // a house: its roof, walls and a door
+                    ctx.fillStyle = on ? "#800000" : "#808080";
+                    ctx.beginPath(); ctx.moveTo(0, 8); ctx.lineTo(8, 1); ctx.lineTo(16, 8); ctx.closePath(); ctx.fill();
+                    frame(3, 8, 10, 7, on ? "#ffffc0" : "#c0c0c0");
+                    rect(7, 10, 3, 5, ink);
+                    break;
                 case "find":
                     ctx.strokeStyle = ink; ctx.lineWidth = 1.5;
                     ctx.beginPath(); ctx.arc(6, 6, 4, 0, 2 * Math.PI); ctx.stroke();

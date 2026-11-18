@@ -1,3 +1,9 @@
+wayland95 (0.5.0) trixie; urgency=medium
+
+  * New: Wayland Studio (Start > Programs > Programming), for making your own Wayland 95 programs: tables with their rules in SQLite, MySQL or PostgreSQL, forms drawn on a grid, code for their events, graphs (stock graphs too), sound and video, web APIs as tables, an AI chat, and a program of its own at the end. Its manual (F1) opens in the new Markdown Reader. Fixes: a screen capture could come back empty on Intel graphics; a drop-down list opened inside a dialog was drawn under it.
+
+ -- Wayland 95 <wayland95@localhost>  Wed, 18 Nov 2026 15:35:43 -0800
+
 wayland95 (0.4.0) trixie; urgency=medium
 
   * New: a Web Browser (the Chromium engine) with tabs, favorites, history, downloads, saved passwords in your keyring and private windows; Email (IMAP and SMTP); a Calculator (Standard and Scientific); a Markdown Editor; Backup to a USB drive on a schedule (Control Panel > Backup); Start Up (login programs, systemd services, boot); USB drives in My Computer and the tray, with Open and Eject; and in Control Panel > Services: MySQL (MariaDB), SQLite and the nginx Web Server.

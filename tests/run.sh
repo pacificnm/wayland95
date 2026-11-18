@@ -3283,8 +3283,12 @@ suite_web() {
     query list | grep -q "^Test Home - Web Browser|win95web|"; expect_true $? "(its title is the page's)" "$(query list | tr '\n' ' ')"
     sleep 1; away; shot home
 
-    # a link, then Back (Alt+Left)
-    wclick 60 153
+    # a link, then Back (Alt+Left). (Chromium may not take clicks for a
+    # moment after its first page, on a busy machine: tried again then)
+    for _ in 1 2 3; do
+        wclick 60 153 1.5
+        wsaid "loaded ${HOME_URL}two.html Page Two" && break
+    done
     wwait "loaded ${HOME_URL}two.html Page Two"; expect_true $? "a link: Page Two" "$(wlast loaded)"
     pointer key:alt+Left wait:1
     [ "$(wlast loaded)" = "loaded $HOME_URL Test Home" ]; expect_true $? "Alt+Left goes back" "$(wlast loaded)"

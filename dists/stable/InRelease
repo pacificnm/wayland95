@@ -4,31 +4,31 @@ Hash: SHA512
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Tue, 17 Nov 2026 04:51:52 +0000
+Date: Wed, 18 Nov 2026 01:04:23 +0000
 Description: Wayland 95 updates
 Label: Wayland 95
 Origin: Wayland 95
 Suite: stable
 MD5Sum:
- 10a79ae13c6bdcde703c1808b739f388             1486 Release
- c480c9d4ecabf9622d5819a851652397             6460 main/binary-amd64/Packages
- ca1ee99060eb591e293e7fb9547b3d04             1654 main/binary-amd64/Packages.gz
+ dc7ebe116f14e689cdfb731cca3e6c55             1486 Release
+ c89b66a6e045ae386319c02a245304db             6755 main/binary-amd64/Packages
+ 13c3b0e048eb8ebc51e30124633d5ef7             1627 main/binary-amd64/Packages.gz
 SHA1:
- 2fef209b468872dab9305e14613cef470a25b492             1486 Release
- f35070871535eba4837e58e31eba22cc7791dc35             6460 main/binary-amd64/Packages
- 2be7a4da47ae4a67a61f562300ec2b8440e4103a             1654 main/binary-amd64/Packages.gz
+ f881a2f58faf3ee15129bd8bcf7b3679a67678cf             1486 Release
+ 04f6ddb07150fe8b4d8692b0b3e4679b5e6ac41a             6755 main/binary-amd64/Packages
+ 10231108b218859b3d7e01282248566ffbbc4d36             1627 main/binary-amd64/Packages.gz
 SHA256:
- 71ada0df0b0e864bfe4a099a3f15bce1757bba9ac2c003fc1dec26495c72545c             1486 Release
- a7b706c1426c4907d34d60b1e176f6592e1e3fef5158403c895c5d3192e8e15e             6460 main/binary-amd64/Packages
- 4cbc5fb2a7a75f50ac676ef49498c7f2ed42e009e51b2bddc72bb5b8689a128a             1654 main/binary-amd64/Packages.gz
+ ac7bb3080af18f676cef20973ed7b15c58c95cd3a7fbedd3c07ea8339f63e8db             1486 Release
+ cc4eceff87c573cc567c705aa44afe65935f917967e698f7f020dad168825d2f             6755 main/binary-amd64/Packages
+ 4bf7f6e20cd9f3f0899a21fcda6369d2fbb73062269c6e2eeaccbf3b63c6e974             1627 main/binary-amd64/Packages.gz
 SHA512:
- c536117fe7b1de2a4496010cd8b2df5d722089f82e1b799a3c718d056242b5b30eb8853196e39fbd72cfcbaae6cab9e676c7ca92bb7d2649831063d863c5dc54             1486 Release
- ac146c40797d07d29fd8ec1744f9d8f427d5916632bff2822e2c5ed6e2f504cea1ae6b949d664385d7269110487dde0b4af5abbc30e090a9607feb163101dbf9             6460 main/binary-amd64/Packages
- 452233540aec0053329aefd588cbd36270d204a357bc3fb41d9f8b1cc633ae9fd573cbd1ded90d4bcce54ce42d24e1e4322f10b5709f08be275aa79bfa2821a0             1654 main/binary-amd64/Packages.gz
+ 2f59eccc0e94f5baa81980f070c419b97a2dd5640757d70135bd5e08f5eadb53fcb209f74e520eaf87816ad62d69a8aa21b6cae934f1fba6590af7900b37c68f             1486 Release
+ 2b9a79ed507f9e43db18cec4266313b4414818b70ef16ba8b65a32699303c5dcec3c096ff28505225cd8850694224d7463965dd18a4e64577fb3d9243a5408e1             6755 main/binary-amd64/Packages
+ 9e079c57af8c32e8ba9e0e321a9ec07efa7ad0298cac35e74a10886b4ecd572adaa52eeb72fa54ca789401b1f366d7f6b971791f4989bb99b9a10ef6523071bd             1627 main/binary-amd64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYKAB0WIQTNbdhKhmttJYxxjGOEtq/wPrcFngUCavvdaAAKCRCEtq/wPrcF
-nuv6AP4jpb33JkFvjEqqY8Qdg7g//7DRwPSqUfHPSiIrXeeMfQD/Y0OB8M0GOSYk
-j3R0raQUgR6ye7cFLmAMaITRQ22XwwI=
-=ywdP
+iHUEARYKAB0WIQTNbdhKhmttJYxxjGOEtq/wPrcFngUCavz5lwAKCRCEtq/wPrcF
+niCRAP42hhJQ9UDBtT3RsDSAafmCliEGpuLvxSqG8y/+bX5OjwEA+v0ty6GoDjPL
+iEZKSuXCRd88ANw6zwWRsVN+vxfFKQo=
+=L6zH
 -----END PGP SIGNATURE-----

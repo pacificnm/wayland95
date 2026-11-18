@@ -23,6 +23,24 @@
 
 using namespace QtWaylandClient;
 
+// The picture's pixel layout as Qt knows it, or Format_Invalid. wl_shm
+// formats past the first two are DRM fourcc codes; the GL renderer offers
+// whatever the GPU reads back fastest (XBGR8888 on Intel), pixman XRGB8888.
+static QImage::Format imageFormat(uint32_t format)
+{
+    switch (format) {
+    case WL_SHM_FORMAT_ARGB8888: return QImage::Format_ARGB32;
+    case WL_SHM_FORMAT_XRGB8888: return QImage::Format_RGB32;
+    case WL_SHM_FORMAT_ABGR8888: return QImage::Format_RGBA8888;
+    case WL_SHM_FORMAT_XBGR8888: return QImage::Format_RGBX8888;
+    case WL_SHM_FORMAT_XRGB2101010: return QImage::Format_RGB30;
+    case WL_SHM_FORMAT_XBGR2101010: return QImage::Format_BGR30;
+    case WL_SHM_FORMAT_ARGB2101010: return QImage::Format_A2RGB30_Premultiplied;
+    case WL_SHM_FORMAT_ABGR2101010: return QImage::Format_A2BGR30_Premultiplied;
+    default: return QImage::Format_Invalid;
+    }
+}
+
 // --------------------------------------------------------- one capture
 
 class CaptureFrame : public QObject, public QtWayland::zwlr_screencopy_frame_v1
@@ -42,8 +60,10 @@ public:
 protected:
     void zwlr_screencopy_frame_v1_buffer(uint32_t format, uint32_t width, uint32_t height, uint32_t stride) override
     {
-        if (format != WL_SHM_FORMAT_ARGB8888 && format != WL_SHM_FORMAT_XRGB8888)
+        if (imageFormat(format) == QImage::Format_Invalid) {
+            m_unusable = format;
             return; // (another offer may suit)
+        }
         m_format = format;
         m_width = int(width);
         m_height = int(height);
@@ -55,8 +75,7 @@ protected:
     void zwlr_screencopy_frame_v1_flags(uint32_t flags) override { m_yInvert = flags & flags_y_invert; }
     void zwlr_screencopy_frame_v1_ready(uint32_t, uint32_t, uint32_t) override
     {
-        QImage image(static_cast<const uchar *>(m_data), m_width, m_height, m_stride,
-                     m_format == WL_SHM_FORMAT_ARGB8888 ? QImage::Format_ARGB32 : QImage::Format_RGB32);
+        QImage image(static_cast<const uchar *>(m_data), m_width, m_height, m_stride, imageFormat(m_format));
         QImage copy = image.copy();
         if (m_yInvert)
             copy = copy.mirrored(false, true);
@@ -68,8 +87,11 @@ private:
     void copyNow()
     {
         if (m_buffer || m_width <= 0) {
-            if (m_width <= 0)
+            if (m_width <= 0) {
+                if (m_unusable)
+                    std::fprintf(stderr, "win95shell: screencopy offered no pixel format we read (0x%08x)\n", m_unusable);
                 done(QImage());
+            }
             return;
         }
         m_size = size_t(m_stride) * size_t(m_height);
@@ -106,7 +128,7 @@ private:
     int m_id;
     QString m_folder;
     uint m_version;
-    uint32_t m_format = 0;
+    uint32_t m_format = 0, m_unusable = 0;
     int m_width = 0, m_height = 0, m_stride = 0;
     bool m_yInvert = false, m_finished = false;
     ::wl_buffer *m_buffer = nullptr;

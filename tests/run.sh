@@ -6,7 +6,7 @@
 # logs) and what's drawn (grim screenshots).
 #
 #   tests/run.sh [SUITE...]        all suites, or some of: input (Chromium) firefox
-#                                  windows popups x11 clipboard qt frames alttab
+#                                  windows popups x11 clipboard qt frames snap alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
 #                                  games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx studio monitors screen
@@ -689,6 +689,121 @@ suite_frames() {
     size=$(size_of X)
     pointer click:$(close_x $PX ${size%x*}),$(title_y $PY) wait:1
     ! kill -0 "$PID_X" 2>/dev/null; expect_true $? "its close button closes it" "X still runs"
+}
+
+# --- snapping a window to half the screen ---------------------------------------
+# a drag in small steps that keeps the button down at the end: drag_hold X1 Y1 X2 Y2
+drag_hold() {
+    local steps=20 i args=("move:$1,$2" "down:left")
+    for i in $(seq 1 $steps); do
+        args+=("move:$(($1 + ($3 - $1) * i / steps)),$(($2 + ($4 - $2) * i / steps))")
+    done
+    pointer "${args[@]}" wait:0.3
+}
+suite_snap() {
+    say "snap: dragging a window to the screen's left or right edge"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    start_shell || return   # (the taskbar: the usable area is 1280x766)
+    start_probe A qt cc0000 || return
+    locate_probe A 300 250 || return
+    local AX=$PX AY=$PY size W H n fx
+    size=$(size_of A); W=${size%x*}; H=${size#*x}
+    # the halves, less the frame: 3-pixel borders, 22-pixel title bar
+    local SW=634 SH=738 LX=3 RX=643 SY=25
+
+    # to the left edge: an outline shows the half while the button is held
+    drag_hold $((AX + 60)) $(title_y $AY) 0 $(title_y $AY)
+    shot left-held
+    expect_pixel "at the left edge, the outline shows (black...)" left-held 2 400 000000
+    expect_pixel "(...and white: the Win95 halftone)" left-held 3 400 ffffff
+    expect_pixel "its right side is at the screen's middle" left-held 638 400 000000
+    expect_pixel "(and inside it)" left-held 637 401 000000
+    expect_pixel "its bottom is above the taskbar" left-held 300 764 000000
+    expect_pixel "and the taskbar isn't covered" left-held 300 780 c0c0c0
+    pointer up:left wait:0.6
+    [ "$(size_of A)" = "${SW}x$SH" ]; expect_true $? "let go there: the window takes the left half" "size $(size_of A), expected ${SW}x$SH"
+    locate_probe A 300 300 || return
+    [ "$PX" -eq $LX ] && [ "$PY" -eq $SY ]; expect_true $? "in the top left corner" "at $PX,$PY, expected $LX,$SY"
+    away; shot left
+    expect_pixel "the outline is gone" left 1 400 dfdfdf
+    expect_pixel "and the frame fits the half (its right edge)" left 639 400 000000
+    expect_pixel "the desktop shows right of it" left 641 400 008080
+
+    # a click on its title bar leaves it be
+    pointer click:300,$(title_y $SY) wait:0.6
+    [ "$(size_of A)" = "${SW}x$SH" ]; expect_true $? "a click on a snapped window's title bar doesn't restore it" "size $(size_of A)"
+
+    # dragging it off: its size from before, under the pointer
+    fx=$(( (300 - LX) * W / SW ))
+    drag 300 $(title_y $SY) 700 300; sleep 0.5
+    [ "$(size_of A)" = "${W}x$H" ]; expect_true $? "dragged off the edge, it gets its size back" "size $(size_of A), expected ${W}x$H"
+    locate_probe A 700 $((300 + 30)) || return
+    near "$PX" $((700 - fx)) 2 && [ "$PY" -eq $((300 + SY - $(title_y $SY))) ]
+    expect_true $? "with the pointer still on its title bar, as far across" "at $PX,$PY, expected about $((700 - fx)),$((300 + SY - $(title_y $SY)))"
+    AX=$PX; AY=$PY
+
+    # to an edge and away again before letting go: no snap
+    drag_hold $((AX + 60)) $(title_y $AY) 0 $(title_y $AY)
+    pointer move:100,$(title_y $AY) move:300,$(title_y $AY) wait:0.3
+    shot left-away
+    expect_pixel "moving away from the edge takes the outline away" left-away 2 700 '!000000'
+    expect_pixel "(all of it)" left-away 3 700 '!ffffff'
+    pointer up:left wait:0.6
+    [ "$(size_of A)" = "${W}x$H" ]; expect_true $? "and letting go there doesn't snap" "size $(size_of A), expected ${W}x$H"
+    locate_probe A 300 $(($(title_y $AY) + 30)) || return
+    AX=$PX; AY=$PY
+
+    # the right edge
+    drag_hold $((AX + 60)) $(title_y $AY) 1279 $(title_y $AY)
+    shot right-held
+    expect_pixel "at the right edge, the outline shows the right half" right-held 1278 400 000000
+    expect_pixel "(its left side at the middle)" right-held 641 400 ffffff
+    pointer up:left wait:0.6
+    [ "$(size_of A)" = "${SW}x$SH" ]; expect_true $? "let go: the window takes the right half" "size $(size_of A), expected ${SW}x$SH"
+    locate_probe A 900 300 || return
+    [ "$PX" -eq $RX ] && [ "$PY" -eq $SY ]; expect_true $? "next to the middle, at the top" "at $PX,$PY, expected $RX,$SY"
+
+    # maximized and restored: back to the half
+    pointer click:900,$(title_y $SY) click:900,$(title_y $SY) wait:0.6
+    [ "$(size_of A)" = "1280x744" ]; expect_true $? "a snapped window maximizes" "size $(size_of A)"
+    pointer click:640,11 click:640,11 wait:0.6
+    [ "$(size_of A)" = "${SW}x$SH" ]; expect_true $? "and restores to its half" "size $(size_of A), expected ${SW}x$SH"
+    drag 900 $(title_y $SY) 700 400; sleep 0.5
+    [ "$(size_of A)" = "${W}x$H" ]; expect_true $? "then dragged off, to its size from before snapping" "size $(size_of A), expected ${W}x$H"
+
+    # an X11 window
+    [ -n "$XDISPLAY" ] || { bad "Xwayland" "the compositor has no X11 display"; return; }
+    start_probe X x11 00aa00 || return
+    locate_probe X 400 300 || return
+    local XX=$PX XY=$PY xw xh
+    size=$(size_of X); xw=${size%x*}; xh=${size#*x}
+    drag $((XX + 60)) $(title_y $XY) 0 $(title_y $XY); sleep 0.5
+    [ "$(size_of X)" = "${SW}x$SH" ]; expect_true $? "X11: dragged to the left edge, it takes the left half" "size $(size_of X), expected ${SW}x$SH"
+    locate_probe X 300 300 || return
+    [ "$PX" -eq $LX ] && [ "$PY" -eq $SY ]; expect_true $? "X11: in the top left corner" "at $PX,$PY, expected $LX,$SY"
+    drag 300 $(title_y $SY) 500 400; sleep 0.5
+    [ "$(size_of X)" = "${xw}x$xh" ]; expect_true $? "X11: dragged off, it gets its size back" "size $(size_of X), expected ${xw}x$xh"
+    locate_probe X 500 $((400 + 30)) || return
+    [ "$PY" -eq $((400 + SY - $(title_y $SY))) ]; expect_true $? "X11: under the pointer" "at $PX,$PY"
+    drag $((PX + 60)) $(title_y $PY) 1279 $(title_y $PY); sleep 0.5
+    locate_probe X 900 300 || return
+    [ "$(size_of X)" = "${SW}x$SH" ] && [ "$PX" -eq $RX ] && [ "$PY" -eq $SY ]
+    expect_true $? "X11: and to the right half" "size $(size_of X) at $PX,$PY"
+
+    # a window that draws its own title bar (GTK) moves itself by asking:
+    # it snaps the same, with no frame around it
+    start_probe G wayland 0000cc || return
+    locate_probe G 300 300 || return
+    local gsize; gsize=$(size_of G)
+    drag $((PX + 60)) $((PY - 15)) 0 $((PY - 15)); sleep 0.6
+    away; shot gtk-left
+    locate_probe G 300 400 || return
+    [ "$PX" -eq 0 ]; expect_true $? "a GTK window snaps to the left half too" "drawing area at $PX,$PY"
+    expect_pixel "(to the middle)" gtk-left 638 400 0000cc
+    expect_pixel "and no further" gtk-left 642 400 '!0000cc'
+    drag 300 $((PY - 15)) 500 400; sleep 0.6
+    [ "$(size_of G)" = "$gsize" ]; expect_true $? "dragged off, it gets its size back" "size $(size_of G), expected $gsize"
 }
 
 # --- Alt+Tab, Alt+F4 ----------------------------------------------------------------
@@ -4433,7 +4548,7 @@ JS
         "$(echo "$colors" | sort -rn | head -8 | tr '\n' ' ')"
 }
 
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx studio studioimport studioapi studioai studiograph studiostock monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames snap alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx studio studioimport studioapi studioai studiograph studiostock monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

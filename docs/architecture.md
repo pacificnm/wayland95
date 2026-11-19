@@ -40,7 +40,8 @@ maintained by the people who write the protocols.
  │ outputs (DRM/KMS, or a window when nested), input (libinput), seat        │
  │ xdg-shell windows and popups, Xwayland windows                            │
  │ Win95 window frames (title bar, buttons, borders: drawn with cairo/pango)│
- │ moving, resizing, maximizing, minimizing, stacking, focus, Alt+Tab keys   │
+ │ moving, resizing, maximizing, snapping, minimizing, stacking, focus,      │
+ │ Alt+Tab keys                                                              │
  │ keyboard layout/repeat, mouse/touchpad settings, accessibility keys       │
  │ every standard protocol wlroots provides (list below)                     │
  └─────────────▲─────────────────────────────▲───────────────────────────────┘
@@ -69,7 +70,7 @@ one file per concern):
 | `main.c` | start-up: backend (DRM/KMS, nested Wayland/X11, or headless for tests), renderer, allocator, scene graph, the protocols, Xwayland, then start `win95shell` |
 | `output.c` | outputs, modes, layouts, frame scheduling, DPMS (`wlr-output-power-management`) |
 | `input.c` | keyboards (xkb layout, repeat), pointers, touchpads (libinput settings), seat, cursor (xcursor + `cursor-shape`) |
-| `view.c` | one window (xdg toplevel or X11): map/unmap, focus, stacking (a window's dialogs stay in front of it), move/resize/maximize/minimize, foreign-toplevel handle |
+| `view.c` | one window (xdg toplevel or X11): map/unmap, focus, stacking (a window's dialogs stay in front of it), move/resize/maximize/snap/minimize, foreign-toplevel handle |
 | `dialog.c` | `xdg-dialog-v1`: which windows are modal dialogs; bringing forward a window that waits on one gives the dialog the keyboard, as in Windows 95 |
 | `xdg.c` | xdg-shell: toplevels, popups (placed and kept on screen with `wlr_xdg_popup_unconstrain_from_box`) |
 | `xwayland.c` | X11 windows through `wlr_xwayland` (its window manager is part of wlroots) |
@@ -90,6 +91,21 @@ behaves as Win95's: drag the title bar to move, the edges and corners to
 resize, double-click the title bar to maximize or restore; buttons act when
 released over them; a maximized window's title bar sits at the top of the
 screen with its borders just off it, and doesn't move by dragging.
+
+Snapping (not in Win95; `input.c`, `view.c`): dragging a window (by the
+Win95 title bar or by its own, as GTK's) until the pointer meets the left
+or right edge of a display, with no other display beyond it, shows Win95's
+halftone drag outline (4 pixels, every other one black and white,
+`decoration.c`) around that half of the display's usable area; letting go
+there gives the window that half, frame and all, and moving away first
+cancels it. The size and place from before are kept (`view.saved`, as for
+maximize): dragging a snapped window more than 4 pixels restores them,
+under the pointer at the same place across its width; a click on its
+title bar doesn't. Maximizing a snapped window and restoring it goes back
+to the half; resizing it from an edge keeps the new size. xdg windows are
+told they're tiled on three sides (GTK then draws no shadow there); X11
+windows keep their place if they ask to move. Fixed-size windows (minimum
+size = maximum) don't snap.
 
 Keys the compositor keeps for itself: Alt+Tab and Alt+Shift+Tab step
 through the windows, most recently used first, and letting go of Alt
@@ -134,7 +150,7 @@ either way (tested).
 
 Each display is arranged on its own (`layers.c`): its panels in its part
 of the layout, and what's left is where windows go there (`output.usable`).
-A maximized or full screen window fills the display it's mostly on; new
+A maximized, snapped or full screen window fills (its part of) the display it's mostly on; new
 windows open on the display the pointer is on. One display is the **main
 display** (chosen in the Control Panel, else the first): the compositor
 tells the shell which (`primary_output` in wayland95-shell-v1), and the

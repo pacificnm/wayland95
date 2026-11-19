@@ -114,7 +114,7 @@ static void xview_request_configure(struct wl_listener *listener, void *data)
 		wlr_xwayland_surface_configure(view->xsurface, event->x, event->y, event->width, event->height);
 		return;
 	}
-	if (view->maximized || view->fullscreen) {
+	if (view->maximized || view->fullscreen || view->snap_edge) {
 		// keep it where it is: tell it its real geometry back
 		wlr_xwayland_surface_configure(view->xsurface, view->x, view->y,
 				view->xsurface->width, view->xsurface->height);

@@ -425,3 +425,62 @@ const char *frame_cursor(enum frame_part part, uint32_t edges)
 	default: return "default";
 	}
 }
+
+// ------------------------------------------- where a dragged window will snap
+
+// Win95 draws the rectangle a window is being dragged to as a thick
+// halftone (every other pixel) outline: the same here, in black and white
+// (seen on any background), around the half of the screen a window will
+// snap to when let go (input.c)
+#define SNAP_OUTLINE 4
+
+void snap_outline_show(struct server *server, const struct wlr_box *box)
+{
+	if (!box || box->width < 2 * SNAP_OUTLINE || box->height < 2 * SNAP_OUTLINE) {
+		if (server->snap_drawn.width) {
+			wlr_scene_node_set_enabled(&server->layer_snap->node, false);
+			server->snap_drawn = (struct wlr_box){0};
+		}
+		return;
+	}
+	if (wlr_box_equal(box, &server->snap_drawn))
+		return;
+	server->snap_drawn = *box;
+	const struct wlr_box strips[4] = {
+		{box->x, box->y, box->width, SNAP_OUTLINE},
+		{box->x, box->y + box->height - SNAP_OUTLINE, box->width, SNAP_OUTLINE},
+		{box->x, box->y + SNAP_OUTLINE, SNAP_OUTLINE, box->height - 2 * SNAP_OUTLINE},
+		{box->x + box->width - SNAP_OUTLINE, box->y + SNAP_OUTLINE, SNAP_OUTLINE, box->height - 2 * SNAP_OUTLINE},
+	};
+	for (int i = 0; i < 4; ++i) {
+		const struct wlr_box *b = &strips[i];
+		if (!server->snap_outline[i]) {
+			server->snap_outline[i] = wlr_scene_buffer_create(server->layer_snap, NULL);
+			// (its pixels stay pixels on a scaled display)
+			wlr_scene_buffer_set_filter_mode(server->snap_outline[i], WLR_SCALE_FILTER_NEAREST);
+		}
+		struct frame_buffer *fb = calloc(1, sizeof(*fb));
+		fb->surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, b->width, b->height);
+		if (cairo_surface_status(fb->surface) != CAIRO_STATUS_SUCCESS) {
+			cairo_surface_destroy(fb->surface);
+			free(fb);
+			return;
+		}
+		wlr_buffer_init(&fb->base, &fb_impl, b->width, b->height);
+		cairo_surface_flush(fb->surface);
+		unsigned char *data = cairo_image_surface_get_data(fb->surface);
+		int stride = cairo_image_surface_get_stride(fb->surface);
+		for (int y = 0; y < b->height; ++y) {
+			uint32_t *row = (uint32_t *)(data + y * stride);
+			// (the checks line up across the strips: by screen position)
+			for (int x = 0; x < b->width; ++x)
+				row[x] = ((b->x + x + b->y + y) & 1) ? 0xffffffff : 0xff000000;
+		}
+		cairo_surface_mark_dirty(fb->surface);
+		wlr_scene_node_set_position(&server->snap_outline[i]->node, b->x, b->y);
+		wlr_scene_buffer_set_buffer(server->snap_outline[i], &fb->base);
+		wlr_scene_buffer_set_dest_size(server->snap_outline[i], b->width, b->height);
+		wlr_buffer_drop(&fb->base); // the scene holds it now
+	}
+	wlr_scene_node_set_enabled(&server->layer_snap->node, true);
+}

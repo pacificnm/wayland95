@@ -213,6 +213,7 @@ int main(int argc, char *argv[])
 	server.layer_background = wlr_scene_tree_create(&server.scene->tree);
 	server.layer_bottom = wlr_scene_tree_create(&server.scene->tree);
 	server.layer_windows = wlr_scene_tree_create(&server.scene->tree);
+	server.layer_snap = wlr_scene_tree_create(&server.scene->tree);
 	server.layer_top = wlr_scene_tree_create(&server.scene->tree);
 	server.layer_fullscreen = wlr_scene_tree_create(&server.scene->tree);
 	server.layer_overlay = wlr_scene_tree_create(&server.scene->tree);

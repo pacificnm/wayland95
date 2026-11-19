@@ -97,6 +97,7 @@ struct server {
 	struct wlr_scene_tree *layer_background; // layer-shell background (wallpaper, icons)
 	struct wlr_scene_tree *layer_bottom;     // layer-shell bottom
 	struct wlr_scene_tree *layer_windows;    // windows, with their popups
+	struct wlr_scene_tree *layer_snap;       // the outline of where a dragged window will snap (decoration.c)
 	struct wlr_scene_tree *layer_top;        // layer-shell top (the taskbar)
 	struct wlr_scene_tree *layer_fullscreen; // the full screen window, while it's in front (view.c)
 	struct wlr_scene_tree *layer_overlay;    // layer-shell overlay (notifications)
@@ -233,6 +234,12 @@ struct server {
 	double grab_x, grab_y;
 	struct wlr_box grab_geobox;
 	uint32_t resize_edges;
+	double grab_start_x, grab_start_y; // where the pointer was when it began
+	// a move with the pointer at a display's left or right edge: letting
+	// go there snaps the window to that half (WLR_EDGE_LEFT/RIGHT, or NONE)
+	uint32_t snap_edge;
+	struct wlr_box snap_drawn; // where the outline is (width 0: hidden)
+	struct wlr_scene_buffer *snap_outline[4];
 };
 
 struct output {
@@ -277,7 +284,10 @@ struct view {
 	bool mapped, placed, minimized, maximized, fullscreen;
 	bool modal; // a modal dialog (xdg-dialog-v1): its owner waits on it
 	int x, y;           // layout position of the window geometry's corner
-	struct wlr_box saved; // size and place before maximize/fullscreen
+	struct wlr_box saved; // size and place before maximize/fullscreen/snap
+	// snapped to the left or right half of its display (WLR_EDGE_LEFT or
+	// RIGHT), by dragging it to that edge; dragging it off restores it
+	uint32_t snap_edge;
 	// resizing with the mouse: the next size is sent when the program has
 	// drawn the last one asked for (not one per mouse movement)
 	uint32_t resize_serial;
@@ -378,13 +388,15 @@ void frame_update(struct view *view); // create, redraw, or remove as needed
 void frame_destroy(struct view *view);
 enum frame_part frame_part_at(struct view *view, double lx, double ly, uint32_t *edges);
 void frame_set_pressed(struct view *view, enum frame_part part);
+void snap_outline_show(struct server *server, const struct wlr_box *box); // NULL hides it
 const char *frame_cursor(enum frame_part part, uint32_t edges);
 // the frame's extent around the window (0 without a frame)
 void view_frame_insets(struct view *view, int *left, int *top, int *right, int *bottom);
 
 // input.c
 void input_init(struct server *server);
-void input_reset_cursor_mode(struct server *server);
+void input_reset_cursor_mode(struct server *server); // the move or resize ends (a move at an edge snaps)
+void input_cancel_snap(struct server *server);        // the move ends without snapping
 void input_refresh_pointer(struct server *server); // re-pick the surface under the pointer
 void input_lock(struct server *server); // the screen locks: grabs, drags and focus end
 void input_focus_surface(struct server *server, struct wlr_surface *surface); // keyboard
@@ -405,6 +417,11 @@ void view_close(struct view *view);
 void view_set_minimized(struct view *view, bool minimized);
 void view_set_maximized(struct view *view, bool maximized);
 void view_set_fullscreen(struct view *view, bool fullscreen);
+// snap to the left or right half of OUTPUT's usable area (NULL: the one
+// it's on); WLR_EDGE_NONE restores the size and place from before
+void view_set_snapped(struct view *view, uint32_t edge, struct output *output);
+void view_snap_box(struct view *view, uint32_t edge, struct output *output, struct wlr_box *frame, struct wlr_box *content);
+bool view_resizable(struct view *view); // not a fixed-size window
 void view_mapped(struct view *view);   // after the type-specific map
 void view_unmapped(struct view *view); // before the type-specific unmap
 void view_update_title(struct view *view);

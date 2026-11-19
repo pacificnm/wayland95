@@ -264,6 +264,11 @@ static void apply_state(struct view *view)
 	if (view->type == VIEW_XDG) {
 		wlr_xdg_toplevel_set_maximized(view->xdg_toplevel, view->maximized);
 		wlr_xdg_toplevel_set_fullscreen(view->xdg_toplevel, view->fullscreen);
+		// a snapped window touches the screen's edges on three sides (GTK
+		// then draws no shadow or rounded corners there)
+		if (wl_resource_get_version(view->xdg_toplevel->resource) >= XDG_TOPLEVEL_STATE_TILED_LEFT_SINCE_VERSION)
+			wlr_xdg_toplevel_set_tiled(view->xdg_toplevel, view->snap_edge
+					? view->snap_edge | WLR_EDGE_TOP | WLR_EDGE_BOTTOM : WLR_EDGE_NONE);
 	} else {
 		wlr_xwayland_surface_set_maximized(view->xsurface, view->maximized);
 		wlr_xwayland_surface_set_fullscreen(view->xsurface, view->fullscreen);
@@ -287,9 +292,59 @@ static void maximized_box(struct view *view, struct wlr_box *box)
 	}
 }
 
+// a snapped window: its display's usable area, the left or right half,
+// with the frame inside it (FRAME is the frame's outer box, CONTENT the
+// window's own)
+void view_snap_box(struct view *view, uint32_t edge, struct output *output, struct wlr_box *frame, struct wlr_box *content)
+{
+	if (!output)
+		output = output_for_view(view);
+	struct wlr_box area = output ? output->usable : (struct wlr_box){0, 0, 640, 480};
+	int half = area.width / 2;
+	if (edge == WLR_EDGE_RIGHT)
+		*frame = (struct wlr_box){area.x + half, area.y, area.width - half, area.height};
+	else
+		*frame = (struct wlr_box){area.x, area.y, half, area.height};
+	int left, top, right, bottom;
+	view_frame_insets(view, &left, &top, &right, &bottom);
+	*content = (struct wlr_box){frame->x + left, frame->y + top,
+			frame->width - left - right, frame->height - top - bottom};
+}
+
+// whether the program lets its window be resized (a dialog of one fixed
+// size doesn't, and doesn't snap)
+bool view_resizable(struct view *view)
+{
+	if (view->type == VIEW_XDG) {
+		const struct wlr_xdg_toplevel_state *s = &view->xdg_toplevel->current;
+		return !(s->max_width > 0 && s->min_width == s->max_width
+				&& s->max_height > 0 && s->min_height == s->max_height);
+	}
+	const xcb_size_hints_t *h = view->xsurface->size_hints;
+	return !(h && (h->flags & XCB_ICCCM_SIZE_HINT_P_MIN_SIZE) && (h->flags & XCB_ICCCM_SIZE_HINT_P_MAX_SIZE)
+			&& h->max_width > 0 && h->min_width == h->max_width
+			&& h->max_height > 0 && h->min_height == h->max_height);
+}
+
+// where a window goes in its state, if that decides it (else false: where
+// it was put)
+static bool state_box(struct view *view, struct wlr_box *box)
+{
+	if (view->fullscreen)
+		output_box_for(view, box);
+	else if (view->maximized)
+		maximized_box(view, box);
+	else if (view->snap_edge) {
+		struct wlr_box frame;
+		view_snap_box(view, view->snap_edge, NULL, &frame, box);
+	} else
+		return false;
+	return true;
+}
+
 static void remember_geometry(struct view *view)
 {
-	if (view->maximized || view->fullscreen)
+	if (view->maximized || view->fullscreen || view->snap_edge)
 		return; // already remembered
 	struct wlr_box geo;
 	view_geometry(view, &geo);
@@ -308,8 +363,38 @@ void view_set_maximized(struct view *view, bool maximized)
 		view_move(view, area.x, area.y);
 		view_resize(view, area.width, area.height);
 	} else {
+		// (a snapped window goes back to its half)
 		view->maximized = false;
-		if (view->saved.width > 0) {
+		struct wlr_box area;
+		if (state_box(view, &area)) {
+			view_move(view, area.x, area.y);
+			view_resize(view, area.width, area.height);
+		} else if (view->saved.width > 0) {
+			view_move(view, view->saved.x, view->saved.y);
+			view_resize(view, view->saved.width, view->saved.height);
+		}
+	}
+	apply_state(view);
+	frame_update(view);
+}
+
+void view_set_snapped(struct view *view, uint32_t edge, struct output *output)
+{
+	if (view->fullscreen || view->snap_edge == edge)
+		return;
+	if (edge != WLR_EDGE_NONE) {
+		remember_geometry(view);
+		view->maximized = false;
+		view->snap_edge = edge;
+		struct wlr_box frame, box;
+		view_snap_box(view, edge, output, &frame, &box);
+		if (box.width <= 0 || box.height <= 0)
+			return;
+		view_move(view, box.x, box.y);
+		view_resize(view, box.width, box.height);
+	} else {
+		view->snap_edge = WLR_EDGE_NONE;
+		if (!view->maximized && view->saved.width > 0) {
 			view_move(view, view->saved.x, view->saved.y);
 			view_resize(view, view->saved.width, view->saved.height);
 		}
@@ -332,9 +417,8 @@ void view_set_fullscreen(struct view *view, bool fullscreen)
 		wlr_scene_node_raise_to_top(&view->scene_tree->node);
 	} else {
 		view->fullscreen = false;
-		if (view->maximized) {
-			struct wlr_box area;
-			maximized_box(view, &area);
+		struct wlr_box area;
+		if (state_box(view, &area)) { // maximized or snapped
 			view_move(view, area.x, area.y);
 			view_resize(view, area.width, area.height);
 		} else if (view->saved.width > 0) {
@@ -348,8 +432,8 @@ void view_set_fullscreen(struct view *view, bool fullscreen)
 	input_refresh_pointer(view->server);
 }
 
-// panels or displays came, went or changed: maximized and full screen
-// windows follow their display
+// panels or displays came, went or changed: maximized, snapped and full
+// screen windows follow their display
 void view_arrange_all(struct server *server)
 {
 	struct view *view;
@@ -357,11 +441,7 @@ void view_arrange_all(struct server *server)
 		if (!view->mapped)
 			continue;
 		struct wlr_box area;
-		if (view->fullscreen)
-			output_box_for(view, &area);
-		else if (view->maximized)
-			maximized_box(view, &area);
-		else
+		if (!state_box(view, &area))
 			continue;
 		if (area.width <= 0 || area.height <= 0)
 			continue;
@@ -508,8 +588,10 @@ void view_unmapped(struct view *view)
 	struct server *server = view->server;
 	view->resize_waiting = false; // (nothing more to ask of a window that's going)
 	view->resize_serial = 0;
-	if (view == server->grabbed_view)
+	if (view == server->grabbed_view) {
+		input_cancel_snap(server);
 		input_reset_cursor_mode(server);
+	}
 	view->mapped = false;
 	wlr_scene_node_set_enabled(&view->scene_tree->node, false);
 	if (server->frame_press_view == view)
@@ -581,19 +663,30 @@ void view_begin_interactive(struct view *view, enum cursor_mode mode, uint32_t e
 		return;
 	if (view->maximized && mode == CURSOR_MOVE) {
 		// dragging a maximized window (by its own title bar) restores it
-		// under the pointer, at the same place across its width
+		// under the pointer, at the same place across its width (to its
+		// size from before it was snapped, if it was)
 		struct wlr_box geo;
 		view_geometry(view, &geo);
 		double fraction = geo.width > 0 ? (server->cursor->x - view->x) / geo.width : 0.5;
 		double dy = server->cursor->y - view->y;
+		view->snap_edge = WLR_EDGE_NONE;
 		view_set_maximized(view, false);
 		if (view->saved.width > 0)
 			view_move(view, server->cursor->x - fraction * view->saved.width, server->cursor->y - dy);
 	} else if (view->maximized) {
 		return; // a maximized window has no edges to resize
+	} else if (view->snap_edge && mode == CURSOR_RESIZE) {
+		// resizing a snapped window: it keeps the new size, as any other
+		view->snap_edge = WLR_EDGE_NONE;
+		apply_state(view);
 	}
+	// (a snapped window being moved is restored once the pointer has
+	// moved a little: input.c)
 	server->grabbed_view = view;
 	server->cursor_mode = mode;
+	server->grab_start_x = server->cursor->x;
+	server->grab_start_y = server->cursor->y;
+	server->snap_edge = WLR_EDGE_NONE;
 	struct wlr_box geo;
 	view_geometry(view, &geo);
 	if (mode == CURSOR_MOVE) {

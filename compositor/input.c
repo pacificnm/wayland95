@@ -121,6 +121,8 @@ static bool handle_shortcut(struct server *server, uint32_t modifiers, const xkb
 		// the window menu's Move or Size: Return or Escape puts it down
 		for (int i = 0; i < nsyms; ++i)
 			if (syms[i] == XKB_KEY_Return || syms[i] == XKB_KEY_Escape || syms[i] == XKB_KEY_KP_Enter) {
+				if (syms[i] == XKB_KEY_Escape)
+					input_cancel_snap(server);
 				server->keyboard_grab = false;
 				input_reset_cursor_mode(server);
 				return true;
@@ -514,6 +516,7 @@ void input_lock(struct server *server)
 	server->keyboard_grab = false;
 	server->frame_press_view = NULL;
 	server->press_surface = NULL;
+	input_cancel_snap(server);
 	server->cursor_mode = CURSOR_PASSTHROUGH;
 	server->grabbed_view = NULL;
 	wlr_seat_pointer_end_grab(server->seat);
@@ -537,10 +540,64 @@ static void note_shell_input(struct server *server, struct wlr_surface *surface)
 
 // ------------------------------------------------------- cursor, pointer
 
+// ---------------------------------------------- snapping to a screen half
+
+#define SNAP_UNSNAP_DISTANCE 4 // pixels: a click on a snapped window's title bar doesn't restore it
+
+// the pointer is at the left or right edge of a display, with no other
+// display beyond it (moving across to that one isn't snapping): which, and
+// the display
+static uint32_t snap_edge_at(struct server *server, struct output **output)
+{
+	double x = server->cursor->x, y = server->cursor->y;
+	struct wlr_output *wo = wlr_output_layout_output_at(server->output_layout, x, y);
+	if (!wo)
+		return WLR_EDGE_NONE;
+	struct wlr_box box;
+	wlr_output_layout_get_box(server->output_layout, wo, &box);
+	*output = output_at(server, x, y);
+	if (x < box.x + 1 && !wlr_output_layout_output_at(server->output_layout, box.x - 1, y))
+		return WLR_EDGE_LEFT;
+	if (x >= box.x + box.width - 1 && !wlr_output_layout_output_at(server->output_layout, box.x + box.width, y))
+		return WLR_EDGE_RIGHT;
+	return WLR_EDGE_NONE;
+}
+
+// while a window is moved: the outline of where it would snap shows while
+// the pointer is at an edge
+static void snap_track(struct server *server)
+{
+	struct view *view = server->grabbed_view;
+	struct output *output = NULL;
+	uint32_t edge = view_resizable(view) ? snap_edge_at(server, &output) : WLR_EDGE_NONE;
+	server->snap_edge = edge;
+	if (edge == WLR_EDGE_NONE) {
+		snap_outline_show(server, NULL);
+		return;
+	}
+	struct wlr_box frame, content;
+	view_snap_box(view, edge, output, &frame, &content);
+	snap_outline_show(server, &frame);
+}
+
+// the move is put down somewhere other than where it was going (Escape,
+// the window going away, the lock screen): no snapping
+void input_cancel_snap(struct server *server)
+{
+	server->snap_edge = WLR_EDGE_NONE;
+	snap_outline_show(server, NULL);
+}
+
 void input_reset_cursor_mode(struct server *server)
 {
 	if (server->grabbed_view && server->cursor_mode == CURSOR_RESIZE)
 		view_resize_flush(server->grabbed_view);
+	if (server->grabbed_view && server->cursor_mode == CURSOR_MOVE && server->snap_edge) {
+		// let go at an edge: the window takes that half of the display
+		view_set_snapped(server->grabbed_view, server->snap_edge,
+				output_at(server, server->cursor->x, server->cursor->y));
+	}
+	input_cancel_snap(server);
 	server->cursor_mode = CURSOR_PASSTHROUGH;
 	server->grabbed_view = NULL;
 }
@@ -549,8 +606,23 @@ void input_reset_cursor_mode(struct server *server)
 // truncating 339.9999 left windows a pixel short half the time)
 static void process_move(struct server *server)
 {
-	view_move(server->grabbed_view, (int)lround(server->cursor->x - server->grab_x),
+	struct view *view = server->grabbed_view;
+	if (view->snap_edge && !view->maximized) {
+		// a snapped window dragged away: back to its size from before,
+		// under the pointer at the same place across its width
+		if (fabs(server->cursor->x - server->grab_start_x) < SNAP_UNSNAP_DISTANCE
+				&& fabs(server->cursor->y - server->grab_start_y) < SNAP_UNSNAP_DISTANCE)
+			return;
+		struct wlr_box geo;
+		view_geometry(view, &geo);
+		double fraction = geo.width > 0 ? server->grab_x / geo.width : 0.5;
+		view_set_snapped(view, WLR_EDGE_NONE, NULL);
+		if (view->saved.width > 0)
+			server->grab_x = fraction * view->saved.width;
+	}
+	view_move(view, (int)lround(server->cursor->x - server->grab_x),
 			(int)lround(server->cursor->y - server->grab_y));
+	snap_track(server);
 }
 
 static void process_resize(struct server *server)

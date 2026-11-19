@@ -26,7 +26,7 @@ static void apply_decoration_mode(struct view *view)
 	if (ssd != view->ssd) {
 		view->ssd = ssd;
 		frame_update(view);
-		if (view->maximized)
+		if (view->maximized || view->snap_edge)
 			view_arrange_all(view->server); // the title bar's room changed
 	}
 }

@@ -190,7 +190,10 @@ key at all (said, nothing sent); `aichat-requests.py` then checks every request 
 the API: headers, fields, thinking blocks sent back signed, each tool
 call answered), what the code window offers to complete
 (`apps/studio/codeassist.js` against `assist.js`), and a made program whose form saves through
-validation and moves between records (`selftest.w95proj`). To run it in a server too, name a database
+validation and moves between records (`selftest.w95proj`), and Claude's tools (`mcp.py`: `win95studio-mcp` over
+JSON-RPC as Claude Code drives it, building a Contacts app from nothing: every tool, what each refuses and
+why with the file left alone, names of things that aren't there, a form's picture, a program, and its table's
+rules holding in the database). To run it in a server too, name a database
 you can throw away: `STUDIO_MYSQL="name=test user=me"
 STUDIO_POSTGRES="name=test" tests/studio/run.sh` (also `host=`, `port=`,
 `password=`): the same ORM checks against the same `orm.expected`, a
@@ -211,7 +214,10 @@ saved in the project; its clicked code; the app's pie by its pixels, and
 a click on a slice running clicked), and `tests/run.sh studiostock` (a
 Candlestick graph through the Graph Editor: Bars a day, its five fields,
 an SMA, Volume and RSI, the latest 25, saved in the project; the app's
-candles, last price, volume and SMA by their colors).
+candles, last price, volume and SMA by their colors), and `tests/run.sh studiomcp` (a Shape put on an open
+project's form through `win95studio-mcp`: the Studio shows it with nothing to save, Undo takes it back,
+with unsaved changes a second change asks first and Yes loads it, its own Ctrl+S isn't taken for a change
+from outside; Help > Build Apps with Claude's Add to Claude Code runs a stand-in `claude mcp add`).
 
 `tests/calc/run.sh` checks the Calculator's arithmetic through `win95calc
 --keys` (97 sums: left to right in Standard, the usual order and brackets

@@ -494,6 +494,23 @@ up next to the shell first, then on `$PATH`.
     by `docs/studio-manual/screenshots.sh` (the test desktop drives the
     Studio and the sample, step by step), so they can be made again when
     the Studio changes.
+  - **Building apps with Claude:** `win95studio-mcp` is an MCP server
+    (the Model Context Protocol, stdio) with the Studio's tools for
+    Claude Code or any MCP client: `claude mcp add --scope user
+    wayland-studio -- win95studio-mcp`, or Help > Build Apps with Claude
+    > Add to Claude Code. Its tools make and change projects (tables,
+    forms, elements, event code), each change checked as the Studio
+    checks it (element types, their properties and values, events, names,
+    field types, Validation Rules) and then for names of things that
+    aren't there; `check_project` compiles it all, `show_form` returns a
+    picture of a form as it opens (`win95apprun --shot`, off the screen),
+    `build_program` and `run_app` make and start it, and
+    `studio_reference` tells Claude how projects are made (written in
+    `apps/studio/mcp/reference.md`, the rest generated from
+    `elements.json` and the field rules). A project open in the Studio
+    reloads when its file changes (asking first if there are unsaved
+    changes; Undo takes a change back). The manual's last chapter
+    ([claude.md](docs/studio-manual/claude.md)) is for people using it.
   - **Adding an element:** write `apps/studio/runtime/App<Name>.qml` (its
     root is `AppElement`, which brings colors, font, DataField and the
     validation mark), list it in `apps/studio/CMakeLists.txt` and describe

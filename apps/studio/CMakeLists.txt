@@ -6,6 +6,8 @@
 #   win95apprun  (runner/)  runs a project or, with a compiled app on the end
 #                of its file, is that app's program
 #   win95studio             the Studio: Data Designer, form designer, code
+#   win95studio-mcp (mcp/)  the Studio's tools for Claude: an MCP server that
+#                           makes and changes projects
 
 find_package(Qt6 REQUIRED COMPONENTS Sql)
 
@@ -130,3 +132,25 @@ target_link_libraries(win95studio PRIVATE
 )
 
 install(TARGETS win95studio RUNTIME DESTINATION bin)
+
+# --- the MCP server (Claude builds apps with it) ----------------------------------
+qt_add_executable(win95studio-mcp mcp/main.cpp)
+set_target_properties(win95studio-mcp PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+target_include_directories(win95studio-mcp PRIVATE runtime)
+qt_add_resources(win95studio-mcp "studiomcp"
+    PREFIX /studio-mcp
+    BASE mcp
+    FILES mcp/reference.md)
+target_compile_definitions(win95studio-mcp PRIVATE
+    WAYLAND95_STUDIO_MANUAL="${CMAKE_INSTALL_FULL_DATADIR}/wayland95/studio-manual"
+    WAYLAND95_STUDIO_MANUAL_SOURCE="${CMAKE_SOURCE_DIR}/docs/studio-manual")
+target_link_libraries(win95studio-mcp PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::Sql
+    win95apprtplugin
+    win95uiplugin
+)
+install(TARGETS win95studio-mcp RUNTIME DESTINATION bin)

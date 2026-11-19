@@ -1,4 +1,4 @@
-[Contents](index.md) | Previous: [Running and Making Programs](running.md)
+[Contents](index.md) | Previous: [Running and Making Programs](running.md) | Next: [Building Apps with Claude](claude.md)
 
 # When Something Isn't Right
 
@@ -104,4 +104,4 @@ message. Ask it to go on, or give it more steps.
 with Wayland 95. The manual's files are in
 `share/wayland95/studio-manual`.
 
-[Contents](index.md) | Previous: [Running and Making Programs](running.md)
+[Contents](index.md) | Previous: [Running and Making Programs](running.md) | Next: [Building Apps with Claude](claude.md)

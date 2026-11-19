@@ -1,7 +1,8 @@
 #!/bin/bash
 # Tests Wayland Studio's runtime without a screen: the ORM and its
 # validation (AppDatabase, every Validation Rule), the compiler (a project into QML, what's wrong
-# with a broken one), and a made program running its form's code.
+# with a broken one), a made program running its form's code, and Claude's
+# tools (win95studio-mcp, an MCP server: mcp.py).
 # (The Studio's own windows are tests/run.sh's `studio` suite.)
 #
 #   tests/studio/run.sh
@@ -548,6 +549,22 @@ server() { # KIND(mysql|postgresql) "name=... user=..."
     case "$out" in "ok "*) ok "$kind: its tables read into the project, and read and written through it (${out#ok } checks)" ;;
                    *) bad "$kind: importing the database's tables" "$(echo "$out" | head -20)" ;; esac
 }
+echo "== Claude's tools (win95studio-mcp)"
+# the MCP server as Claude Code uses it: JSON-RPC on its stdin and stdout
+if [ -x "$BUILD/win95studio-mcp" ] && command -v python3 >/dev/null; then
+    mkdir "$WORK/mcp"
+    while IFS= read -r line; do
+        case "$line" in
+            "PASS  "*) ok "${line#PASS  }" ;;
+            "FAIL  "*) bad "${line#FAIL  }" ;;
+            "      "*) echo "$line" ;;
+            *) bad "mcp.py" "$line" ;;
+        esac
+    done < <(python3 "$HERE/mcp.py" "$BUILD" "$WORK/mcp" 2>&1)
+else
+    bad "win95studio-mcp" "not built (or no python3)"
+fi
+
 if [ -n "${STUDIO_MYSQL:-}" ]; then
     echo "== The ORM (MySQL)"
     server mysql "$STUDIO_MYSQL"

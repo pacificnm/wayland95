@@ -249,6 +249,7 @@ Window {
         closeData();
         project = JSON.parse(JSON.stringify(p));
         projectPath = path;
+        StudioTools.watchProject(path);
         modified = false;
         undoStack = [];
         redoStack = [];
@@ -307,6 +308,7 @@ Window {
             return false;
         }
         projectPath = path;
+        StudioTools.watchProject(path);
         modified = false;
         return true;
     }
@@ -1306,6 +1308,72 @@ Window {
         target: StudioTools
         function onOutput(line) { studio.say(line); }
         function onFinished(code) { studio.say("--- ended" + (code !== 0 ? " (exit " + code + ")" : "") + " ---"); }
+        function onProjectFileChanged() { reloadTimer.restart(); }
+    }
+
+    // ------------------------------------------- the project changed on disk
+    // Another program wrote the project (Claude through win95studio-mcp, an
+    // editor): with nothing unsaved here it's taken as it is, as one change
+    // that Undo takes back; with unsaved changes, the Studio asks first.
+    // Not while a dialog or menu is open (it may hold a copy of a piece).
+    Timer {
+        id: reloadTimer
+        interval: 200
+        onTriggered: studio.reloadFromDisk()
+    }
+    property bool reloadAsking: false
+    // the same JSON whatever order its keys were made in
+    function canonical(v) {
+        if (Array.isArray(v))
+            return "[" + v.map(canonical).join(",") + "]";
+        if (v !== null && typeof v === "object")
+            return "{" + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ":" + canonical(v[k]); }).join(",") + "}";
+        return JSON.stringify(v);
+    }
+    function reloadFromDisk() {
+        if (projectPath === "" || reloadAsking)
+            return;
+        if (modalOpen) {
+            reloadTimer.restart();
+            return;
+        }
+        var r = StudioTools.loadProject(projectPath);
+        if (!r.ok)
+            return; // (gone, or not all there yet: the next change says)
+        flush();
+        if (canonical(r.project) === canonical(project))
+            return;
+        if (!modified) {
+            takeFromDisk(r.project);
+            return;
+        }
+        reloadAsking = true;
+        msgBox.show("Wayland Studio", Win95Fs.fileName(projectPath) + " was changed by another program.\n\n"
+                    + "Load it? The changes you haven't saved here will be lost.", "question", ["Yes", "No"], function (i) {
+            reloadAsking = false;
+            if (i !== 0)
+                return;
+            var again = StudioTools.loadProject(projectPath);
+            if (again.ok)
+                takeFromDisk(again.project);
+        });
+    }
+    function takeFromDisk(p) {
+        var stack = undoStack;
+        stack.push(JSON.stringify(project));
+        if (stack.length > 100)
+            stack.shift();
+        undoStack = stack;
+        redoStack = [];
+        if (viewMode === "data") {
+            // (the table may have changed under the Data view)
+            closeData();
+            viewMode = "design";
+        }
+        project = JSON.parse(JSON.stringify(p));
+        modified = false;
+        fixView();
+        revision++;
     }
 
     // ------------------------------------------------------------------ menus
@@ -1435,6 +1503,34 @@ Window {
                 openProject(path);
         });
     }
+    // Help > Build Apps with Claude: Claude Code (or another MCP client)
+    // starts win95studio-mcp and builds apps with its tools
+    function showClaude() {
+        var server = StudioTools.mcpServer();
+        if (server === "") {
+            msgBox.show("Build Apps with Claude", "Claude's tools for Wayland Studio (win95studio-mcp) aren't installed.",
+                        "error", ["OK"], null);
+            return;
+        }
+        var command = "claude mcp add --scope user wayland-studio -- " + server;
+        var claude = StudioTools.claudeCodeInstalled();
+        msgBox.show("Build Apps with Claude",
+                    "Claude can build Wayland Studio apps for you: the tables, the forms, their code. It works on the "
+                    + "project files, and a project open here follows each change (Undo takes one back).\n\n"
+                    + "To give Claude Code the tools, run:\n\n" + command + "\n\n"
+                    + "Then ask Claude for an app, like \"Make a Wayland Studio app in ~/Recipes for my recipes.\"\n\n"
+                    + "Another MCP client: its command is " + server + " (stdio). Help > Contents, Building Apps with Claude, says more.",
+                    "info", claude ? ["Add to Claude Code", "Copy Command", "Close"] : ["Copy Command", "Close"], function (i) {
+            if (claude && i === 0) {
+                var error = StudioTools.addToClaudeCode();
+                msgBox.show("Build Apps with Claude", error === ""
+                            ? "Claude Code has Wayland Studio's tools now. Start a new Claude Code session and ask it for an app."
+                            : "It wasn't added:\n\n" + error, error === "" ? "info" : "error", ["OK"], null);
+            } else if (i === (claude ? 1 : 0)) {
+                StudioTools.copyText(command);
+            }
+        });
+    }
     function helpMenu() {
         return [
             { text: "&Contents", shortcut: "F1", action: function () { studio.openManual("index.md"); } },
@@ -1445,6 +1541,7 @@ Window {
             { text: "An &AI Chat in Your App", action: function () { studio.openManual("ai-chat.md"); } },
             { separator: true },
             { text: "Open the Book Club &Sample", action: studio.openSample },
+            { text: "Build Apps with &Claude...", action: studio.showClaude },
             { separator: true },
             { text: "&About Wayland Studio", action: function () {
                 msgBox.show("About Wayland Studio",

@@ -33,6 +33,8 @@ Studio in detail; come back to them while you build your own.
    Check for Problems, Make Program, and where the data is kept.
 8. [When Something Isn't Right](troubleshooting.md): what the usual
    surprises mean, and what to do about them.
+9. [Building Apps with Claude](claude.md): Claude Code builds an app for
+   you with the Studio's tools, and the Studio shows it as it goes.
 
 ## The Book Club sample
 

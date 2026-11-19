@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDateTime>
 #include <QObject>
 #include <QProcess>
 #include <QVariantList>
@@ -60,16 +61,37 @@ public:
     Q_INVOKABLE bool run(const QString &projectPath);
     Q_INVOKABLE void stop();
 
+    // Claude's tools (win95studio-mcp): the command an MCP client starts
+    // ("" if it isn't installed), whether Claude Code is, and adding the
+    // server to it (claude mcp add, for all its projects): "" or what went wrong
+    Q_INVOKABLE QString mcpServer() const;
+    Q_INVOKABLE bool claudeCodeInstalled() const;
+    Q_INVOKABLE QString addToClaudeCode() const;
+    Q_INVOKABLE void copyText(const QString &text) const;
+
+    // watch the open project's file ("": none): projectFileChanged when
+    // another program (win95studio-mcp, an editor) writes it
+    Q_INVOKABLE void watchProject(const QString &path);
+
 signals:
     void runningChanged();
     void output(const QString &line);
     void finished(int exitCode);
+    void projectFileChanged();
 
 private:
+    void projectFileTouched();
+
     QString runner() const;
     QString manualDir() const;
+    QString claudeCode() const;
     QVariantMap runTool(const QStringList &arguments) const;
 
     QProcess *m_run = nullptr;
     QByteArray m_pending;
+    class QFileSystemWatcher *m_watcher = nullptr;
+    class QTimer *m_settle = nullptr;
+    QString m_watched;
+    QDateTime m_watchedTime;
+    qint64 m_watchedSize = -1;
 };

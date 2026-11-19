@@ -7,8 +7,10 @@
 #include <QJsonObject>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQuickWindow>
 #include <QStandardPaths>
 #include <QTextStream>
+#include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
 
 #include "aiclient.h"
@@ -28,6 +30,10 @@ Q_IMPORT_QML_PLUGIN(Win95AppPlugin)
 //   win95apprun --check PROJECT              compile it; what's wrong, one per line (exit 1 if anything)
 //   win95apprun --build PROJECT -o FILE      make the program
 //   win95apprun --qml PROJECT [FORM]         the QML a form compiles to
+//   win95apprun --shot PROJECT [FORM] -o FILE.png
+//                                            a picture of a form as it opens (its load
+//                                            code run), off the screen: what's wrong on
+//                                            stderr (win95studio-mcp's show_form)
 //   win95apprun --eval SCRIPT.js PROJECT     run a script with the project's database as Db and
 //                                            Test.out(text) to print (tests/studio/run.sh)
 //
@@ -94,6 +100,13 @@ bool openDatabase(AppDatabase &db, const QJsonObject &compiled, const QString &d
 
 int main(int argc, char *argv[])
 {
+    // --shot draws off the screen, with Qt Quick's software renderer
+    for (int i = 1; i < argc; ++i) {
+        if (qstrcmp(argv[i], "--shot") == 0) {
+            qputenv("QT_QPA_PLATFORM", "offscreen");
+            QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
+        }
+    }
     QGuiApplication app(argc, argv);
     QStringList args = app.arguments();
     args.removeFirst();
@@ -105,6 +118,7 @@ int main(int argc, char *argv[])
     const bool program = !payload.isEmpty();
     QString mode;
     QString projectPath;
+    QString shotForm, shotPath;
 
     if (program) {
         compiled = AppCompiler::unpack(payload);
@@ -116,7 +130,8 @@ int main(int argc, char *argv[])
         QString outPath, script, formName;
         for (int i = 0; i < args.size(); ++i) {
             const QString a = args.at(i);
-            if (a == QLatin1String("--check") || a == QLatin1String("--build") || a == QLatin1String("--qml")) {
+            if (a == QLatin1String("--check") || a == QLatin1String("--build") || a == QLatin1String("--qml")
+                || a == QLatin1String("--shot")) {
                 mode = a.mid(2);
             } else if (a == QLatin1String("--eval") && i + 1 < args.size()) {
                 mode = QStringLiteral("eval");
@@ -130,7 +145,7 @@ int main(int argc, char *argv[])
             }
         }
         if (projectPath.isEmpty()) {
-            say(QStringLiteral("usage: win95apprun [--check | --build -o FILE | --qml | --eval SCRIPT.js] PROJECT.w95proj"));
+            say(QStringLiteral("usage: win95apprun [--check | --build -o FILE | --qml | --shot -o FILE.png | --eval SCRIPT.js] PROJECT.w95proj"));
             return 2;
         }
         QString error;
@@ -205,7 +220,17 @@ int main(int argc, char *argv[])
             }
             return 0;
         }
-        if (!problems.isEmpty()) {
+        if (mode == QLatin1String("shot")) {
+            if (outPath.isEmpty()) {
+                say(QStringLiteral("--shot needs -o FILE.png"));
+                return 2;
+            }
+            // (what's wrong is said, and the form drawn as far as it goes)
+            for (const QString &p : std::as_const(problems))
+                say(p);
+            shotForm = formName;
+            shotPath = outPath;
+        } else if (!problems.isEmpty()) {
             for (const QString &p : std::as_const(problems))
                 say(p);
             return 1;
@@ -244,6 +269,33 @@ int main(int argc, char *argv[])
     });
 
     QString error;
+    if (!shotPath.isEmpty()) {
+        // one form, drawn off the screen once its load code has run; its
+        // records too if the database opens (it's the project's own)
+        if (!openDatabase(db, compiled, dataDir, &error))
+            say(error);
+        if (shotForm.isEmpty())
+            shotForm = info.value(QLatin1String("startForm")).toString();
+        auto *window = qobject_cast<QQuickWindow *>(runtime.openForm(shotForm));
+        if (!window) {
+            // (openForm has said why)
+            say(QStringLiteral("The form %1 didn't open.").arg(shotForm));
+            return 1;
+        }
+        int status = 1;
+        QTimer::singleShot(700, &app, [&]() {
+            const QImage image = window->grabWindow();
+            if (image.isNull())
+                say(QStringLiteral("The form couldn't be drawn."));
+            else if (!image.save(shotPath, "PNG"))
+                say(QStringLiteral("%1 can't be written.").arg(shotPath));
+            else
+                status = 0;
+            app.exit(status);
+        });
+        app.exec();
+        return status;
+    }
     if (!openDatabase(db, compiled, dataDir, &error) || !runtime.start(&error)) {
         say(error);
         runtime.msgBox(error, runtime.title(), QStringLiteral("error"));

@@ -4212,6 +4212,88 @@ App.openForm("About")' ]
 
 
 # --- Wayland Studio: a database that was there already, into a project (Project > Import Tables) ---
+# --- Claude's tools (win95studio-mcp) and an open Studio --------------------------
+# one tool call through the MCP server, as Claude makes it: mcp_call TOOL JSON-ARGUMENTS
+mcp_call() {
+    python3 - "$BUILD/win95studio-mcp" "$1" "$2" <<'PY' 2>&1
+import json, subprocess, sys
+p = subprocess.Popen([sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+msgs = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": sys.argv[2], "arguments": json.loads(sys.argv[3])}}]
+out, _ = p.communicate("".join(json.dumps(m) + "\n" for m in msgs), timeout=60)
+r = [json.loads(l) for l in out.splitlines()][-1]["result"]
+print(("ERROR " if r["isError"] else "") + " ".join(c.get("text", "") for c in r["content"]))
+PY
+}
+suite_studiomcp() {
+    say "studiomcp: Claude's tools (win95studio-mcp) change a project the Studio has open: it follows"
+    [ -x "$BUILD/win95studio" ] && [ -x "$BUILD/win95studio-mcp" ] || { bad "win95studio-mcp" "not built"; return; }
+    fresh
+    start_shell || return
+    STHOME=$WORK/home-$SUITE
+    rm -rf "$STHOME"; mkdir -p "$STHOME"
+    cp "$REPO/tests/studio/contacts.w95proj" "$STHOME/"
+    local proj=$STHOME/contacts.w95proj
+    # a stand-in claude (Help > Build Apps with Claude adds the server to it): what it's asked
+    mkdir -p "$STHOME/bin"
+    printf '#!/bin/sh\necho "$*" >>"%s"\necho "Added stdio MCP server wayland-studio"\n' "$WORK/$SUITE-claude.log" >"$STHOME/bin/claude"
+    chmod +x "$STHOME/bin/claude"
+    HOME=$STHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        PATH="$STHOME/bin:$PATH" "$BUILD/win95studio" "$proj" >"$WORK/$SUITE-studio.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95studio)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    away; shot open
+    expect_pixel "the form is open in the designer (nothing red where the new Shape goes)" open $(stf 430 305 | tr ',' ' ') '!ff0000'
+
+    # a red Shape, put on the form through the MCP server: the Studio shows it, with nothing to save
+    local said
+    said=$(mcp_call put_element "{\"path\": \"$proj\", \"form\": \"Main\", \"element\": {\"type\": \"Shape\", \"name\": \"mcpBox\", \"x\": 400, \"y\": 290, \"width\": 64, \"height\": 32, \"props\": {\"backColor\": \"#ff0000\"}}}")
+    case "$said" in "Added mcpBox (Shape) on Main at 400,290, 64x32."*) ok "put_element adds a Shape to the project's file" ;; *) bad "put_element adds a Shape to the project's file" "$said" ;; esac
+    sleep 1
+    away; shot reloaded
+    expect_pixel "the open Studio shows it on its own" reloaded $(stf 430 305 | tr ',' ' ') ff0000
+    query list | grep -q "^contacts.w95proj - Wayland Studio|"
+    expect_true $? "with nothing to save (the title has no *)" "$(query list | tr '\n' ' ')"
+
+    # Undo takes the change back; then (unsaved changes) a change on disk asks first
+    pointer click:327,94 wait:0.5   # (the toolbar's Undo)
+    away; shot undone
+    expect_pixel "Undo takes the change from outside back" undone $(stf 430 305 | tr ',' ' ') '!ff0000'
+    query list | grep -q "^contacts.w95proj \* - Wayland Studio|"
+    expect_true $? "(and the project has a change to save)" "$(query list | tr '\n' ' ')"
+    said=$(mcp_call put_element "{\"path\": \"$proj\", \"form\": \"Main\", \"element\": {\"name\": \"mcpBox\", \"props\": {\"backColor\": \"#0000ff\"}}, \"merge\": true}")
+    sleep 1
+    away; shot asking
+    expect_pixel "with unsaved changes, it isn't taken without asking" asking $(stf 430 305 | tr ',' ' ') '!0000ff'
+    pointer key:Return wait:0.8
+    away; shot taken
+    expect_pixel "Yes: it's loaded (the Shape blue now)" taken $(stf 430 305 | tr ',' ' ') 0000ff
+    query list | grep -q "^contacts.w95proj - Wayland Studio|"
+    expect_true $? "and there's nothing to save" "$(query list | tr '\n' ' ')"
+
+    # the Studio's own save doesn't come back as a change from outside
+    pointer click:$(stf 40 292) wait:0.3 key:Delete wait:0.3 key:ctrl+s wait:1
+    away; shot saved
+    query list | grep -q "^contacts.w95proj - Wayland Studio|" && [ "$(stjson Main optFriend c)" = None ]
+    expect_true $? "its own Ctrl+S isn't taken for another program's change (no question, saved)" "$(query list | tr '\n' ' ') $(stjson Main optFriend c)"
+    expect_pixel "(and nothing asks)" saved 640 400 '!c0c0c0'
+
+    # Help > Build Apps with Claude: the command, and Add to Claude Code
+    pointer click:296,66 wait:0.5
+    away; shot help-menu
+    pointer click:340,222 wait:0.6
+    away; shot claude
+    pointer key:Return wait:1
+    grep -qx "mcp add --scope user wayland-studio -- $BUILD/win95studio-mcp" "$WORK/$SUITE-claude.log"
+    expect_true $? "Help > Build Apps with Claude: Add to Claude Code runs claude mcp add with the server" "$(cat "$WORK/$SUITE-claude.log" 2>&1)"
+    away; shot added
+    pointer key:Return wait:0.4
+    query list | sed -n 's/^\([^|]*\)|win95studio|.*/\1/p' | while read -r t; do query close "$t"; done
+    sleep 0.5
+}
+
 suite_studioimport() {
     say "studioimport: Wayland Studio: Import Tables from a database the Studio didn't make, and forms for them"
     [ -x "$BUILD/win95studio" ] && command -v sqlite3 >/dev/null || { bad "studioimport" "not built, or no sqlite3"; return; }
@@ -4548,7 +4630,7 @@ JS
         "$(echo "$colors" | sort -rn | head -8 | tr '\n' ' ')"
 }
 
-ALL=(input firefox windows popups x11 clipboard qt frames snap alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx studio studioimport studioapi studioai studiograph studiostock monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames snap alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx studio studiomcp studioimport studioapi studioai studiograph studiostock monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

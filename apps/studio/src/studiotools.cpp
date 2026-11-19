@@ -2,15 +2,19 @@
 
 #include "appcompiler.h"
 
+#include <QClipboard>
 #include <QColor>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <QFontDatabase>
+#include <QGuiApplication>
 #include <QJsonDocument>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QTimer>
 #include <QUrl>
 
 StudioTools::StudioTools(QObject *parent)
@@ -294,4 +298,111 @@ void StudioTools::stop()
         m_run->kill();
         m_run->waitForFinished(1000);
     }
+}
+
+// The file and its folder are both watched: a program that saves by writing
+// a new file and renaming it over the old one (QSaveFile, as the Studio and
+// win95studio-mcp do) replaces the file the watcher was following. What
+// changed is told by the file's time and size, a moment after the writes
+// stop.
+void StudioTools::watchProject(const QString &path)
+{
+    if (!m_watcher) {
+        m_watcher = new QFileSystemWatcher(this);
+        m_settle = new QTimer(this);
+        m_settle->setSingleShot(true);
+        m_settle->setInterval(150);
+        connect(m_watcher, &QFileSystemWatcher::fileChanged, this, &StudioTools::projectFileTouched);
+        connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, &StudioTools::projectFileTouched);
+        connect(m_settle, &QTimer::timeout, this, [this]() {
+            const QFileInfo info(m_watched);
+            if (!m_watched.isEmpty() && !m_watcher->files().contains(m_watched) && info.exists())
+                m_watcher->addPath(m_watched);
+            if (!info.exists() || (info.lastModified() == m_watchedTime && info.size() == m_watchedSize))
+                return;
+            m_watchedTime = info.lastModified();
+            m_watchedSize = info.size();
+            emit projectFileChanged();
+        });
+    }
+    const QString file = path.isEmpty() ? QString() : QFileInfo(path).absoluteFilePath();
+    if (file == m_watched) {
+        // (saved by the Studio: that's the file as it is now)
+        const QFileInfo info(file);
+        m_watchedTime = info.lastModified();
+        m_watchedSize = info.size();
+        return;
+    }
+    if (!m_watcher->files().isEmpty())
+        m_watcher->removePaths(m_watcher->files());
+    if (!m_watcher->directories().isEmpty())
+        m_watcher->removePaths(m_watcher->directories());
+    m_watched = file;
+    if (file.isEmpty())
+        return;
+    const QFileInfo info(file);
+    m_watchedTime = info.lastModified();
+    m_watchedSize = info.size();
+    m_watcher->addPath(info.absolutePath());
+    if (info.exists())
+        m_watcher->addPath(file);
+}
+
+void StudioTools::projectFileTouched()
+{
+    m_settle->start();
+}
+
+QString StudioTools::mcpServer() const
+{
+    const QString beside = QCoreApplication::applicationDirPath() + QStringLiteral("/win95studio-mcp");
+    if (QFileInfo(beside).isExecutable())
+        return beside;
+    return QStandardPaths::findExecutable(QStringLiteral("win95studio-mcp"));
+}
+
+// claude: on PATH, or where its installer puts it
+QString StudioTools::claudeCode() const
+{
+    QString found = QStandardPaths::findExecutable(QStringLiteral("claude"));
+    for (const QString &place : { QStringLiteral("/.local/bin/claude"), QStringLiteral("/.claude/local/claude") }) {
+        if (found.isEmpty() && QFileInfo(QDir::homePath() + place).isExecutable())
+            found = QDir::homePath() + place;
+    }
+    return found;
+}
+
+bool StudioTools::claudeCodeInstalled() const
+{
+    return !claudeCode().isEmpty();
+}
+
+QString StudioTools::addToClaudeCode() const
+{
+    const QString claude = claudeCode();
+    const QString server = mcpServer();
+    if (claude.isEmpty())
+        return QStringLiteral("Claude Code isn't installed.");
+    if (server.isEmpty())
+        return QStringLiteral("win95studio-mcp isn't installed.");
+    QProcess p;
+    p.setProcessChannelMode(QProcess::MergedChannels);
+    p.start(claude, { QStringLiteral("mcp"), QStringLiteral("add"), QStringLiteral("--scope"), QStringLiteral("user"),
+                      QStringLiteral("wayland-studio"), QStringLiteral("--"), server });
+    if (!p.waitForStarted(10000) || !p.waitForFinished(30000)) {
+        p.kill();
+        return QStringLiteral("claude didn't answer.");
+    }
+    const QString said = QString::fromUtf8(p.readAll()).trimmed();
+    if (p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0)
+        return QString();
+    if (said.contains(QLatin1String("already exists")))
+        return QString(); // (added before)
+    return said.isEmpty() ? QStringLiteral("claude mcp add failed.") : said;
+}
+
+void StudioTools::copyText(const QString &text) const
+{
+    if (QGuiApplication::clipboard())
+        QGuiApplication::clipboard()->setText(text);
 }

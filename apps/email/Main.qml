@@ -434,7 +434,7 @@ Window {
                         }
                     }
                 }
-                WheelHandler { onWheel: (event) => folderList.contentY = Math.max(0, Math.min(folderList.contentHeight - folderList.height, folderList.contentY - event.angleDelta.y / 2)) }
+                WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => folderList.contentY = Math.max(0, Math.min(folderList.contentHeight - folderList.height, folderList.contentY - event.angleDelta.y / 2)) }
             }
         }
     }
@@ -595,7 +595,7 @@ Window {
                         }
                     }
                 }
-                WheelHandler { onWheel: (event) => listBar.scrollBy(-event.angleDelta.y / 120 * 54) }
+                WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => listBar.scrollBy(-event.angleDelta.y / 120 * 54) }
             }
             ScrollBar95 {
                 id: listBar
@@ -743,7 +743,7 @@ Window {
                         onTextChanged: bodyFlick.contentY = 0
                         onLinkActivated: (link) => Qt.openUrlExternally(link)
                     }
-                    WheelHandler { onWheel: (event) => bodyBar.scrollBy(-event.angleDelta.y / 120 * 54) }
+                    WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => bodyBar.scrollBy(-event.angleDelta.y / 120 * 54) }
                 }
                 ScrollBar95 {
                     id: bodyBar

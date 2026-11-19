@@ -193,7 +193,7 @@ Window {
                            + "<br>" + esc(p.description || "");
                 }
             }
-            WheelHandler { onWheel: (event) => detailBar.scrollBy(-event.angleDelta.y / 120 * 45) }
+            WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => detailBar.scrollBy(-event.angleDelta.y / 120 * 45) }
         }
         ScrollBar95 {
             id: detailBar

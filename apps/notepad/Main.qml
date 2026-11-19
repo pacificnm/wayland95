@@ -328,6 +328,7 @@ Window {
             }
 
             WheelHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: (event) => {
                     if (event.modifiers & Qt.ShiftModifier)
                         hbar.scrollBy(-event.angleDelta.y / 120 * 48);

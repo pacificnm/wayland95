@@ -310,7 +310,7 @@ Item {
                     onDoubleClicked: page.properties(row.modelData)
                 }
             }
-            WheelHandler { onWheel: (event) => bar.scrollBy(-event.angleDelta.y / 120 * 54) }
+            WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => bar.scrollBy(-event.angleDelta.y / 120 * 54) }
         }
         ScrollBar95 {
             id: bar
@@ -416,7 +416,7 @@ Item {
                     font.pixelSize: Theme.fontSize
                     color: Theme.text
                 }
-                WheelHandler { onWheel: (event) => statusBar.scrollBy(-event.angleDelta.y / 120 * 48) }
+                WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => statusBar.scrollBy(-event.angleDelta.y / 120 * 48) }
             }
             ScrollBar95 {
                 id: statusBar

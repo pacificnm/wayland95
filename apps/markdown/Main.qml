@@ -908,6 +908,7 @@ Window {
             interactive: false
             contentWidth: width
             contentHeight: Math.max(height, editor.height)
+            onContentYChanged: window.log("scrolled " + Math.round(contentY))
 
             TextEdit {
                 id: editor
@@ -936,6 +937,8 @@ Window {
                 onLinkActivated: (link) => { if (window.readingView) window.openLink(link); }
 
                 Keys.onPressed: (event) => {
+                    if (window.pageKey(event, editor, vbar))
+                        return;
                     // (the reader's history keys: the page would take them as cursor moves)
                     if (window.readerOnly) {
                         var alt = event.modifiers & Qt.AltModifier;
@@ -1023,6 +1026,7 @@ Window {
             }
 
             WheelHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: (event) => vbar.scrollBy(-event.angleDelta.y / 120 * 54)
             }
         }
@@ -1049,6 +1053,7 @@ Window {
             interactive: false
             contentWidth: width
             contentHeight: Math.max(height, sourceEdit.height)
+            onContentYChanged: window.log("source scrolled " + Math.round(contentY))
 
             TextEdit {
                 id: sourceEdit
@@ -1074,6 +1079,7 @@ Window {
                     wordTimer.restart();
                 }
                 onCursorRectangleChanged: if (activeFocus) window.ensureVisible(sourceFlick, cursorRectangle)
+                Keys.onPressed: (event) => window.pageKey(event, sourceEdit, sourceBar)
 
                 MouseArea {
                     anchors.fill: parent
@@ -1087,6 +1093,7 @@ Window {
                 }
             }
             WheelHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: (event) => sourceBar.scrollBy(-event.angleDelta.y / 120 * 48)
             }
         }
@@ -1100,6 +1107,29 @@ Window {
             flickable: sourceFlick
             stepSize: 16
         }
+    }
+
+    // Page Up / Page Down (TextEdit ignores them): the view moves a page and
+    // the cursor with it, to the same place on the screen (Shift: selecting)
+    function pageKey(event, edit, bar) {
+        if ((event.key !== Qt.Key_PageDown && event.key !== Qt.Key_PageUp)
+                || (event.modifiers & ~(Qt.ShiftModifier | Qt.KeypadModifier)))
+            return false;
+        var dir = event.key === Qt.Key_PageDown ? 1 : -1;
+        var f = bar.flickable;
+        var r = edit.cursorRectangle;
+        var before = f.contentY;
+        bar.scrollBy(dir * Math.max(20, f.height - 20)); // (a line kept in view)
+        var moved = f.contentY - before;
+        // already at the top or bottom: to the start or end
+        var y = moved !== 0 ? r.y + moved + r.height / 2 : (dir > 0 ? edit.height : 0);
+        var pos = edit.positionAt(r.x, y);
+        if (event.modifiers & Qt.ShiftModifier)
+            edit.moveCursorSelection(pos);
+        else
+            edit.cursorPosition = pos;
+        event.accepted = true;
+        return true;
     }
 
     function ensureVisible(f, r) {

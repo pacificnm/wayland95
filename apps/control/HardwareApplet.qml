@@ -184,7 +184,7 @@ PropertySheet {
                     }
                 }
 
-                WheelHandler { onWheel: (event) => treeBar.scrollBy(-event.angleDelta.y / 120 * 57) }
+                WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => treeBar.scrollBy(-event.angleDelta.y / 120 * 57) }
             }
             ScrollBar95 {
                 id: treeBar

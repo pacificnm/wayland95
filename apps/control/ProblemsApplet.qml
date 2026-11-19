@@ -98,7 +98,7 @@ PropertySheet {
                     font.pixelSize: Theme.fontSize - 1
                     color: Theme.text
                 }
-                WheelHandler { onWheel: (event) => bar.scrollBy(-event.angleDelta.y / 120 * 48) }
+                WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => bar.scrollBy(-event.angleDelta.y / 120 * 48) }
             }
             ScrollBar95 {
                 id: bar

@@ -274,7 +274,7 @@ Window {
                     else if (r.y + r.height > flick.contentY + flick.height) flick.contentY = r.y + r.height - flick.height;
                 }
             }
-            WheelHandler { onWheel: (event) => bar.scrollBy(-event.angleDelta.y / 120 * 54) }
+            WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => bar.scrollBy(-event.angleDelta.y / 120 * 54) }
         }
         ScrollBar95 {
             id: bar

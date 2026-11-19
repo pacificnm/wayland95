@@ -320,7 +320,7 @@ Window {
                 z: -1
                 onPressed: { grid.forceActiveFocus(); win.current = ""; }
             }
-            WheelHandler { onWheel: (event) => vbar.scrollBy(-event.angleDelta.y / 120 * 54) }
+            WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => vbar.scrollBy(-event.angleDelta.y / 120 * 54) }
         }
 
         ScrollBar95 {

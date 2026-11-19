@@ -136,7 +136,7 @@ Window {
                 }
             }
 
-            WheelHandler { onWheel: (event) => bar.scrollBy(-event.angleDelta.y / 120 * 60) }
+            WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => bar.scrollBy(-event.angleDelta.y / 120 * 60) }
         }
         ScrollBar95 {
             id: bar

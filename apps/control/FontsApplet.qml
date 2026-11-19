@@ -345,6 +345,7 @@ Window {
             }
 
             WheelHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: (event) => {
                     if (win.view === "list")
                         hbar.scrollBy(-event.angleDelta.y / 120 * 66);

@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games files find repos markdown startup drives backup calc email web dbservices nginx studio monitors screen
+#                                  games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx studio monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -2623,6 +2623,52 @@ msaid() { grep -q "markdown: $1" "$WORK/$SUITE-markdown.log"; }
 mwait() { local i; for i in $(seq 40); do msaid "$1" && return 0; sleep 0.25; done; return 1; }
 MX=43; MY=55
 mbtn() { echo "$((MX + 4 + $1)),$((MY + $2))"; } # X-IN-BAR BAR-Y: a toolbar button's middle on screen
+# the page and the Markdown view scroll: the wheel, the scroll bar, the keys
+suite_markdownscroll() {
+    say "markdownscroll: the Markdown Editor scrolls (wheel, scroll bar, keys)"
+    [ -x "$BUILD/win95markdown" ] || { bad "win95markdown" "not built"; return; }
+    fresh
+    start_shell || return
+    MHOME=$WORK/home-$SUITE
+    rm -rf "$MHOME"; mkdir -p "$MHOME/Documents"
+    { echo "# Long Document"; for i in $(seq 1 120); do printf '\nParagraph %d, some words to fill the line.\n' "$i"; done; } >"$MHOME/Documents/long.md"
+    start_markdown "$MHOME/Documents/long.md"
+    away; shot top
+    local n
+    n=$(grep -c "markdown: scrolled" "$WORK/$SUITE-markdown.log")
+    pointer move:400,400 wheel:3 wait:0.5
+    away; shot wheeled
+    [ "$(grep -c "markdown: scrolled [1-9]" "$WORK/$SUITE-markdown.log")" -gt "$n" ]
+    expect_true $? "the wheel scrolls the page" "$(grep "markdown: scrolled" "$WORK/$SUITE-markdown.log" | tail -3 | tr '\n' ' ')"
+
+    # the scroll bar's down arrow (the bottom of the bar, right of the page)
+    n=$(grep -c "markdown: scrolled" "$WORK/$SUITE-markdown.log")
+    pointer click:793,580 wait:0.4
+    [ "$(grep -c "markdown: scrolled" "$WORK/$SUITE-markdown.log")" -gt "$n" ]
+    expect_true $? "the scroll bar's arrow scrolls the page" "$(grep "markdown: scrolled" "$WORK/$SUITE-markdown.log" | tail -3 | tr '\n' ' ')"
+
+    # Page Down moves the cursor down a page, and the page follows it
+    pointer click:400,300 wait:0.3
+    n=$(grep -c "markdown: scrolled" "$WORK/$SUITE-markdown.log")
+    pointer key:Next key:Next key:Next wait:0.4
+    [ "$(grep -c "markdown: scrolled" "$WORK/$SUITE-markdown.log")" -gt "$n" ]
+    expect_true $? "Page Down scrolls the page" "$(grep "markdown: scrolled" "$WORK/$SUITE-markdown.log" | tail -3 | tr '\n' ' ')"
+    pointer key:Prior key:Prior key:Prior key:Prior key:Prior wait:0.4
+    grep "markdown: scrolled" "$WORK/$SUITE-markdown.log" | tail -1 | grep -q "scrolled 0$"
+    expect_true $? "and Page Up goes back to the top" "$(grep "markdown: scrolled" "$WORK/$SUITE-markdown.log" | tail -3 | tr '\n' ' ')"
+
+    # the Markdown view (Ctrl+M): the wheel
+    pointer key:ctrl+m wait:0.6 move:400,400 wheel:3 wait:0.5
+    away; shot source-wheeled
+    msaid "source scrolled [1-9]"
+    expect_true $? "the wheel scrolls the Markdown view" "$(grep "markdown: source scrolled" "$WORK/$SUITE-markdown.log" | tail -3 | tr '\n' ' ')"
+    pointer click:400,300 wait:0.3 key:ctrl+Home wait:0.3
+    n=$(grep -c "markdown: source scrolled [1-9]" "$WORK/$SUITE-markdown.log")
+    pointer key:Next key:Next wait:0.4
+    [ "$(grep -c "markdown: source scrolled [1-9]" "$WORK/$SUITE-markdown.log")" -gt "$n" ]
+    expect_true $? "Page Down scrolls the Markdown view" "$(grep "markdown: source scrolled" "$WORK/$SUITE-markdown.log" | tail -3 | tr '\n' ' ')"
+}
+
 suite_markdown() {
     say "markdown: the Markdown Editor (win95markdown): open, format, lists, links, tables, the Markdown view, save"
     [ -x "$BUILD/win95markdown" ] || { bad "win95markdown" "not built"; return; }
@@ -4387,7 +4433,7 @@ JS
         "$(echo "$colors" | sort -rn | head -8 | tr '\n' ' ')"
 }
 
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games files find repos markdown startup drives backup calc email web dbservices nginx studio studioimport studioapi studioai studiograph studiostock monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx studio studioimport studioapi studioai studiograph studiostock monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

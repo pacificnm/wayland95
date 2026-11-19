@@ -192,7 +192,7 @@ PropertySheet {
                         Label { x: 4; width: 90; text: modelData.time; horizontalAlignment: Text.AlignRight }
                         Label { x: 104; width: parent.width - 108; elide: Text.ElideRight; wrapMode: Text.NoWrap; text: modelData.unit }
                     }
-                    WheelHandler { onWheel: (event) => blameView.contentY = Math.max(0, Math.min(blameView.contentHeight - blameView.height, blameView.contentY - event.angleDelta.y / 120 * 51)) }
+                    WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => blameView.contentY = Math.max(0, Math.min(blameView.contentHeight - blameView.height, blameView.contentY - event.angleDelta.y / 120 * 51)) }
                 }
             }
         }

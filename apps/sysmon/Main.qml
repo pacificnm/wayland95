@@ -361,7 +361,7 @@ Window {
                             }
                         }
                     }
-                    WheelHandler { onWheel: (event) => listBar.scrollBy(-event.angleDelta.y / 120 * 51) }
+                    WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => listBar.scrollBy(-event.angleDelta.y / 120 * 51) }
                 }
                 ScrollBar95 {
                     id: listBar

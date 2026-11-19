@@ -155,7 +155,7 @@ TrayIcon {
                 }
                 Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: "#e0e0e0" }
             }
-            WheelHandler { onWheel: (event) => bar.scrollBy(-event.angleDelta.y / 120 * 60) }
+            WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => bar.scrollBy(-event.angleDelta.y / 120 * 60) }
         }
         Ui.ScrollBar95 {
             id: bar

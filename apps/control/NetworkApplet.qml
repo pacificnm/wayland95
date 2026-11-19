@@ -386,7 +386,7 @@ PropertySheet {
                     }
                 }
 
-                WheelHandler { onWheel: (event) => wifiBar.scrollBy(-event.angleDelta.y / 120 * 54) }
+                WheelHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; onWheel: (event) => wifiBar.scrollBy(-event.angleDelta.y / 120 * 54) }
             }
             ScrollBar95 {
                 id: wifiBar

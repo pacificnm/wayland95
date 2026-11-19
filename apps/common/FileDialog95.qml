@@ -318,6 +318,7 @@ Dialog95 {
             }
 
             WheelHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: (event) => listBar.scrollBy(-event.angleDelta.y / 120 * 54)
             }
         }

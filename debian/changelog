@@ -1,3 +1,9 @@
+wayland95 (0.5.1) trixie; urgency=medium
+
+  * New: drag a window to the left or right edge of the screen and it snaps to that half (dragging it away gives it back its size). Fixes: Rename in the file manager did nothing (what you typed went to the folder); the mouse wheel didn't scroll the Markdown Editor, and touchpad scrolling didn't work in Notepad, the Control Panel, Email and other programs; Page Up and Page Down now scroll the Markdown Editor.
+
+ -- Wayland 95 <wayland95@localhost>  Wed, 18 Nov 2026 17:25:26 -0800
+
 wayland95 (0.5.0) trixie; urgency=medium
 
   * New: Wayland Studio (Start > Programs > Programming), for making your own Wayland 95 programs: tables with their rules in SQLite, MySQL or PostgreSQL, forms drawn on a grid, code for their events, graphs (stock graphs too), sound and video, web APIs as tables, an AI chat, and a program of its own at the end. Its manual (F1) opens in the new Markdown Reader. Fixes: a screen capture could come back empty on Intel graphics; a drop-down list opened inside a dialog was drawn under it.

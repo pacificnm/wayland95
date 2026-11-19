@@ -9,7 +9,7 @@
 #                                  windows popups x11 clipboard qt frames alttab
 #                                  settings shell dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games find repos markdown startup drives backup calc email web dbservices nginx studio monitors screen
+#                                  games files find repos markdown startup drives backup calc email web dbservices nginx studio monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -2016,6 +2016,66 @@ find_last() { grep '^Find: [0-9]* found' "$WORK/$SUITE-shell.log" | tail -1; }
 find_paths() { # the paths of the last search (the lines after its count)
     awk '/^Find: [0-9]+ found/ { n = 0; delete p; next } /^Find: found / { p[n++] = $3 } END { for (i = 0; i < n; i++) print p[i] }' "$WORK/$SUITE-shell.log"
 }
+# --- the file manager (win95files): renaming --------------------------------------
+# In a made-up home folder, never yours (W95_FILES_DEBUG: what My Computer shows).
+files_start() { # PATH [ARGS...]
+    HOME=$FHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        W95_FILES_DEBUG=1 "$BUILD/win95files" "$@" >>"$WORK/$SUITE-files.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95files)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1
+}
+files_close() {
+    query list | sed -n 's/^\([^|]*\)|win95files|.*/\1/p' | while read -r t; do query close "$t"; done
+    for _ in $(seq 20); do [ "$(windows_of win95files)" -eq 0 ] && break; sleep 0.25; done
+}
+suite_files() {
+    say "files: the file manager (win95files): renaming folders"
+    [ -x "$BUILD/win95files" ] || { bad "win95files" "not built"; return; }
+    fresh
+    start_shell || return
+    FHOME=$WORK/home-$SUITE
+    rm -rf "$FHOME"; mkdir -p "$FHOME/Alpha" "$FHOME/Beta" "$FHOME/Gamma"; echo hi >"$FHOME/note.txt"
+
+    # F2 on a folder, in the folder itself
+    files_start "$FHOME" --select Alpha
+    pointer key:F2 wait:0.4 key:ctrl+a type:apple key:Return wait:0.8
+    [ -d "$FHOME/apple" ] && [ ! -e "$FHOME/Alpha" ]
+    expect_true $? "F2 renames a folder" "$(ls "$FHOME" | tr '\n' ' ') $(tail -3 "$WORK/$SUITE-files.log")"
+    files_close
+
+    # File > Rename, by mouse (maximized: the menu bar is at the top left)
+    files_start "$FHOME" --select Beta
+    query maximize home-$SUITE; sleep 0.8
+    pointer click:18,33 wait:0.5
+    away; shot file-menu
+    # Open, Open Terminal Here, -, New Folder, -, Delete, Rename (18 a row, 8 a line)
+    pointer click:40,142 wait:0.5 key:ctrl+a type:banana key:Return wait:0.8
+    [ -d "$FHOME/banana" ] && [ ! -e "$FHOME/Beta" ]
+    expect_true $? "File > Rename renames a folder" "$(ls "$FHOME" | tr '\n' ' ') $(tail -3 "$WORK/$SUITE-files.log")"
+
+    # in the Details view (its own rename box), a file: the name is
+    # selected without its extension, so typing keeps ".txt"
+    pointer click:340,59 wait:0.5 key:n wait:0.3 key:F2 wait:0.4 type:memo key:Return wait:0.8
+    away; shot details-renamed
+    [ -f "$FHOME/memo.txt" ] && [ ! -e "$FHOME/note.txt" ]
+    expect_true $? "in the Details view, F2 renames (and keeps the extension)" "$(ls "$FHOME" | tr '\n' ' ') $(tail -3 "$WORK/$SUITE-files.log")"
+    files_close
+
+    # from My Computer: open Home, then the right-click menu (the Menu key): Rename
+    files_start "My Computer"
+    away; shot computer
+    pointer key:h wait:0.3 key:Return wait:1 key:g wait:0.3 key:Menu wait:0.5
+    away; shot item-menu
+    pointer key:Down key:Down key:Down key:Down key:Down key:Return wait:0.5
+    away; shot renaming
+    pointer key:ctrl+a type:grape key:Return wait:0.8
+    away; shot renamed
+    [ -d "$FHOME/grape" ] && [ ! -e "$FHOME/Gamma" ]
+    expect_true $? "from My Computer > Home, the right-click menu's Rename renames a folder" "$(ls "$FHOME" | tr '\n' ' ') $(tail -3 "$WORK/$SUITE-files.log")"
+    files_close
+}
+
 suite_find() {
     say "find: Start > Find > Files or Folders... (win95files --find)"
     [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
@@ -4327,7 +4387,7 @@ JS
         "$(echo "$colors" | sort -rn | head -8 | tr '\n' ' ')"
 }
 
-ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games find repos markdown startup drives backup calc email web dbservices nginx studio studioimport studioapi studioai studiograph studiostock monitors screen classic vscode)
+ALL=(input firefox windows popups x11 clipboard qt frames alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games files find repos markdown startup drives backup calc email web dbservices nginx studio studioimport studioapi studioai studiograph studiostock monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

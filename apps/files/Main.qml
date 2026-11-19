@@ -569,7 +569,9 @@ Window {
                     required property bool symlink
                     required property bool hidden
 
-                    readonly property bool editing: window.renameRow === index
+                    // (only the view that's showing: the hidden one's rename box
+                    // took the keyboard, and the typing went to the folder)
+                    readonly property bool editing: window.renameRow === index && window.viewMode === "icons"
                     readonly property bool isCurrent: iconView.currentIndex === index
 
                     width: iconView.cellWidth
@@ -710,7 +712,7 @@ Window {
                     required property bool symlink
                     required property bool hidden
 
-                    readonly property bool editing: window.renameRow === index
+                    readonly property bool editing: window.renameRow === index && window.viewMode === "details"
                     readonly property bool isCurrent: detailsView.currentIndex === index
 
                     width: detailsView.width

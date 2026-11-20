@@ -140,5 +140,7 @@ Item {
         onShutDownRequested: taskbar.shutDownRequested()
         onHelpRequested: taskbar.helpRequested()
         onClosed: taskbar.startMenuClosed()
+        // (the End Task box is the taskbar's one message box)
+        onProblem: (title, text) => endTaskBox.show(title, text, "error", ["OK"])
     }
 }

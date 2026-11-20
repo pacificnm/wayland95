@@ -206,6 +206,29 @@ void WindowManager::toggleFromTaskbar(int index)
     t->requestActivate();
 }
 
+bool WindowManager::showApp(const QString &appId)
+{
+    if (appId.isEmpty())
+        return false;
+    Toplevel *pick = nullptr;
+    for (const QPointer<Toplevel> &t : std::as_const(m_recent)) {
+        if (t && t->appId() == appId) {
+            pick = t;
+            break;
+        }
+    }
+    for (int i = 0; !pick && i < m_toplevels.size(); ++i) {
+        if (m_toplevels.at(i)->appId() == appId)
+            pick = m_toplevels.at(i);
+    }
+    if (!pick)
+        return false;
+    if (pick->minimized())
+        pick->setMinimizedState(false);
+    pick->requestActivate();
+    return true;
+}
+
 QObject *WindowManager::activeFrame() const
 {
     for (Toplevel *t : m_toplevels)

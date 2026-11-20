@@ -2,14 +2,54 @@ import QtQuick
 import Win95Ui
 import Win95Control
 
-// Passwords: change your (login) password, and see who can approve
-// changes to the computer.
+// Passwords: change your (login) password, see who can approve changes to
+// the computer, and choose the log-on screen (Wayland 95's SDDM theme, or
+// the one SDDM had; wayland95-services login-theme writes the choice).
 PropertySheet {
     id: sheet
 
     title: "Passwords Properties"
-    titles: ["Change Passwords", "Administrators"]
-    canApply: false
+    titles: ["Change Passwords", "Administrators", "Log On"]
+
+    // --- the log-on screen
+    property var login: Services.loginScreen()
+    // "wayland95" or "other": what the radio buttons say
+    property string loginChoice: login.ours ? "wayland95" : "other"
+    readonly property bool isSddm: login.displayManager === "" || login.displayManager === "sddm"
+    property bool applying: false
+    property bool closeWhenDone: false
+
+    function loadLogin() {
+        login = Services.loginScreen();
+        loginChoice = login.ours ? "wayland95" : "other";
+        dirty = false;
+    }
+    function chooseLogin(choice) {
+        loginChoice = choice;
+        dirty = choice !== (login.ours ? "wayland95" : "other");
+    }
+
+    onClosing: (close) => {
+        if (applying) {
+            close.accepted = false;
+            closeWhenDone = true;
+        }
+    }
+    onApplyRequested: {
+        applying = true;
+        Services.admin(["login-theme", loginChoice === "wayland95" ? "wayland95" : "default"], "", function (ok, output) {
+            sheet.applying = false;
+            if (!ok) {
+                sheet.closeWhenDone = false;
+                sheet.messageBox.show("Passwords Properties", output || "The log-on screen couldn't be changed.",
+                                      "error", ["OK"], function () { sheet.loadLogin(); });
+                return;
+            }
+            sheet.loadLogin();
+            if (sheet.closeWhenDone)
+                sheet.close();
+        });
+    }
 
     component Label: Text {
         wrapMode: Text.Wrap
@@ -101,6 +141,83 @@ PropertySheet {
             width: parent.width
             color: Theme.shadow
             text: "Adding or removing administrators needs the command line, for example:\n    sudo usermod -aG sudo NAME"
+        }
+    }
+
+    // --------------------------------------------------------------- Log On
+    Item {
+        Label {
+            width: parent.width
+            text: "The log-on screen is where you type your user name and password when the computer "
+                  + "starts, or after you log off. It's the same for everyone on this computer, whichever "
+                  + "desktop they use."
+        }
+
+        GroupBox95 {
+            y: 56
+            width: parent.width
+            height: 70
+            title: "Log-on screen"
+
+            Column {
+                spacing: 4
+                RadioButton95 {
+                    text: "<u>W</u>ayland 95's"
+                    enabled: sheet.isSddm && sheet.login.installed && !sheet.applying
+                    checked: sheet.loginChoice === "wayland95"
+                    onClicked: sheet.chooseLogin("wayland95")
+                }
+                RadioButton95 {
+                    text: "<u>T</u>he computer's own" + (sheet.login.otherName ? " (" + sheet.login.otherName + ")" : "")
+                    enabled: sheet.isSddm && !sheet.applying
+                    checked: sheet.loginChoice === "other"
+                    onClicked: sheet.chooseLogin("other")
+                }
+            }
+        }
+
+        // what the chosen one looks like
+        Bevel {
+            id: loginPreview
+            y: 138
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 204
+            height: 157
+            style: "sunken"
+            face: Theme.shadow
+            readonly property string source: sheet.loginChoice === "wayland95" ? sheet.login.preview : sheet.login.otherPreview
+            Image {
+                anchors.fill: parent
+                anchors.margins: 2
+                source: loginPreview.source
+                sourceSize.width: 400
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+            }
+            Text {
+                anchors.centerIn: parent
+                visible: !loginPreview.source
+                text: "(no picture)"
+                color: Theme.highlight
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize
+            }
+        }
+
+        Label {
+            anchors.bottom: parent.bottom
+            width: parent.width
+            color: Theme.shadow
+            text: !sheet.isSddm
+                  ? "This computer's log-on screen is " + sheet.login.displayManager
+                    + ", not SDDM, so it can't use Wayland 95's."
+                  : !sheet.login.installed
+                  ? "Wayland 95's log-on screen isn't installed (/usr/share/sddm/themes/wayland95)."
+                  : sheet.login.overriddenBy
+                  ? sheet.login.overriddenBy + " chooses another one, and it wins over this setting: remove "
+                    + "its [Theme] Current= line to use Wayland 95's."
+                  : "A change shows the next time the log-on screen does: when you log off or restart. "
+                    + "It asks for an administrator's password."
         }
     }
 

@@ -1,0 +1,13 @@
+[SddmGreeterTheme]
+Name=Wayland 95
+Description=The Wayland 95 log-on dialog
+Author=Wayland 95
+License=unknown
+Type=sddm-theme
+Version=1.0
+Screenshot=preview.png
+MainScript=Main.qml
+ConfigFile=theme.conf
+Theme-Id=wayland95
+Theme-API=2.0
+QtVersion=6

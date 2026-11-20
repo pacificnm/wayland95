@@ -42,8 +42,10 @@ go through them, with a list of all of them beside it.
 
 Claude reads how projects are made first, then builds: tables, then
 forms, then code. Before it says it's done, it checks the project for
-problems (as **Run > Check for Problems** does) and draws each form to
-look at it. Then it can start the app on your desktop for you to try,
+problems (as **Run > Check for Problems** does), draws each form to
+look at it, and runs tests that use the app the way you would: it
+types, clicks, picks from the lists, answers the message boxes and the
+Open boxes, and checks what happened. Then it can start the app on your desktop for you to try,
 or make it a program file (as **Make Program** does).
 
 Ask for changes the same way: "Put the rating on the list too", "Make
@@ -81,6 +83,7 @@ what Claude finds the next time it reads the project.
 | `set_code` | The code for an event, an element's or the form's. |
 | `check_project` | Everything that would stop it running: the code compiled, and every table, field and form that something names. |
 | `show_form` | A picture of a form as it opens, with its records. |
+| `run_test` | The app run out of sight, driven the way you'd use it (clicks, typing, choices, the answers to its message boxes), with checks of what it does: what passed, what didn't, and any mistake in its code. |
 | `build_program` | Make Program. |
 | `run_app` | Start the app on your desktop. |
 
@@ -97,6 +100,10 @@ isn't made, and Claude is told why.
   version from before, copy the project's folder first.
 - `run_app` starts the app as **Start** does: on the project's own
   database, beside the project.
+- `run_test` works on a copy of the project's database, so a test that
+  adds or deletes records leaves yours as they were. It runs out of
+  sight and makes no sound. (A project kept in MySQL or PostgreSQL can't
+  be copied: Claude has to be told it may test on the database itself.)
 - Claude can be wrong. Try the app yourself before you rely on it.
 
 [Contents](index.md) | Previous: [When Something Isn't Right](troubleshooting.md)

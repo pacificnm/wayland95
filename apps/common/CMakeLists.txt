@@ -35,6 +35,7 @@ qt_add_qml_module(win95ui
         ComboBox95.qml
         FileDialog95.qml
         Graph95.qml
+        Icon95.qml
         TabWidget95.qml
         Slider95.qml
         VSlider95.qml
@@ -47,6 +48,8 @@ qt_add_qml_module(win95ui
         SaverCurves.qml
         SaverMarquee.qml
         SaverMatrix.qml
+    RESOURCES
+        icons.json
     SOURCES
         win95fs.h
         win95fs.cpp
@@ -54,6 +57,8 @@ qt_add_qml_module(win95ui
         wayland95settings.cpp
         audiomixer.h
         audiomixer.cpp
+        mediaplayers.h
+        mediaplayers.cpp
         bluetoothinfo.h
         bluetoothinfo.cpp
         networkstatus.h

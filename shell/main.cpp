@@ -11,6 +11,7 @@
 #include "crashhandler.h"
 #include "desktopentry.h"
 #include "launcher.h"
+#include "programlook.h"
 #include "notifications.h"
 #include "statusnotifier.h"
 #include <QElapsedTimer>
@@ -83,9 +84,17 @@ int main(int argc, char *argv[])
     const bool restarted = app.arguments().contains(QStringLiteral("--restarted"));
     std::fprintf(stderr, "win95shell: ready%s%s\n", session ? " (the session's desktop)" : "",
                  restarted ? " (started again)" : "");
-    // as the session: tell D-Bus and systemd where the display is, then
-    // start the autostart programs, once the desktop is up
-    if (session && !restarted)
-        QTimer::singleShot(2000, &app, &Launcher::startSession);
+    // as the session, once the desktop is up: GTK's theme and fonts and the
+    // browsers' title bars, then tell D-Bus and systemd where the display
+    // is, and start the autostart programs
+    // (other programs' look first: the autostart programs may be browsers)
+    ProgramLook look;
+    if (session) {
+        QTimer::singleShot(2000, &app, [&look, restarted] {
+            look.startSession();
+            if (!restarted)
+                Launcher::startSession();
+        });
+    }
     return app.exec();
 }

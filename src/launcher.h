@@ -5,6 +5,8 @@
 #include <QStringList>
 #include <QtQmlIntegration/qqmlintegration.h>
 
+struct DesktopEntry;
+
 // Starts client programs connected to *this* compositor rather than to
 // whatever desktop we might be nested inside: the child gets
 // WAYLAND_DISPLAY pointed at our socket and is told to prefer Wayland, and
@@ -46,6 +48,14 @@ public:
     static void setSession(bool session);
 
     Q_INVOKABLE bool launch(const QString &program, const QStringList &arguments = {});
+    // the same as root (Start menu > Open as Admin (Root)): through pkexec
+    // and wayland95-run-as-admin, so polkit asks for an administrator's
+    // password first; the program still shows up on this desktop
+    Q_INVOKABLE bool launchAsRoot(const QString &program, const QStringList &arguments = {});
+    // a .desktop file's program, as the user or as root; one that asks for
+    // a terminal runs in win95terminal (as root: the terminal stays the
+    // user's, the program in it goes through pkexec)
+    bool launchEntry(const DesktopEntry &entry, bool asRoot = false);
 
     // Start > Run...: opens a folder (in the file manager), a document or
     // URL (with xdg-open), or runs a command line. Returns an empty string
@@ -58,6 +68,9 @@ signals:
     void lastCommandChanged();
 
 private:
+    // a program's full path: next to win95shell first, then on $PATH
+    static QString resolve(const QString &program);
+
     static QString s_socketName;
     static QString s_x11Display;
     static bool s_session;

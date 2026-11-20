@@ -1,7 +1,9 @@
 // X11 programs, through Xwayland (started when the first X11 program
 // connects; wlroots is its window manager). Ordinary windows are views like
 // any other; menus, tooltips and other override-redirect windows are placed
-// where the program puts them, above the windows.
+// where the program puts them, above the windows. On scaled displays X11's
+// coordinates are the desktop's times server->xscale (xscale.c): every
+// number to or from X11 goes through xscale_to_x / xscale_from_x.
 #include <stdlib.h>
 #include <wlr/util/log.h>
 #include <wlr/xwayland.h>
@@ -11,6 +13,14 @@
 
 // --------------------------------------------------------------- windows
 
+// (after the scene helper's own: it sets the buffer's size, this the
+// size it's shown at)
+static void xview_scale_commit(struct wl_listener *listener, void *data)
+{
+	struct view *view = wl_container_of(listener, view, scale_commit);
+	xscale_apply(view->server, view->content);
+}
+
 static void xview_map(struct wl_listener *listener, void *data)
 {
 	struct view *view = wl_container_of(listener, view, map);
@@ -19,15 +29,18 @@ static void xview_map(struct wl_listener *listener, void *data)
 		view->scene_tree = wlr_scene_tree_create(view->server->layer_windows);
 		view->scene_tree->node.data = &view->tag;
 		view->content = wlr_scene_subsurface_tree_create(view->scene_tree, xs->surface);
+		view->scale_commit.notify = xview_scale_commit;
+		wl_signal_add(&xs->surface->events.commit, &view->scale_commit);
 	}
+	xscale_apply(view->server, view->content);
 	// the Win95 frame, unless the program asked for none (_MOTIF_WM_HINTS:
 	// programs that draw their own title bar, splash screens)
 	view->ssd = xs->decorations == WLR_XWAYLAND_SURFACE_DECORATIONS_ALL;
 	// a window that asked for a position keeps it (X11 programs remember
 	// theirs); others are cascaded like Wayland windows
 	if (!view->placed && (xs->x != 0 || xs->y != 0)) {
-		view->x = xs->x;
-		view->y = xs->y;
+		view->x = xscale_from_x(view->server, xs->x);
+		view->y = xscale_from_x(view->server, xs->y);
 		view->placed = true;
 	}
 	view_mapped(view);
@@ -78,6 +91,7 @@ static void xview_dissociate(struct wl_listener *listener, void *data)
 	wl_list_remove(&view->unmap.link);
 	wl_list_remove(&view->commit.link);
 	if (view->scene_tree) {
+		wl_list_remove(&view->scale_commit.link);
 		frame_destroy(view);
 		wlr_scene_node_destroy(&view->scene_tree->node);
 		view->scene_tree = NULL;
@@ -109,20 +123,25 @@ static void xview_request_configure(struct wl_listener *listener, void *data)
 {
 	struct view *view = wl_container_of(listener, view, request_configure);
 	struct wlr_xwayland_surface_configure_event *event = data;
+	struct server *server = view->server;
+	// (sizes X11 can show pixel for pixel: xscale.c)
+	int width = xscale_to_x(server, xscale_snap(server, xscale_from_x(server, event->width)));
+	int height = xscale_to_x(server, xscale_snap(server, xscale_from_x(server, event->height)));
 	if (!view->mapped) {
 		// before it's shown it may put itself where it likes
-		wlr_xwayland_surface_configure(view->xsurface, event->x, event->y, event->width, event->height);
+		wlr_xwayland_surface_configure(view->xsurface, event->x, event->y, width, height);
 		return;
 	}
 	if (view->maximized || view->fullscreen || view->snap_edge) {
 		// keep it where it is: tell it its real geometry back
-		wlr_xwayland_surface_configure(view->xsurface, view->x, view->y,
-				view->xsurface->width, view->xsurface->height);
+		wlr_xwayland_surface_configure(view->xsurface, xscale_to_x(view->server, view->x),
+				xscale_to_x(view->server, view->y), view->xsurface->width, view->xsurface->height);
 		return;
 	}
 	// move (which re-sends the current size), then the new size
-	view_move(view, event->x, event->y);
-	wlr_xwayland_surface_configure(view->xsurface, event->x, event->y, event->width, event->height);
+	view_move(view, xscale_from_x(server, event->x), xscale_from_x(server, event->y));
+	wlr_xwayland_surface_configure(view->xsurface, xscale_to_x(server, view->x), xscale_to_x(server, view->y),
+			width, height);
 }
 
 static void xview_request_activate(struct wl_listener *listener, void *data)
@@ -218,13 +237,24 @@ static void new_managed(struct server *server, struct wlr_xwayland_surface *xs)
 
 // -------------------------------------------- menus, tooltips (unmanaged)
 
+static void unmanaged_scale_commit(struct wl_listener *listener, void *data)
+{
+	struct unmanaged *u = wl_container_of(listener, u, scale_commit);
+	xscale_apply(u->server, u->scene_tree);
+}
+
 static void unmanaged_map(struct wl_listener *listener, void *data)
 {
 	struct unmanaged *u = wl_container_of(listener, u, map);
-	u->scene_tree = wlr_scene_tree_create(u->server->layer_unmanaged);
+	struct server *server = u->server;
+	u->scene_tree = wlr_scene_tree_create(server->layer_unmanaged);
 	u->scene_tree->node.data = &u->tag;
 	wlr_scene_subsurface_tree_create(u->scene_tree, u->xsurface->surface);
-	wlr_scene_node_set_position(&u->scene_tree->node, u->xsurface->x, u->xsurface->y);
+	u->scale_commit.notify = unmanaged_scale_commit;
+	wl_signal_add(&u->xsurface->surface->events.commit, &u->scale_commit);
+	xscale_apply(server, u->scene_tree);
+	wlr_scene_node_set_position(&u->scene_tree->node, xscale_from_x(server, u->xsurface->x),
+			xscale_from_x(server, u->xsurface->y));
 	// a menu that wants the keyboard (keyboard navigation) gets it
 	if (wlr_xwayland_or_surface_wants_focus(u->xsurface))
 		input_focus_surface(u->server, u->xsurface->surface);
@@ -236,6 +266,7 @@ static void unmanaged_unmap(struct wl_listener *listener, void *data)
 	struct unmanaged *u = wl_container_of(listener, u, unmap);
 	struct server *server = u->server;
 	if (u->scene_tree) {
+		wl_list_remove(&u->scale_commit.link);
 		wlr_scene_node_destroy(&u->scene_tree->node);
 		u->scene_tree = NULL;
 	}
@@ -275,7 +306,8 @@ static void unmanaged_set_geometry(struct wl_listener *listener, void *data)
 {
 	struct unmanaged *u = wl_container_of(listener, u, set_geometry);
 	if (u->scene_tree)
-		wlr_scene_node_set_position(&u->scene_tree->node, u->xsurface->x, u->xsurface->y);
+		wlr_scene_node_set_position(&u->scene_tree->node, xscale_from_x(u->server, u->xsurface->x),
+				xscale_from_x(u->server, u->xsurface->y));
 }
 
 static void unmanaged_destroy(struct wl_listener *listener, void *data)
@@ -331,6 +363,7 @@ static void xwayland_ready(struct wl_listener *listener, void *data)
 				image->width, image->height, image->hotspot_x, image->hotspot_y);
 	}
 	wlr_log(WLR_INFO, "Xwayland ready on DISPLAY=%s", server->xwayland->display_name);
+	xscale_xwayland_ready(server); // (its DPI)
 }
 
 void xwayland_init(struct server *server)

@@ -46,6 +46,9 @@ The first build downloads about 2 GB of packages; later builds reuse them
   what's on it besides Debian's base system.
 - [config/includes.chroot/usr/lib/live/config/0086-wayland95](config/includes.chroot/usr/lib/live/config/0086-wayland95):
   logs the live user in to Wayland 95 at boot (through SDDM).
+- [config/includes.chroot/etc/sddm.conf.d/wayland95.conf](config/includes.chroot/etc/sddm.conf.d/wayland95.conf):
+  the login screen is Wayland 95's own theme (`sddm/wayland95` in the
+  repository), on the live system and on what the installer puts on disk.
 - [config/hooks/live/0100-wayland95.hook.chroot](config/hooks/live/0100-wayland95.hook.chroot):
   the installer's settings: automatic login goes to Wayland 95, and it uses
   the Wayland 95 branding below. (New accounts need no extra groups: the

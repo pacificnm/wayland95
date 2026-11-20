@@ -131,6 +131,7 @@ void outputs_changed(struct server *server)
 			frame_update(view);
 		}
 	}
+	xscale_update(server); // (X11's screen follows the displays)
 	displays_write_state(server);
 	shell_send_primary(server);
 	input_refresh_pointer(server);

@@ -1,0 +1,590 @@
+/* Wayland 95's look for GTK programs (GTK 3 and plain GTK 4: not
+   libadwaita's). The shell writes this into ~/.local/share/themes/Wayland95
+   with the colour scheme from Control Panel > Display > Appearance in front
+   (src/programlook.cpp): Adwaita underneath, with Win95's grey faces, bevels,
+   square corners and title bar gradient on top.
+
+   The colours, from the scheme:
+     w95_face w95_light w95_highlight w95_shadow w95_dark   3D faces and edges
+     w95_window w95_window_text                             text boxes, lists
+     w95_menu w95_menu_text                                 menus
+     w95_selection w95_selection_text                       selected items
+     w95_title w95_title2 w95_title_text                    the active title bar
+     w95_ititle w95_ititle2 w95_ititle_text                 inactive title bars */
+
+/* (Every rule ends in :not(#w95): an ID's weight, so it wins over Adwaita's
+   own, however many classes those name. Programs' own CSS still wins: GTK
+   ranks it above any theme.) */
+
+/* Adwaita's named colours, which programs (and Chromium) use themselves */
+@define-color theme_bg_color @w95_face;
+@define-color theme_fg_color @w95_window_text;
+@define-color theme_base_color @w95_window;
+@define-color theme_text_color @w95_window_text;
+@define-color theme_selected_bg_color @w95_selection;
+@define-color theme_selected_fg_color @w95_selection_text;
+@define-color insensitive_bg_color @w95_face;
+@define-color insensitive_fg_color @w95_shadow;
+@define-color insensitive_base_color @w95_face;
+@define-color theme_unfocused_bg_color @w95_face;
+@define-color theme_unfocused_fg_color @w95_window_text;
+@define-color theme_unfocused_base_color @w95_window;
+@define-color theme_unfocused_text_color @w95_window_text;
+@define-color theme_unfocused_selected_bg_color @w95_selection;
+@define-color theme_unfocused_selected_fg_color @w95_selection_text;
+@define-color borders @w95_shadow;
+@define-color unfocused_borders @w95_shadow;
+@define-color accent_color @w95_selection;
+@define-color accent_bg_color @w95_selection;
+@define-color accent_fg_color @w95_selection_text;
+@define-color window_bg_color @w95_face;
+@define-color window_fg_color @w95_window_text;
+@define-color view_bg_color @w95_window;
+@define-color view_fg_color @w95_window_text;
+@define-color headerbar_bg_color @w95_title;
+@define-color headerbar_fg_color @w95_title_text;
+@define-color popover_bg_color @w95_menu;
+@define-color popover_fg_color @w95_menu_text;
+
+*:not(#w95) {
+    border-radius: 0;
+    text-shadow: none;
+    -gtk-icon-shadow: none;
+    transition: none;
+    outline-color: alpha(@w95_window_text, 0.7);
+    outline-style: dotted;
+    outline-width: 1px;
+}
+
+window:not(#w95),
+.background:not(#w95),
+dialog:not(#w95),
+messagedialog .dialog-action-box:not(#w95) {
+    background-color: @w95_face;
+    color: @w95_window_text;
+}
+
+*:disabled:not(#w95),
+label:disabled:not(#w95) {
+    color: @w95_shadow;
+}
+
+/* ---- raised: buttons ---------------------------------------------------- */
+button:not(#w95),
+headerbar button:not(#w95),
+.titlebar button:not(#w95),
+combobox button:not(#w95),
+spinbutton button:not(#w95),
+notebook > header > tabs > arrow:not(#w95),
+treeview header button:not(#w95) {
+    background-image: none;
+    background-color: @w95_face;
+    color: @w95_window_text;
+    border-style: solid;
+    border-width: 1px;
+    border-color: @w95_highlight @w95_dark @w95_dark @w95_highlight;
+    box-shadow: inset -1px -1px @w95_shadow, inset 1px 1px @w95_light;
+}
+button:not(#w95) {
+    padding: 3px 10px;
+    min-height: 17px;
+}
+button:hover:not(#w95),
+headerbar button:hover:not(#w95),
+combobox button:hover:not(#w95) {
+    background-image: none;
+    background-color: @w95_face;
+    border-color: @w95_highlight @w95_dark @w95_dark @w95_highlight;
+    box-shadow: inset -1px -1px @w95_shadow, inset 1px 1px @w95_light;
+}
+button:active:not(#w95),
+button:checked:not(#w95),
+button:active:hover:not(#w95),
+button:checked:hover:not(#w95),
+headerbar button:active:not(#w95),
+headerbar button:checked:not(#w95) {
+    background-image: none;
+    background-color: @w95_face;
+    color: @w95_window_text;
+    border-color: @w95_dark @w95_highlight @w95_highlight @w95_dark;
+    box-shadow: inset 1px 1px @w95_shadow, inset -1px -1px @w95_light;
+}
+button:disabled:not(#w95) {
+    background-image: none;
+    background-color: @w95_face;
+    color: @w95_shadow;
+}
+button:focus:not(#w95) {
+    outline-offset: -4px;
+}
+/* the default button has an extra black line round it */
+button.default:not(#w95),
+button.suggested-action:not(#w95),
+button.destructive-action:not(#w95) {
+    background-image: none;
+    background-color: @w95_face;
+    color: @w95_window_text;
+    border-color: @w95_dark;
+    box-shadow: inset 1px 1px @w95_highlight, inset -1px -1px @w95_dark,
+                inset 2px 2px @w95_light, inset -2px -2px @w95_shadow;
+}
+/* flat buttons (toolbars): a thin bevel only under the pointer */
+button.flat:not(#w95),
+toolbar button:not(#w95),
+.inline-toolbar button:not(#w95),
+actionbar button.flat:not(#w95) {
+    background-image: none;
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+button.flat:hover:not(#w95),
+toolbar button:hover:not(#w95) {
+    border-color: @w95_highlight @w95_shadow @w95_shadow @w95_highlight;
+    box-shadow: none;
+}
+button.flat:active:not(#w95),
+button.flat:checked:not(#w95),
+toolbar button:active:not(#w95),
+toolbar button:checked:not(#w95) {
+    border-color: @w95_shadow @w95_highlight @w95_highlight @w95_shadow;
+    box-shadow: none;
+}
+
+/* ---- sunken: text boxes, lists, frames ---------------------------------- */
+entry:not(#w95),
+spinbutton:not(.vertical):not(#w95),
+searchbar entry:not(#w95) {
+    background-image: none;
+    background-color: @w95_window;
+    color: @w95_window_text;
+    border-style: solid;
+    border-width: 1px;
+    border-color: @w95_shadow @w95_highlight @w95_highlight @w95_shadow;
+    box-shadow: inset 1px 1px @w95_dark, inset -1px -1px @w95_light;
+    padding-left: 4px;
+    padding-right: 4px;
+    min-height: 19px;
+}
+entry:focus:not(#w95),
+spinbutton:focus-within:not(#w95) {
+    border-color: @w95_shadow @w95_highlight @w95_highlight @w95_shadow;
+    box-shadow: inset 1px 1px @w95_dark, inset -1px -1px @w95_light;
+    outline: none;
+}
+entry:disabled:not(#w95),
+spinbutton:disabled:not(#w95) {
+    background-color: @w95_face;
+    color: @w95_shadow;
+}
+entry selection:not(#w95),
+entry text selection:not(#w95),
+textview text selection:not(#w95),
+label selection:not(#w95),
+selection:not(#w95) {
+    background-color: @w95_selection;
+    color: @w95_selection_text;
+}
+spinbutton entry:not(#w95),
+spinbutton text:not(#w95),
+combobox entry:not(#w95) {
+    border: none;
+    box-shadow: none;
+}
+
+scrolledwindow.frame:not(#w95),
+frame > border:not(#w95),
+.frame:not(#w95),
+viewport.frame:not(#w95) {
+    border-style: solid;
+    border-width: 1px;
+    border-color: @w95_shadow @w95_highlight @w95_highlight @w95_shadow;
+    box-shadow: inset 1px 1px @w95_dark, inset -1px -1px @w95_light;
+}
+
+.view:not(#w95),
+treeview.view:not(#w95),
+iconview:not(#w95),
+textview text:not(#w95),
+list:not(#w95),
+listview:not(#w95),
+columnview:not(#w95),
+placessidebar list:not(#w95),
+.sidebar:not(#w95),
+flowbox:not(#w95) {
+    background-color: @w95_window;
+    color: @w95_window_text;
+}
+.view:selected:not(#w95),
+.view:selected:focus:not(#w95),
+treeview.view:selected:not(#w95),
+iconview:selected:not(#w95),
+row:selected:not(#w95),
+list row:selected:not(#w95),
+flowboxchild:selected:not(#w95),
+placessidebar row:selected:not(#w95),
+.sidebar row:selected:not(#w95),
+cell:selected:not(#w95) {
+    background-image: none;
+    background-color: @w95_selection;
+    color: @w95_selection_text;
+}
+row:hover:not(:selected):not(#w95) {
+    background-color: transparent;
+}
+treeview header button:not(#w95) {
+    padding: 1px 4px;
+    min-height: 0;
+    color: @w95_window_text;
+}
+
+/* ---- menus ---------------------------------------------------------------- */
+menubar:not(#w95),
+.menubar:not(#w95) {
+    background-color: @w95_menu;
+    background-image: none;
+    color: @w95_menu_text;
+    box-shadow: none;
+    border: none;
+    padding: 0;
+}
+menubar > menuitem:not(#w95),
+.menubar > menuitem:not(#w95),
+menubar > item:not(#w95) {
+    padding: 2px 7px;
+    color: @w95_menu_text;
+}
+menubar > menuitem:hover:not(#w95),
+.menubar > menuitem:hover:not(#w95),
+menubar > item:selected:not(#w95) {
+    background-color: @w95_selection;
+    color: @w95_selection_text;
+    box-shadow: none;
+}
+menu:not(#w95),
+.menu:not(#w95),
+.context-menu:not(#w95),
+popover.menu > contents:not(#w95),
+popover > contents:not(#w95),
+popover.background:not(#w95),
+popover.menu:not(#w95) {
+    background-color: @w95_menu;
+    background-image: none;
+    color: @w95_menu_text;
+    border-style: solid;
+    border-width: 1px;
+    border-color: @w95_light @w95_dark @w95_dark @w95_light;
+    box-shadow: inset 1px 1px @w95_highlight, inset -1px -1px @w95_shadow;
+    padding: 2px;
+}
+menu menuitem:not(#w95),
+.menu menuitem:not(#w95),
+.context-menu menuitem:not(#w95),
+popover modelbutton:not(#w95) {
+    padding: 3px 18px;
+    min-height: 16px;
+    color: @w95_menu_text;
+}
+menu menuitem:hover:not(#w95),
+.menu menuitem:hover:not(#w95),
+.context-menu menuitem:hover:not(#w95),
+popover modelbutton:hover:not(#w95),
+popover.menu modelbutton:selected:not(#w95) {
+    background-color: @w95_selection;
+    color: @w95_selection_text;
+}
+menu menuitem:disabled:not(#w95),
+popover modelbutton:disabled:not(#w95) {
+    color: @w95_shadow;
+}
+menu separator:not(#w95),
+.menu separator:not(#w95),
+popover separator:not(#w95) {
+    margin: 3px 0;
+}
+
+/* ---- title bars: header bars look like Win95's --------------------------- */
+headerbar:not(#w95),
+.titlebar:not(headerbar):not(#w95),
+window.csd > .titlebar:not(#w95) {
+    background-image: linear-gradient(to right, @w95_title, @w95_title2);
+    background-color: @w95_title;
+    color: @w95_title_text;
+    border: none;
+    box-shadow: none;
+    min-height: 22px;
+    padding: 0 3px;
+}
+headerbar:backdrop:not(#w95),
+.titlebar:backdrop:not(#w95) {
+    background-image: linear-gradient(to right, @w95_ititle, @w95_ititle2);
+    background-color: @w95_ititle;
+    color: @w95_ititle_text;
+}
+headerbar .title:not(#w95),
+.titlebar .title:not(#w95) {
+    font-weight: bold;
+}
+headerbar .subtitle:not(#w95) {
+    font-size: smaller;
+}
+headerbar button:not(#w95) {
+    padding: 1px 6px;
+    min-height: 16px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+headerbar button.titlebutton:not(#w95),
+.titlebar button.titlebutton:not(#w95),
+windowcontrols button:not(#w95) {
+    padding: 0;
+    min-width: 16px;
+    min-height: 14px;
+    margin: 0 1px;
+}
+headerbar entry:not(#w95) {
+    min-height: 18px;
+    margin-top: 1px;
+    margin-bottom: 1px;
+}
+decoration:not(#w95),
+window.csd decoration:not(#w95) {
+    border-radius: 0;
+    box-shadow: 0 0 0 1px @w95_dark, 0 3px 8px rgba(0, 0, 0, 0.35);
+}
+window.maximized decoration:not(#w95),
+window.tiled decoration:not(#w95) {
+    box-shadow: none;
+}
+
+/* ---- check boxes and option buttons ------------------------------------- */
+check:not(#w95),
+radio:not(#w95),
+checkbutton check:not(#w95),
+radiobutton radio:not(#w95) {
+    background-image: none;
+    background-color: @w95_window;
+    color: @w95_window_text;
+    border-style: solid;
+    border-width: 1px;
+    border-color: @w95_shadow @w95_highlight @w95_highlight @w95_shadow;
+    box-shadow: inset 1px 1px @w95_dark, inset -1px -1px @w95_light;
+    min-width: 11px;
+    min-height: 11px;
+}
+radio:not(#w95),
+radiobutton radio:not(#w95) {
+    border-radius: 100%;
+}
+check:checked:not(#w95),
+check:indeterminate:not(#w95),
+radio:checked:not(#w95),
+radio:indeterminate:not(#w95),
+check:hover:not(#w95),
+radio:hover:not(#w95),
+check:active:not(#w95),
+radio:active:not(#w95) {
+    background-image: none;
+    background-color: @w95_window;
+    color: @w95_window_text;
+    border-color: @w95_shadow @w95_highlight @w95_highlight @w95_shadow;
+    box-shadow: inset 1px 1px @w95_dark, inset -1px -1px @w95_light;
+}
+check:disabled:not(#w95),
+radio:disabled:not(#w95) {
+    background-color: @w95_face;
+}
+
+/* ---- tabs ------------------------------------------------------------------ */
+notebook > header:not(#w95) {
+    background-color: @w95_face;
+    border: none;
+    box-shadow: none;
+}
+notebook > header tab:not(#w95) {
+    background-color: @w95_face;
+    color: @w95_window_text;
+    border-style: solid;
+    border-width: 1px 1px 0 1px;
+    border-color: @w95_highlight @w95_dark transparent @w95_highlight;
+    box-shadow: inset -1px 0 @w95_shadow;
+    padding: 2px 8px;
+    min-height: 16px;
+    margin: 2px 0 0 0;
+    outline-offset: -3px;
+}
+notebook > header tab:checked:not(#w95) {
+    margin-top: 0;
+    padding-bottom: 4px;
+    box-shadow: inset -1px 0 @w95_shadow;
+}
+notebook > header tab:hover:not(#w95) {
+    box-shadow: inset -1px 0 @w95_shadow;
+}
+notebook > stack:not(:only-child):not(#w95) {
+    background-color: @w95_face;
+    border-style: solid;
+    border-width: 1px;
+    border-color: @w95_highlight @w95_dark @w95_dark @w95_highlight;
+    box-shadow: inset -1px -1px @w95_shadow, inset 1px 1px @w95_light;
+}
+
+/* ---- scroll bars ------------------------------------------------------------ */
+scrollbar:not(#w95),
+scrollbar.horizontal:not(#w95),
+scrollbar.vertical:not(#w95) {
+    background-color: mix(@w95_face, @w95_highlight, 0.5);
+    background-image: none;
+    border: none;
+    box-shadow: none;
+}
+scrollbar trough:not(#w95) {
+    background-color: transparent;
+    border: none;
+}
+scrollbar slider:not(#w95),
+scrollbar button:not(#w95) {
+    background-color: @w95_face;
+    background-image: none;
+    background-clip: border-box;
+    border-style: solid;
+    border-width: 1px;
+    border-color: @w95_light @w95_dark @w95_dark @w95_light;
+    box-shadow: inset 1px 1px @w95_highlight, inset -1px -1px @w95_shadow;
+    margin: 0;
+    min-width: 14px;
+    min-height: 14px;
+    padding: 0;
+}
+scrollbar slider:hover:not(#w95),
+scrollbar slider:active:not(#w95) {
+    background-color: @w95_face;
+}
+scrollbar button:not(#w95) {
+    color: @w95_window_text;
+}
+scrollbar button:active:not(#w95) {
+    border-color: @w95_shadow;
+    box-shadow: none;
+}
+
+/* ---- progress bars and sliders --------------------------------------------- */
+progressbar trough:not(#w95),
+levelbar trough:not(#w95) {
+    background-color: @w95_face;
+    background-image: none;
+    border-style: solid;
+    border-width: 1px;
+    border-color: @w95_shadow @w95_highlight @w95_highlight @w95_shadow;
+    box-shadow: none;
+    min-height: 14px;
+}
+progressbar progress:not(#w95),
+levelbar block.filled:not(#w95) {
+    min-height: 10px;
+    background-color: @w95_selection;
+    background-image: none;
+    border: none;
+    box-shadow: none;
+    margin: 2px;
+}
+scale trough:not(#w95) {
+    background-color: @w95_window;
+    background-image: none;
+    border-style: solid;
+    border-width: 1px;
+    border-color: @w95_shadow @w95_highlight @w95_highlight @w95_shadow;
+    box-shadow: inset 1px 1px @w95_dark;
+    min-height: 2px;
+    min-width: 2px;
+}
+scale highlight:not(#w95),
+scale fill:not(#w95) {
+    background-color: transparent;
+    background-image: none;
+    border: none;
+}
+scale slider:not(#w95) {
+    background-color: @w95_face;
+    background-image: none;
+    border-style: solid;
+    border-width: 1px;
+    border-color: @w95_highlight @w95_dark @w95_dark @w95_highlight;
+    box-shadow: inset -1px -1px @w95_shadow, inset 1px 1px @w95_light;
+    border-radius: 0;
+    min-width: 10px;
+    min-height: 20px;
+    margin: -9px -4px;
+}
+scale.vertical slider:not(#w95) {
+    min-width: 20px;
+    min-height: 10px;
+    margin: -4px -9px;
+}
+
+/* ---- switches ---------------------------------------------------------------- */
+switch:not(#w95) {
+    background-color: @w95_window;
+    background-image: none;
+    border-style: solid;
+    border-width: 1px;
+    border-color: @w95_shadow @w95_highlight @w95_highlight @w95_shadow;
+    box-shadow: inset 1px 1px @w95_dark;
+    color: @w95_window_text;
+}
+switch:checked:not(#w95) {
+    background-color: @w95_selection;
+    color: @w95_selection_text;
+}
+switch slider:not(#w95) {
+    background-color: @w95_face;
+    background-image: none;
+    border-style: solid;
+    border-width: 1px;
+    border-color: @w95_highlight @w95_dark @w95_dark @w95_highlight;
+    box-shadow: inset -1px -1px @w95_shadow;
+}
+
+/* ---- the rest -------------------------------------------------------------------- */
+tooltip:not(#w95),
+tooltip.background:not(#w95) {
+    background-color: #ffffe1;
+    background-image: none;
+    color: #000000;
+    border: 1px solid #000000;
+    box-shadow: none;
+    padding: 1px 2px;
+}
+tooltip *:not(#w95) {
+    background-color: transparent;
+    color: #000000;
+}
+toolbar:not(#w95),
+.toolbar:not(#w95),
+actionbar:not(#w95),
+statusbar:not(#w95),
+searchbar:not(#w95),
+.inline-toolbar:not(#w95) {
+    background-color: @w95_face;
+    background-image: none;
+    border-color: @w95_shadow;
+}
+separator:not(#w95) {
+    background-color: @w95_shadow;
+    min-width: 1px;
+    min-height: 1px;
+}
+infobar:not(#w95),
+infobar > revealer > box:not(#w95) {
+    background-color: #ffffe1;
+    color: #000000;
+}
+.dim-label:not(#w95),
+label.dim-label:not(#w95) {
+    opacity: 1;
+    color: @w95_shadow;
+}
+link:not(#w95),
+*:link:not(#w95) {
+    color: #0000ff;
+}

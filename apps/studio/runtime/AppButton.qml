@@ -7,6 +7,8 @@ AppElement {
     id: button
 
     property string text: "Button"
+    // one of Wayland 95's icons (Icon95), left of the text, or alone
+    property string icon: ""
     property bool isDefault: false
     signal clicked()
 
@@ -34,31 +36,50 @@ AppElement {
         face: button.fillColor
     }
 
-    // (disabled: the etched look, a light copy one pixel down and right)
-    Text {
-        visible: !button.enabled
-        anchors.centerIn: parent
-        anchors.horizontalCenterOffset: 1
-        anchors.verticalCenterOffset: 1
-        text: label.text
-        color: Theme.highlight
-        font: label.font
-    }
-    Text {
-        id: label
+    // its icon and text, side by side in the middle
+    Row {
+        id: content
         anchors.centerIn: parent
         anchors.horizontalCenterOffset: button.down ? 1 : 0
         anchors.verticalCenterOffset: button.down ? 1 : 0
-        width: Math.min(implicitWidth, button.width - 6)
-        elide: Text.ElideRight
-        text: button.text
-        textFormat: Text.PlainText
-        color: button.textColor
-        font.family: button.family
-        font.pixelSize: button.pixelSize
-        font.bold: button.fontBold
-        font.italic: button.fontItalic
-        font.underline: button.fontUnderline
+        spacing: glyph.visible && label.text !== "" ? 4 : 0
+        Icon95 {
+            id: glyph
+            visible: known
+            anchors.verticalCenter: parent.verticalCenter
+            width: visible ? 16 : 0
+            name: button.icon
+            enabled: button.enabled
+        }
+        Item {
+            anchors.verticalCenter: parent.verticalCenter
+            width: label.width
+            height: label.height
+            // (disabled: the etched look, a light copy one pixel down and right)
+            Text {
+                visible: !button.enabled
+                x: 1
+                y: 1
+                width: label.width
+                elide: Text.ElideRight
+                text: label.text
+                color: Theme.highlight
+                font: label.font
+            }
+            Text {
+                id: label
+                width: Math.min(implicitWidth, button.width - 6 - glyph.width - content.spacing)
+                elide: Text.ElideRight
+                text: button.text
+                textFormat: Text.PlainText
+                color: button.textColor
+                font.family: button.family
+                font.pixelSize: button.pixelSize
+                font.bold: button.fontBold
+                font.italic: button.fontItalic
+                font.underline: button.fontUnderline
+            }
+        }
     }
 
     Loader {

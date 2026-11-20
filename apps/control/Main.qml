@@ -110,6 +110,8 @@ Window {
             var w = openWindows[applets[i].id];
             if (w && initialTab > 0 && initialTab < w.titles.length)
                 w.currentTab = initialTab;
+            if (w && initialUninstall && w.uninstall)
+                w.uninstall(initialUninstall);
         }
         else
             panel.visible = true;

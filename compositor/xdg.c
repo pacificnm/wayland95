@@ -11,8 +11,27 @@
 
 // Who draws the frame: the Win95 frame for programs that leave it to the
 // desktop (xdg-decoration, no preference or server side: Qt, most Electron
-// and Chromium setups); programs that ask to draw their own, or don't speak
-// xdg-decoration at all (GTK), draw their own. As the Qt compositor did.
+// and Chromium setups; or KDE's server-decoration in server mode: GTK 3
+// windows without a header bar, Firefox with its title bar turned on);
+// programs that ask to draw their own, or speak neither, draw their own.
+
+// a KDE server-decoration object (one per surface that asked)
+struct kde_deco {
+	struct wl_list link; // server->kde_decos
+	struct server *server;
+	struct wlr_server_decoration *deco;
+	struct wl_listener mode, destroy;
+};
+
+static struct kde_deco *kde_deco_for(struct server *server, struct wlr_surface *surface)
+{
+	struct kde_deco *k;
+	wl_list_for_each(k, &server->kde_decos, link)
+		if (k->deco->surface == surface)
+			return k;
+	return NULL;
+}
+
 static void apply_decoration_mode(struct view *view)
 {
 	bool ssd = false;
@@ -22,6 +41,9 @@ static void apply_decoration_mode(struct view *view)
 			wlr_xdg_toplevel_decoration_v1_set_mode(view->decoration, ssd
 					? WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE
 					: WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
+	} else {
+		struct kde_deco *k = kde_deco_for(view->server, view->xdg_toplevel->base->surface);
+		ssd = k && k->deco->mode == WLR_SERVER_DECORATION_MANAGER_MODE_SERVER;
 	}
 	if (ssd != view->ssd) {
 		view->ssd = ssd;
@@ -263,6 +285,55 @@ static void new_xdg_decoration(struct wl_listener *listener, void *data)
 	decoration_request_mode(&view->decoration_mode, NULL);
 }
 
+// the window a KDE server-decoration surface belongs to (none yet: it's
+// looked up again when the window first commits)
+static struct view *view_of_surface(struct wlr_surface *surface)
+{
+	struct wlr_xdg_toplevel *toplevel = wlr_xdg_toplevel_try_from_wlr_surface(surface);
+	if (!toplevel)
+		return NULL;
+	struct wlr_scene_tree *content = toplevel->base->data;
+	if (!content || !content->node.parent || !content->node.parent->node.data)
+		return NULL;
+	return (struct view *)content->node.parent->node.data;
+}
+
+static void kde_deco_mode(struct wl_listener *listener, void *data)
+{
+	struct kde_deco *k = wl_container_of(listener, k, mode);
+	struct view *view = view_of_surface(k->deco->surface);
+	if (view)
+		apply_decoration_mode(view);
+}
+
+static void kde_deco_destroy(struct wl_listener *listener, void *data)
+{
+	struct kde_deco *k = wl_container_of(listener, k, destroy);
+	struct wlr_surface *surface = k->deco->surface;
+	wl_list_remove(&k->link);
+	wl_list_remove(&k->mode.link);
+	wl_list_remove(&k->destroy.link);
+	free(k);
+	struct view *view = surface ? view_of_surface(surface) : NULL;
+	if (view)
+		apply_decoration_mode(view); // the program draws its own again
+}
+
+static void new_kde_decoration(struct wl_listener *listener, void *data)
+{
+	struct server *server = wl_container_of(listener, server, new_kde_decoration);
+	struct wlr_server_decoration *deco = data;
+	struct kde_deco *k = calloc(1, sizeof(*k));
+	k->server = server;
+	k->deco = deco;
+	wl_list_insert(&server->kde_decos, &k->link);
+	k->mode.notify = kde_deco_mode;
+	wl_signal_add(&deco->events.mode, &k->mode);
+	k->destroy.notify = kde_deco_destroy;
+	wl_signal_add(&deco->events.destroy, &k->destroy);
+	kde_deco_mode(&k->mode, NULL);
+}
+
 // ---------------------------------------------------------------- popups
 
 // Keep a popup on screen: the box is the output's area, in the coordinates
@@ -409,4 +480,10 @@ void xdg_init(struct server *server)
 	struct wlr_xdg_decoration_manager_v1 *decorations = wlr_xdg_decoration_manager_v1_create(server->display);
 	server->new_xdg_decoration.notify = new_xdg_decoration;
 	wl_signal_add(&decorations->events.new_toplevel_decoration, &server->new_xdg_decoration);
+
+	wl_list_init(&server->kde_decos);
+	server->kde_decorations = wlr_server_decoration_manager_create(server->display);
+	wlr_server_decoration_manager_set_default_mode(server->kde_decorations, WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
+	server->new_kde_decoration.notify = new_kde_decoration;
+	wl_signal_add(&server->kde_decorations->events.new_decoration, &server->new_kde_decoration);
 }

@@ -35,6 +35,11 @@ set(win95app_qml
     AppMediaPlayer.qml
     AppAiChat.qml
     AppGraph.qml
+    AppTimer.qml
+    AppSlider.qml
+    AppVisualizer.qml
+    AppEqualizer.qml
+    AppFileWindow.qml
 )
 set(win95app_qml_paths "")
 foreach(f ${win95app_qml})
@@ -64,9 +69,13 @@ qt_add_qml_module(win95apprt
         runtime/appcompiler.cpp
         runtime/appruntime.h
         runtime/appruntime.cpp
+        runtime/appaudio.h
+        runtime/appaudio.cpp
+        runtime/appmpris.h
+        runtime/appmpris.cpp
 )
-find_package(Qt6 REQUIRED COMPONENTS Network)
-target_link_libraries(win95apprt PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Sql Qt6::Network)
+find_package(Qt6 REQUIRED COMPONENTS Network Multimedia DBus)
+target_link_libraries(win95apprt PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Sql Qt6::Network Qt6::Multimedia Qt6::DBus)
 target_include_directories(win95apprt PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
 
 # --- the runner ---------------------------------------------------------------

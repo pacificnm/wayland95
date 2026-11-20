@@ -34,6 +34,7 @@ compositor in [docs/migration.md](docs/migration.md).
   Studio, for making more: its `runtime/` is what a made app is built
   from (the ORM, the elements, the compiler) and `runner/` what runs one.
 - `session/` - the login session (`wayland95-session`) and its files.
+- `sddm/wayland95/` - the login screen: an SDDM theme in the Win95 look.
 - `tests/` - the automated tests: `tests/run.sh` (headless),
   `tests/selftest.sh`, `tests/vm/run.sh` (the live image in a VM).
 
@@ -337,14 +338,22 @@ up next to the shell first, then on `$PATH`.
     several up or makes them one size. The form's own handles size it.
   - **Elements** so far: Label, TextBox (one line or several, password),
     Button, CheckBox, OptionButton, ComboBox, ListBox, Frame, Image, Shape,
-    DataGrid, Menu, ToolBar, DateTimePicker (Date in the Toolbox), Graph, MediaPlayer
-    and AIChat. They're drawn
+    DataGrid, Menu, ToolBar, DateTimePicker (Date in the Toolbox), MediaPlayer,
+    Visualizer, Slider, Timer, Graph and AIChat. They're drawn
     by the same QML the program uses, so the canvas is what you get.
+  - **Icons:** `Icon95` in Win95Ui draws Wayland 95's own 16x16 icons
+    (69: New, Open, Save, Print, the record moves, People, Mail,
+    Chart...), any size, grey with a white shadow when disabled, the way
+    Windows 95 drew a toolbar's; `apps/common/icons.json` names them for
+    the Icon chooser. The Markdown Editor's toolbars use them, and in the
+    Studio a ToolBar button's or a Button's Icon is picked from a grid
+    (Choose… in the Menu Editor, … in Properties).
   - **Graph:** our own graph library, `Graph95` in Win95Ui (any app can
     use it): Column, Bar, Line, Area, Pie, Doughnut, Scatter, and stock
     graphs (Candlestick, Heikin-Ashi, OHLC, HLC, Price), drawn on a
-    Canvas like a Windows 95 spreadsheet (white chart, grey plot, black
-    outlines, a boxed legend); stacked, markers, smooth lines; a title,
+    Canvas like a Windows 95 spreadsheet (black outlines, a boxed legend,
+    in the desktop's colors unless BackColor and PlotColor say others:
+    the chart a dialog's, the plot a list's); stacked, markers, smooth lines; a title,
     axis titles, grid lines, values (a pie's percents), four palettes,
     the value axis' ends, decimals and a prefix or suffix; resting the
     pointer shows a value, a click says which (`itemAt(x, y)`). A stock
@@ -398,8 +407,40 @@ up next to the shell first, then on `$PATH`.
     program when it's made, unpacked to the program's cache to play;
     Embed False plays it from where it is) or a web address; with a
     DataField, the file a field holds. In code: `player1.play()`,
-    `pause()`, `stop()`, `seek(ms)`, `position`, `duration`; events
-    started, paused, stopped, finished, failed.
+    `pause()`, `stop()`, `seek(ms)`, `position`, `duration`, its tags
+    (`artist`, `album`, `trackNumber`...), and what the sound's doing
+    (`levels`, `level`, `waveform`: an AudioAnalyzer, runtime/appaudio.cpp,
+    takes the decoded sound through Qt 6.8's QAudioBufferOutput, keeps it
+    by its time and FFTs the bit being heard); events started, paused,
+    stopped, finished, failed, loaded, positionChanged.
+  - **Equalizer:** a MediaPlayer's ten bands (31 Hz to 16 kHz, -12 to
+    +12 dB) and preamp, with presets; the Equalizer element shows them.
+    With it on, the player's own output is muted and the AudioAnalyzer
+    puts what QAudioBufferOutput hands it through ten peaking biquads
+    (the Audio EQ Cookbook's) to a QAudioSink of its own (about 0.1 s
+    behind).
+  - **Visualizer:** a MediaPlayer's sound as it plays: Spectrum (bars
+    with falling peaks), Oscilloscope or Meter. **Slider:** Win95's
+    trackbar (Slider95/VSlider95), Min to Max, bound to a number field or
+    not. **Timer:** its timer event every Interval ms while Enabled; a
+    stopwatch in the Studio, nothing in the program.
+  - **Files from code:** `App.chooseFile`, `chooseFiles`, `chooseFolder`,
+    `chooseSaveFile` open FileDialog95 in a window of its own
+    (AppFileWindow.qml) and give the answer to a callback;
+    `App.listFiles`, `App.fileInfo`, and `App.readTags` (a media file's
+    tags through a QMediaPlayer that only loads, one file at a time).
+  - **DataGrid column widths:** `Title:180` in Columns; the rest share
+    what's left.
+  - **MediaKeys** (a MediaPlayer's): it's an MPRIS player on the session
+    bus (runtime/appmpris.cpp: org.mpris.MediaPlayer2.<app>.instance...),
+    so the media keys and the sound menu reach it; `nextTrack` and
+    `previousTrack` events; `player1.coverArt` (the file's picture, saved
+    in the program's cache, for an Image and the sound menu).
+  - **Test runs:** `win95apprun --test SCRIPT.js PROJECT [--data DIR]`
+    runs the app off the screen, muted, with a script driving it
+    (`Test.click`, `type`, `pick`, `answer`, `choose`, `check`, `wait`...);
+    win95studio-mcp's `run_test` gives it a copy of the SQLite database
+    and returns what happened.
   - **DateTimePicker:** a date, a date and a time, or a time (Mode). Type
     it in, or pick it: ▼ (F4) drops a month calendar (today circled, the
     days it can't be greyed, Today and None under it, and in Date and
@@ -518,10 +559,17 @@ up next to the shell first, then on `$PATH`.
     Properties window, the code window and the compiler all read that.
   - **Not yet:** elements inside a Frame move with it only if you select
     them too (a Frame is drawn behind, not a container); submenus (a menu's
-    items are one level deep), timers and tab strips; a field's type can't be changed in a database that already
+    items are one level deep) and tab strips; a field's type can't be changed in a database that already
     has it; a MySQL/PostgreSQL password is kept as plain text in the
     project and in programs made from it.
 
+- **Media keys and the sound menu:** the compositor hands Play/Pause,
+  Stop, Next and Previous to the shell (as it does the volume keys; they
+  work over the lock screen too), and the shell's `MediaPlayers`
+  (apps/common/mediaplayers.cpp) sends them over MPRIS to the program
+  that's playing: a Wayland Studio app, Firefox, Chromium, VLC... The
+  tray's speaker shows what it's playing beside the volume (its cover,
+  title, artist, ⏮ ⏯ ⏭, Show the Player).
 - **Notepad** (`win95notepad`, [apps/notepad/](apps/notepad/)): Start >
   Programs > Notepad, or double-click a text file in the file manager. It
   has File (New, Open, Save, Save As) with Win95-style Open/Save dialogs,
@@ -841,12 +889,15 @@ up next to the shell first, then on `$PATH`.
     with a preview monitor. **Appearance:** 17 color schemes, plus your own
     colors for the desktop, title bars (two-color gradients), 3D objects,
     windows, menus and selected items, with a live preview. Colors apply to
-    the compositor's chrome and every bundled app.
+    the compositor's chrome and every bundled app, and (with **Other
+    programs use this look**, on unless you untick it) to GTK programs and
+    web browsers too: see [Other programs' look](#other-programs-look).
     **Settings:** the displays (monitors). A picture shows how they stand;
     drag one to where it is on your desk. For each: on or off, the main
     display (the taskbar's), resolution, refresh rate, size of text and
     windows (100% to 300%), orientation, and adaptive sync where the
-    display has it. After Apply, "Keep these settings?" puts the old ones
+    display has it. **Sharp older programs (X11) on scaled displays** (on
+    unless you untick it): see [X11 programs](#x11-programs). After Apply, "Keep these settings?" puts the old ones
     back in 15 seconds unless you answer Yes (a mode the display can't show
     leaves nothing to click). They're kept in
     `~/.config/wayland95/displays.ini` and applied at login and when a
@@ -942,6 +993,13 @@ up next to the shell first, then on `$PATH`.
     so the system's own password rules apply and its messages are shown.
     **Administrators** lists who can approve changes to the computer
     (members of sudo, wheel or admin) and says whether you're one of them.
+    **Log On** chooses the log-on screen: Wayland 95's (see *The login
+    screen* below) or the computer's own (whatever SDDM used before, named,
+    such as Breeze), with a picture of the one chosen. Apply asks for an
+    administrator's password; `wayland95-services login-theme` writes or
+    removes `/etc/sddm.conf.d/wayland95.conf`. It says so when the computer
+    doesn't use SDDM, when the theme isn't installed, or when
+    `/etc/sddm.conf` chooses a theme of its own (that file wins).
   - **Power:** laptop and power settings.
     - **Power Schemes:**
       - Screen brightness (through logind, no root needed).
@@ -1011,7 +1069,7 @@ up next to the shell first, then on `$PATH`.
       system's default through systemd-localed (it asks for a password).
   - **Services:** servers, programming languages and tools, each turned
     on and off with a check box: **SSH Server**, **PostgreSQL**, **MySQL
-    (MariaDB)**, **nginx Web Server**, **WireGuard VPN**, **Python**, **Node.js** and **SQLite**. Checking one that isn't installed installs it first
+    (MariaDB)**, **nginx Web Server**, **Samba File Sharing**, **WireGuard VPN**, **Python**, **Node.js** and **SQLite**. Checking one that isn't installed installs it first
     (PackageKit), then starts it and has it start with the computer.
     Unchecking a server stops it but keeps it, with its settings and data;
     unchecking a language removes it. **Settings...** opens each one's own
@@ -1047,6 +1105,21 @@ up next to the shell first, then on `$PATH`.
       `index.html` lists its files. Written as its own site
       (`sites-available/wayland95`, in place of Debian's default one),
       checked with `nginx -t` first and put back if nginx won't take it.
+    - **Samba File Sharing:** shares folders with other computers on the
+      network: Windows (`\\computer\folder`), Macs and Linux (`smb://`).
+      **General:** the workgroup and the computer's description, and your
+      Samba password (set apart from your log-on one; empty takes it
+      away). **Shared Folders:** Add, Remove and Properties, like Windows'
+      Sharing tab: the folder, its share name and comment, read-only or
+      full access, and only you (with your Samba password) or anyone on the
+      network without one; it says how to connect to each. A share acts as
+      you, so it gives only what you could reach yourself: it must be a
+      folder of yours (not your whole home, a hidden folder or a link), and
+      files whose names start with a dot are never shown. Other users'
+      shares are listed and left as they are. Written to
+      `/etc/samba/wayland95.conf`, which `smb.conf` includes at its end
+      (Debian's own settings stay), checked with `testparm` first and put
+      back if Samba won't take it.
     - **SQLite:** a database in a single file, with no server. Turning it
       on installs the `sqlite3` command; **DB Browser for SQLite** is an
       extra. **Databases** lists the SQLite files in `~/Databases` (or a
@@ -1084,7 +1157,9 @@ up next to the shell first, then on `$PATH`.
       password (sent as hex for the server to quote), writes nginx's
       site and lets it into a website folder in your home (only in
       `/var/www`, `/srv` or the caller's home, never the home itself or a
-      hidden folder, by its own name and not a link), and reads, writes and removes
+      hidden folder, by its own name and not a link), writes Samba's
+      `wayland95.conf` with the caller's shares (folders they own) and
+      sets their Samba password (on `smbpasswd`'s standard input), and reads, writes and removes
       WireGuard's tunnel files and starts and stops `wg-quick@NAME`
       (`wg-quick strip` checks a file first; one a connected tunnel can't
       start with is put back). It checks every value it's given
@@ -1216,6 +1291,39 @@ Chromium ignored. wlroots does these as other desktops do, and
 `tests/run.sh` checks them with Chromium, Firefox, VS Code, GTK, Qt and
 xterm (the `input`, `popups`, `windows`, `x11` and `vscode` suites).
 
+## Other programs' look
+
+Programs that aren't Wayland 95's own take its look in its session (and
+only there: log in to Plasma and KDE's look is back):
+
+- **GTK programs** get the theme **Wayland95**: Win95's grey faces, bevelled
+  buttons, sunken text boxes, square corners, navy selection and, for
+  programs with a GNOME header bar, the Win95 title bar gradient. It's
+  Adwaita underneath with Wayland 95 on top, written by the shell into
+  `~/.local/share/themes/Wayland95` from your colour scheme, and written
+  again when you change the scheme (GTK programs follow at once). GTK's
+  font is the desktop's, Liberation Sans 8.25 (its 11 pixels), with
+  Liberation Mono for monospace, Adwaita icons and the compositor's pointer.
+  These go into GNOME's settings (`org.gnome.desktop.interface`), which
+  GTK reads on Wayland; at login Plasma puts its own back
+  ([src/programlook.cpp](src/programlook.cpp)).
+- **Win95 frames:** GTK windows without a header bar ask for the Win95
+  frame (KDE's server-decoration protocol, which GTK 3 speaks). Chromium,
+  Google Chrome, Brave, Edge and Vivaldi get **Use system title bar and
+  borders**, and Firefox its **Title Bar** box, so they're framed like
+  everything else. That's set once per browser profile, at a login when
+  the browser isn't running; turn it back off in the browser and it stays
+  off.
+- **One font:** web pages' and programs' plain "sans-serif" and
+  "system-ui" are Liberation Sans in the session (it points fontconfig at
+  `share/wayland95/fonts.conf`); fonts asked for by name are themselves.
+  GTK programs' scroll bars stay showing, as Win95's did
+  (`GTK_OVERLAY_SCROLLING=0`).
+
+Untick **Other programs use this look** (Control Panel > Display >
+Appearance) and GTK's settings go back to their defaults; the browsers are
+left as they are, and the session's fonts and scroll bars stay.
+
 ## X11 programs
 
 Programs that only speak X11 (xterm, older toolkits, a lot of games and
@@ -1256,6 +1364,19 @@ What the window manager handles:
   `_MOTIF_WM_HINTS`) are shown without a frame and can be dragged by their
   own title bar (`_NET_WM_MOVERESIZE`).
 - Splash screens appear unframed and stay out of the taskbar.
+
+**On a scaled display** (Size of text and windows above 100%), X11
+programs are drawn at the display's own pixels, as KDE's "apply scaling
+themselves" ([compositor/xscale.c](compositor/xscale.c)): X11 is told its
+screen is the display's real size (1920x1200 for a 1920x1200 display at
+125%) at 120 DPI (`Xft.dpi`), so programs that follow the DPI (Qt,
+Chromium and Electron, most toolkits) draw their text and pictures at that
+size, and the compositor shows them pixel for pixel instead of enlarging
+them, which blurred them. Ones that ignore the DPI (older programs, Wine,
+Java) come out smaller but sharp. With several displays X11 works at the
+largest scale. Untick **Sharp older programs (X11) on scaled displays**
+(Control Panel > Display > Settings) to have them enlarged instead; X11
+programs already running keep the DPI they started with.
 
 Copy and paste and the primary selection work between X11 and Wayland
 programs (tested; drag and drop between them isn't yet). If Xwayland isn't installed (`sudo apt-get install xwayland`), X11
@@ -1376,7 +1497,10 @@ What's installed:
   or Select Folder dialog, with their file types and, for Open, several
   files at once (Ctrl+click, Shift+click). xdg-desktop-portal only finds
   backends in `/usr/share/xdg-desktop-portal/portals`, so `wayland95.portal`
-  goes there (the one file outside `/usr/local`).
+  goes there (one of two files outside `/usr/local`);
+- the login screen's theme, in `/usr/share/sddm/themes/wayland95` (SDDM
+  only looks there). Installing it doesn't change your login screen; see
+  *The login screen* below.
 
 **Screen, keyboard and mouse** come through the login session (libseat and
 logind): no `input` group needed. Without a real GPU (a VM without 3D,
@@ -1397,6 +1521,34 @@ and run `wayland95-session`. Start > Shut Down > *Exit Wayland 95* ends it,
 and Ctrl+Alt+F1 or F2 gets you back to your usual desktop. If it ever won't
 start from the login screen, choose your usual desktop there instead; the
 log says what went wrong.
+
+**The login screen:** [sddm/wayland95](sddm/wayland95) is an SDDM theme
+in the Win95 look: the desktop color and a *Welcome to Wayland 95* dialog
+with your user name (▼ lists the computer's accounts), password, which
+desktop to **Start** (the last one used, else Wayland 95), the keyboard
+layout when there's more than one, OK and **Shut Down...** (shut down,
+restart, stand by, hibernate, whichever the computer can). Alt + the
+underlined letter moves between them; a wrong password says so and clears
+the box, and Caps Lock is pointed out while you type one. On big screens it's
+drawn twice (or more) the size; `theme.conf` sets that (`scale`), the
+desktop color and an optional picture. It's self-contained (the login
+screen runs before anyone logs in, so it can't use the desktop's own QML)
+and uses the Wayland 95 Standard colors.
+
+The live ISO and installs from it use it. Elsewhere it's installed but not
+chosen, since it's the login screen for every desktop on the computer:
+choose it in **Control Panel > Passwords > Log On** (and go back there).
+That writes `/etc/sddm.conf.d/wayland95.conf`:
+
+```ini
+[Theme]
+Current=wayland95
+```
+
+To see it without logging out:
+`sddm-greeter-qt6 --test-mode --theme /usr/share/sddm/themes/wayland95`
+(Shut Down... is grayed out there: test mode can't shut down). If the theme
+ever fails to load, SDDM falls back to the plain theme built into it.
 
 **Not provided by Wayland 95:** a password keyring service. Plasma and GNOME
 start theirs at login, so programs that keep passwords in one (browsers,

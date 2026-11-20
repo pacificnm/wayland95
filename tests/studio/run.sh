@@ -17,6 +17,8 @@ BUILD=${BUILD:-$HERE/../../build}
 RUN=$BUILD/win95apprun
 [ -x "$RUN" ] || { echo "Missing $RUN: build first" >&2; exit 2; }
 export QT_QPA_PLATFORM=offscreen
+# (nothing the tests run shows on the desktop's sound menu)
+export W95APP_NO_MPRIS=1
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/wayland95-studio.XXXXXX")
 pass=0 fail=0
 ok() { echo "PASS  $1"; pass=$((pass + 1)); }
@@ -239,12 +241,15 @@ def value(p):
     if t == "image": return ""
     if t == "timezone": return "Europe/London"
     if t == "media": return "https://example.com/song.mp3"
+    if t == "icon": return "save"
+    # (another element: the one of that type this form has)
+    if t == "element": return [e["prefix"] + "1" for e in reg["elements"] if e["type"] == p["of"]][0]
     if t == "graph": return {"type": "Pie", "title": "it's \"quoted\"", "table": "Things", "labelField": "Name",
                              "series": [{"field": "", "aggregate": "count"}], "sort": "valueDesc", "limit": 3}
     if t == "menu": return [{"text": "&File \"x\"", "name": "fileMenu", "items": [
         {"text": "&Open", "name": "fileOpen", "shortcut": "Ctrl+O", "action": "openForm", "form": "Everything"},
         {"separator": True}, {"text": "E&xit", "name": "fileExit", "action": "quit", "checked": True, "enabled": False}]}]
-    if t == "toolbar": return [{"text": "Save", "name": "saveButton", "glyph": "✔", "toolTip": "it's \"saved\"", "action": "save"},
+    if t == "toolbar": return [{"text": "Save", "name": "saveButton", "glyph": "✔", "icon": "save", "toolTip": "it's \"saved\"", "action": "save"},
                                {"separator": True}, {"text": "Next", "name": "nextButton", "action": "next"}]
     return "text with \"quotes\"\nand a line"
 controls = []
@@ -324,6 +329,10 @@ px() { magick "$WORK/graphs/$1" -format "%[hex:p{$2,$3}]" info: 2>/dev/null | cu
 [ "$(px byRegion.png 45 200)" = 000080 ] && [ "$(px top2.png 175 95)" = 9999FF ] && [ "$(px top2.png 120 150)" = 993366 ]
 expect_true $? "drawn: the first bar where itemAt says (navy, Bright), the pie's two slices (Windows colors)" \
     "$(px byRegion.png 45 200) $(px top2.png 175 95) $(px top2.png 120 150)"
+# no BackColor or PlotColor: the desktop's (a dialog's grey around it, a list's white behind the bars)
+[ "$(px byRegion.png 2 2)" = C0C0C0 ] && [ "$(px byRegion.png 200 30)" = FFFFFF ]
+expect_true $? "drawn in the desktop's colors: grey around it, white behind the bars" \
+    "corner $(px byRegion.png 2 2), plot $(px byRegion.png 200 30)"
 python3 - "$HERE/graphs.w95proj" "$WORK/graphs/broken.w95proj" <<'PY'
 import json, sys
 p = json.load(open(sys.argv[1]))
@@ -358,6 +367,8 @@ read -r m1 m2 _ <<<"$(sed -n 's/^qml: T middles //p' "$WORK/stocks/run.out")"
 down=$(column $((m1 - 10)) 000000FF); up=$(column $((m2 - 10)) FFFFFFFF)
 [ "${down:-0}" -ge 20 ] && [ "${up:-0}" -ge 20 ] && [ -z "$(column $((m1 - 10)) FFFFFFFF)" ]
 expect_true $? "drawn: the candle that went down is black, the one that went up white" "down $down up $up"
+[ "$(column $((m1 - 10)) C0C0C0FF)" -ge 5 ] && [ -z "$(column $((m1 - 10)) FFFFFFFF)" ]
+expect_true $? "its PlotColor (#c0c0c0) behind the candles" "grey $(column $((m1 - 10)) C0C0C0FF)"
 python3 - "$HERE/stocks.w95proj" "$WORK/stocks/broken.w95proj" <<'PY'
 import json, sys
 p = json.load(open(sys.argv[1]))
@@ -420,6 +431,70 @@ cleared ""'
         "$(sed -n 's/^qml: T //p' "$WORK/media/program.out" | head -5; ls -R "$WORK/media/away/cache" 2>&1 | head)"
 else
     echo "SKIP  sound and video (no ffmpeg to make them)"
+fi
+
+echo "== Files, timers, sliders, song tags, the visualizer, column widths"
+# newelements.py: App's file boxes (answered by code), listFiles, fileInfo, readTags; a Timer;
+# Sliders; a MediaPlayer's tags and its loaded and positionChanged events; a Visualizer of
+# it (muted); a DataGrid's column widths. (Some come in any order: compared sorted.)
+if command -v ffmpeg >/dev/null; then
+    mkdir "$WORK/newel"
+    ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=frequency=1000:duration=6" -metadata title="Test Tone" \
+        -metadata artist="The Testers" -metadata album="Tones" -metadata track=3 -metadata genre=Noise -c:a libmp3lame "$WORK/newel/tone.mp3"
+    python3 "$HERE/newelements.py" "$WORK/newel" "$WORK/newel/tone.mp3"
+    want='bound slider 70
+box Add Songs | open multiple true filters [{"label":"Music (*.mp3 *.flac)","patterns":["*.mp3","*.flac"]},{"label":"All Files (*.*)","patterns":["*"]}]
+chose ["a/2.mp3","a/10.mp3"]
+fallen true
+files ["a/2.mp3","a/10.mp3","b/1.flac"]
+files flat 2 none 0
+folder []
+grid [200,126,50]
+info true true 10.mp3 10 mp3 home true
+loaded Test Tone 6
+one b/1.flac
+player tags The Testers|Tones|3|Noise
+position moves
+save list.m3u
+slider 40 vslider 7
+stopped false
+tags missing false There'"'"'s no such file.
+tags text false true
+tags true Test Tone|The Testers|Tones|3|Noise|6
+timer 3 running true
+vis 16 moving true wave 64 playing true'
+    ( cd "$WORK/newel" && XDG_CACHE_HOME="$WORK/newel/cache" timeout 60 "$RUN" newelements.w95proj >run.out 2>&1 )
+    got=$(sed -n 's/^qml: T //p' "$WORK/newel/run.out" | LC_ALL=C sort)
+    [ "$got" = "$(echo "$want" | LC_ALL=C sort)" ]
+    expect_true $? "the file boxes, listFiles, fileInfo, readTags, a Timer, Sliders, a MediaPlayer's tags and events, a Visualizer, column widths" \
+        "$(diff <(echo "$want" | LC_ALL=C sort) <(echo "$got"); grep -iv '^qml: T \|ffmpeg\|vdpau\|mp3' "$WORK/newel/run.out" | head -5)"
+    ! grep -q 'Binding loop\|TypeError\|ReferenceError' "$WORK/newel/run.out"
+    expect_true $? "and no QML warnings" "$(grep 'Binding loop\|TypeError\|ReferenceError' "$WORK/newel/run.out" | head -3)"
+else
+    echo "SKIP  files, timers, sliders, tags, the visualizer (no ffmpeg to make a sound)"
+fi
+
+echo "== The equalizer"
+# equalizer.js through --test: a 1 kHz tone; +12/-12 dB on its band, a bass preset, the preamp
+if command -v ffmpeg >/dev/null; then
+    mkdir "$WORK/eq"
+    ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=frequency=1000:duration=30" -ac 2 -c:a libmp3lame "$WORK/eq/tone1k.mp3"
+    python3 - "$WORK/eq" <<'PY'
+import json, sys
+d = sys.argv[1]
+json.dump({"format": 1, "app": {"name": "eqtest", "title": "EQ", "version": "1", "startForm": "Main"},
+           "database": {"driver": "sqlite", "file": "e.db"}, "tables": [],
+           "forms": [{"name": "Main", "width": 420, "height": 240, "props": {"title": "EQ"}, "code": {},
+                      "controls": [{"type": "MediaPlayer", "name": "player1", "x": 8, "y": 8, "width": 300, "height": 26,
+                                    "props": {"source": d + "/tone1k.mp3", "embed": False}},
+                                   {"type": "Equalizer", "name": "eq1", "x": 8, "y": 40, "width": 392, "height": 152,
+                                    "props": {"player": "player1"}}]}]}, open(d + "/e.w95proj", "w"))
+PY
+    out=$("$RUN" --test "$HERE/equalizer.js" "$WORK/eq/e.w95proj" --timeout 30 2>/dev/null)
+    case "$out" in *"Finished in"*": 12 passed, 0 failed, 0 errors."*) ok "the equalizer: a band +12 and -12 dB, a preset, the preamp, off; the Equalizer element (12 checks)" ;;
+                   *) bad "the equalizer" "$(echo "$out" | grep -v '^\[pass\]' | head -12)" ;; esac
+else
+    echo "SKIP  the equalizer (no ffmpeg to make a sound)"
 fi
 
 echo "== Menus and tool bars"
@@ -549,6 +624,56 @@ server() { # KIND(mysql|postgresql) "name=... user=..."
     case "$out" in "ok "*) ok "$kind: its tables read into the project, and read and written through it (${out#ok } checks)" ;;
                    *) bad "$kind: importing the database's tables" "$(echo "$out" | head -20)" ;; esac
 }
+echo "== Icons (Icon95, icons.json)"
+# every icon on a ToolBar (and on one that's disabled), drawn off the screen
+mkdir "$WORK/icons"
+python3 - "$HERE/../../apps/common/icons.json" "$HERE/../../apps/common/Icon95.qml" "$WORK/icons" <<'PY'
+import json, re, sys
+names = [i["name"] for i in json.load(open(sys.argv[1]))["icons"]]
+qml = open(sys.argv[2]).read()
+known = re.findall(r'"([a-z]+)"', qml[qml.index("readonly property var names"):qml.index("]", qml.index("readonly property var names"))])
+cases = set(re.findall(r'case "([a-z]+)":', qml))
+open(sys.argv[3] + "/names", "w").write(" ".join(n for n in names if n not in known or n not in cases))
+bars, per = [], 20
+for k in range(0, len(names), per):
+    bars.append({"type": "ToolBar", "name": "bar%d" % len(bars), "x": 0, "y": 28 * len(bars), "width": 600, "height": 28,
+                 "props": {"showCaptions": False, "buttons": [{"text": n, "name": n + "T", "icon": n} for n in names[k:k + per]]}})
+off = {"type": "ToolBar", "name": "off", "x": 0, "y": 28 * len(bars), "width": 600, "height": 28,
+       "props": {"enabled": False, "showCaptions": False, "buttons": [{"text": n, "name": n + "D", "icon": n} for n in names[:per]]}}
+form = {"name": "Main", "width": 600, "height": 28 * (len(bars) + 1), "props": {"title": "Icons"}, "code": {}, "controls": bars + [off]}
+json.dump({"format": 1, "app": {"name": "icons", "title": "Icons", "version": "1.0", "startForm": "Main"},
+           "database": {"driver": "sqlite", "file": "icons.db"}, "tables": [], "forms": [form]}, open(sys.argv[3] + "/icons.w95proj", "w"))
+open(sys.argv[3] + "/count", "w").write("%d %d" % (len(names), len(bars)))
+PY
+[ -z "$(cat "$WORK/icons/names")" ]
+expect_true $? "every icon in icons.json is one Icon95 knows and draws" "not: $(cat "$WORK/icons/names")"
+"$RUN" --shot "$WORK/icons/icons.w95proj" -o "$WORK/icons/icons.png" 2>"$WORK/icons/shot.err"
+read -r nicons nbars <"$WORK/icons/count"
+# (a button is 28 wide, a pixel apart, from x 2; its inside clear of the bevel)
+inside() { magick "$WORK/icons/icons.png" -crop "20x18+$((2 + 29 * $1 + 4))+$((28 * $2 + 4))" +repage -format %c histogram:info:- 2>/dev/null; }
+blank=""
+for i in $(seq 0 $((nicons - 1))); do
+    drawn=$(inside $((i % 20)) $((i / 20)) | grep -v -i '#C0C0C0' | awk '{n += $1} END {print n + 0}')
+    [ "$drawn" -ge 8 ] || blank="$blank $i"
+done
+[ -s "$WORK/icons/icons.png" ] && [ -z "$blank" ]
+expect_true $? "each of the $nicons icons draws something on its ToolBar button" "blank: $blank $(head -3 "$WORK/icons/shot.err")"
+# (greys only, edges smoothed: no color; the grey and the white both there)
+colors=$(for i in $(seq 0 19); do inside "$i" "$nbars"; done | grep -o '#[0-9A-F]\{6\}' | sort -u)
+hued=$(echo "$colors" | awk '{ if (substr($1, 2, 2) != substr($1, 4, 2) || substr($1, 2, 2) != substr($1, 6, 2)) print }')
+[ -z "$hued" ] && echo "$colors" | grep -q '#808080' && echo "$colors" | grep -q '#FFFFFF'
+expect_true $? "on a disabled ToolBar they're grey with a white shadow (no color)" "colors: $(echo "$hued" | head -5 | tr '\n' ' ')"
+python3 - "$WORK/icons/icons.w95proj" "$WORK/icons/wrong.w95proj" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))
+p["forms"][0]["controls"][0]["props"]["buttons"][0]["icon"] = "sparkle"
+p["forms"][0]["controls"].append({"type": "Button", "name": "go", "x": 8, "y": 200, "width": 80, "height": 24, "props": {"icon": "nope"}})
+json.dump(p, open(sys.argv[2], "w"))
+PY
+out=$("$RUN" --check "$WORK/icons/wrong.w95proj" 2>&1)
+case "$out" in *'icon "sparkle" isn'"'"'t one of Wayland 95'"'"'s icons'*'Icon "nope" isn'"'"'t one of'*) ok "an icon that isn't one: Check for Problems says so (a ToolBar button's, a Button's)" ;;
+                *) bad "an icon that isn't one: Check for Problems says so (a ToolBar button's, a Button's)" "$out" ;; esac
+
 echo "== Claude's tools (win95studio-mcp)"
 # the MCP server as Claude Code uses it: JSON-RPC on its stdin and stdout
 if [ -x "$BUILD/win95studio-mcp" ] && command -v python3 >/dev/null; then

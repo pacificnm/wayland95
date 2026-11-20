@@ -21,7 +21,7 @@ Item {
     property var projectDatabase: ({})
     property var projectApis: []
 
-    readonly property bool open: colorDialog.visible || listDialog.visible || textDialog.visible
+    readonly property bool open: colorDialog.visible || listDialog.visible || textDialog.visible || iconDialog.visible
                                  || databaseDialog.visible || projectDialog.visible || menuEditor.visible || importDialog.visible
                                  || apiDialog.visible || endpointDialog.visible || graphEditor.visible
 
@@ -37,6 +37,14 @@ Item {
         colorDialog.value = value || "";
         hexField.text = value || "";
         colorDialog.show();
+    }
+    // one of Wayland 95's icons (Icon95): its name, or "" for none
+    function pickIcon(current, callback) {
+        iconDialog.callback = callback;
+        iconDialog.index = Math.max(0, iconDialog.indexOf(current || ""));
+        iconDialog.show();
+        iconGrid.positionViewAtIndex(iconDialog.index, GridView.Contain);
+        iconGrid.forceActiveFocus();
     }
     // items: [{ value, label }]
     function pickFromList(title, items, current, callback) {
@@ -257,6 +265,119 @@ Item {
         Button95 { x: 10; y: 216; width: 66; text: "OK"; isDefault: true; onClicked: colorDialog.accept() }
         Button95 { x: 82; y: 216; width: 66; text: "Cancel"; onClicked: colorDialog.close() }
         Button95 { x: 154; y: 216; width: 66; text: "Default"; onClicked: colorDialog.answer("") }
+    }
+
+    // --- the Icon chooser: Wayland 95's icons, as a grid --------------------------
+    Dialog95 {
+        id: iconDialog
+        // (over the other dialogs: the Menu Editor opens it)
+        z: 1600
+        title: "Choose an Icon"
+        dialogWidth: 436
+        dialogHeight: 352
+        // (None) first, then icons.json's, in its order
+        readonly property var items: [{ name: "", label: "(None)" }].concat(StudioTools.icons())
+        property int index: 0
+        property var callback: null
+        readonly property int columns: Math.max(1, Math.floor(iconGrid.width / iconGrid.cellWidth))
+        function indexOf(name) {
+            for (var i = 0; i < items.length; ++i) {
+                if (items[i].name === name)
+                    return i;
+            }
+            return -1;
+        }
+        function accept() {
+            var cb = callback, name = items[index].name;
+            callback = null;
+            close();
+            if (cb)
+                cb(name);
+        }
+        function step(by) {
+            index = Math.max(0, Math.min(items.length - 1, index + by));
+            iconGrid.positionViewAtIndex(index, GridView.Contain);
+        }
+
+        Bevel { id: iconWell; x: 10; y: 10; width: iconDialog.dialogWidth - 26; height: 270; style: "sunken"; face: Theme.window }
+        GridView {
+            id: iconGrid
+            x: 12
+            y: 12
+            width: iconWell.width - 4 - (iconBar.needed ? iconBar.width : 0)
+            height: iconWell.height - 4
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            cellWidth: 66
+            cellHeight: 58
+            model: iconDialog.items
+            delegate: Item {
+                id: tile
+                required property var modelData
+                required property int index
+                readonly property bool chosen: index === iconDialog.index
+                width: iconGrid.cellWidth
+                height: iconGrid.cellHeight
+                Rectangle {
+                    // the icon framed while it's the one chosen
+                    x: (parent.width - 40) / 2; y: 3; width: 40; height: 38
+                    color: tile.chosen ? Theme.selection : "transparent"
+                    Rectangle { anchors.fill: parent; anchors.margins: 2; color: Theme.face }
+                }
+                Icon95 { x: (parent.width - 32) / 2; y: 6; size: 32; name: tile.modelData.name }
+                Label95 {
+                    visible: tile.modelData.name === ""
+                    x: 0; y: 3; width: parent.width; height: 38
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Theme.shadow
+                    text: "none"
+                }
+                Rectangle {
+                    x: (parent.width - caption.implicitWidth) / 2 - 2; y: 42
+                    width: Math.min(parent.width, caption.implicitWidth + 4); height: 15
+                    color: tile.chosen ? Theme.selection : "transparent"
+                }
+                Label95 {
+                    id: caption
+                    x: 0; y: 42; width: parent.width; height: 15
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                    text: tile.modelData.label
+                    color: tile.chosen ? Theme.selectionText : Theme.text
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: { iconDialog.index = tile.index; iconGrid.forceActiveFocus(); }
+                    onDoubleClicked: iconDialog.accept()
+                }
+            }
+            Keys.onPressed: (event) => {
+                if (event.key === Qt.Key_Right) iconDialog.step(1);
+                else if (event.key === Qt.Key_Left) iconDialog.step(-1);
+                else if (event.key === Qt.Key_Down) iconDialog.step(iconDialog.columns);
+                else if (event.key === Qt.Key_Up) iconDialog.step(-iconDialog.columns);
+                else if (event.key === Qt.Key_Home) iconDialog.step(-iconDialog.items.length);
+                else if (event.key === Qt.Key_End) iconDialog.step(iconDialog.items.length);
+                else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) iconDialog.accept();
+                else if (event.key === Qt.Key_Escape) iconDialog.close();
+                else return;
+                event.accepted = true;
+            }
+        }
+        ScrollBar95 {
+            id: iconBar
+            x: iconWell.x + iconWell.width - width - 2; y: 12
+            height: iconWell.height - 4
+            flickable: iconGrid
+            stepSize: iconGrid.cellHeight
+        }
+        Label95 {
+            x: 12; y: 288; height: 21
+            text: iconDialog.items[iconDialog.index].name === "" ? "No icon." : "Icon: " + iconDialog.items[iconDialog.index].label
+                  + " (" + iconDialog.items[iconDialog.index].name + ")"
+        }
+        Button95 { x: iconDialog.dialogWidth - 168; y: 318; width: 75; text: "OK"; isDefault: true; onClicked: iconDialog.accept() }
+        Button95 { x: iconDialog.dialogWidth - 88; y: 318; width: 75; text: "Cancel"; onClicked: iconDialog.close() }
     }
 
     // --- a list to pick from --------------------------------------------------
@@ -1112,7 +1233,7 @@ Item {
         property string kind: "menu"
         property var callback: null
         // the items in a list: { level (0 a menu, 1 its item), text, name,
-        // shortcut, glyph, picture, toolTip, action, form, enabled, checked, separator }
+        // shortcut, icon, glyph, picture, toolTip, action, form, enabled, checked, separator }
         property var rows: []
         property int current: -1
         property bool loading: false
@@ -1141,7 +1262,7 @@ Item {
 
         function row(it, level) {
             return { level: level, text: it.text || "", name: it.name || "", shortcut: it.shortcut || "",
-                     glyph: it.glyph || "", picture: it.picture || "", toolTip: it.toolTip || "",
+                     icon: it.icon || "", glyph: it.glyph || "", picture: it.picture || "", toolTip: it.toolTip || "",
                      action: it.action || "", form: it.form || "", enabled: it.enabled !== false,
                      checked: it.checked === true, separator: it.separator === true };
         }
@@ -1232,7 +1353,7 @@ Item {
         }
         function accept() {
             var list = rows.filter(function (r) {
-                return r.separator || r.text.trim() !== "" || (!isMenu && (r.glyph !== "" || r.picture !== ""));
+                return r.separator || r.text.trim() !== "" || (!isMenu && (r.icon !== "" || r.glyph !== "" || r.picture !== ""));
             });
             if (isMenu && list.length && list[0].level !== 0) {
                 dialogs.messageBox.show(title, "The first one has to be a menu (all the way left): its items go under it, indented (→).",
@@ -1274,6 +1395,8 @@ Item {
                     it = { text: r.text, name: name };
                     if (isMenu && r.shortcut.trim() !== "")
                         it.shortcut = r.shortcut.trim();
+                    if (!isMenu && r.icon !== "")
+                        it.icon = r.icon;
                     if (!isMenu && r.glyph !== "")
                         it.glyph = r.glyph;
                     if (!isMenu && r.picture !== "")
@@ -1337,19 +1460,40 @@ Item {
         }
         Label95 { visible: menuEditor.isMenu; x: 192; y: 44; height: 21; color: Theme.shadow; text: "like Ctrl+O or F5; & in a Caption is its access key" }
 
-        Label95 { visible: !menuEditor.isMenu; x: 12; y: 44; height: 21; text: "Symbol:" }
+        // a button's icon (the chooser), or a symbol (a character), or a picture file
+        Label95 { visible: !menuEditor.isMenu; x: 12; y: 44; height: 21; text: "Icon:" }
+        Bevel {
+            visible: !menuEditor.isMenu
+            x: 84; y: 44; width: 22; height: 21
+            style: "sunken"
+            face: Theme.window
+            Icon95 {
+                anchors.centerIn: parent
+                name: menuEditor.here ? menuEditor.here.icon || "" : ""
+                enabled: menuEditor.itemRow
+            }
+        }
+        Button95 {
+            id: itemIconButton
+            visible: !menuEditor.isMenu
+            x: 110; y: 44; width: 64; height: 21
+            text: "Choose…"
+            enabled: menuEditor.itemRow
+            onClicked: dialogs.pickIcon(menuEditor.here.icon, function (name) { menuEditor.store("icon", name); })
+        }
+        Label95 { visible: !menuEditor.isMenu; x: 184; y: 44; height: 21; text: "Symbol:" }
         TextField95 {
             id: itemGlyph
             visible: !menuEditor.isMenu
-            x: 84; y: 44; width: 40
+            x: 232; y: 44; width: 28
             enabled: menuEditor.itemRow
             onTextChanged: menuEditor.store("glyph", text)
         }
-        Label95 { visible: !menuEditor.isMenu; x: 136; y: 44; height: 21; text: "Picture:" }
+        Label95 { visible: !menuEditor.isMenu; x: 268; y: 44; height: 21; text: "Picture:" }
         TextField95 {
             id: itemPicture
             visible: !menuEditor.isMenu
-            x: 190; y: 44; width: 248
+            x: 316; y: 44; width: 122
             enabled: menuEditor.itemRow
             onTextChanged: menuEditor.store("picture", text)
         }
@@ -1436,15 +1580,21 @@ Item {
                 width: itemList.width
                 height: 17
                 color: isCurrent ? Theme.selection : "transparent"
+                Icon95 {
+                    id: rowIcon
+                    visible: !itemRow.modelData.separator && (itemRow.modelData.icon || "") !== ""
+                    x: 4; y: 0
+                    name: itemRow.modelData.icon || ""
+                }
                 Label95 {
-                    x: 4 + (itemRow.modelData.level > 0 ? 24 : 0)
+                    x: 4 + (itemRow.modelData.level > 0 ? 24 : 0) + (rowIcon.visible ? 20 : 0)
                     width: parent.width * 0.55 - x
                     height: parent.height
                     elide: Text.ElideRight
                     color: itemRow.ink
                     text: (itemRow.modelData.level > 0 ? "···· " : "")
                           + (itemRow.modelData.separator ? "-"
-                             : (itemRow.modelData.glyph ? itemRow.modelData.glyph + "  " : "")
+                             : (!rowIcon.visible && itemRow.modelData.glyph ? itemRow.modelData.glyph + "  " : "")
                                + (menuEditor.plain(itemRow.modelData.text) || "(no caption)"))
                 }
                 Label95 {

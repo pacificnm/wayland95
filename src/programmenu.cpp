@@ -90,17 +90,20 @@ void ProgramMenu::reload()
 
 bool ProgramMenu::launch(const QString &desktopId)
 {
+    return start(desktopId, false);
+}
+
+bool ProgramMenu::launchAsRoot(const QString &desktopId)
+{
+    return start(desktopId, true);
+}
+
+bool ProgramMenu::start(const QString &desktopId, bool asRoot)
+{
     const QString path = m_paths.value(desktopId);
     if (path.isEmpty())
         return false;
-    const DesktopEntry e = DesktopEntry::read(path, desktopId);
-    QStringList command = e.command();
-    if (command.isEmpty())
-        return false;
-    if (e.terminal)
-        return m_launcher.launch(QStringLiteral("win95terminal"), QStringList{ QStringLiteral("-e") } + command);
-    const QString program = command.takeFirst();
-    return m_launcher.launch(program, command);
+    return m_launcher.launchEntry(DesktopEntry::read(path, desktopId), asRoot);
 }
 
 QString ProgramMenu::iconFor(const QString &appId) const

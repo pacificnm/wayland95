@@ -1,3 +1,4 @@
+#include <QHash>
 #include "appcompiler.h"
 
 #include <QDir>
@@ -126,6 +127,26 @@ QJsonObject registry()
     return cached;
 }
 
+QJsonArray icons()
+{
+    static QJsonArray cached;
+    if (cached.isEmpty()) {
+        QFile file(QStringLiteral(":/qt/qml/Win95Ui/icons.json"));
+        if (file.open(QIODevice::ReadOnly))
+            cached = QJsonDocument::fromJson(file.readAll()).object().value(QLatin1String("icons")).toArray();
+    }
+    return cached;
+}
+
+bool isIcon(const QString &name)
+{
+    for (const QJsonValue &i : icons()) {
+        if (i.toObject().value(QLatin1String("name")).toString() == name)
+            return true;
+    }
+    return false;
+}
+
 QJsonObject elementInfo(const QString &type)
 {
     const QJsonArray elements = registry().value(QLatin1String("elements")).toArray();
@@ -251,6 +272,10 @@ QString formQml(const QJsonObject &form, const QJsonObject &project, const QStri
 
     QStringList names;
     const QJsonArray controls = form.value(QLatin1String("controls")).toArray();
+    // (each element's type, for a property that names another element)
+    QHash<QString, QString> typeOf;
+    for (const QJsonValue &c : controls)
+        typeOf.insert(c.toObject().value(QLatin1String("name")).toString(), c.toObject().value(QLatin1String("type")).toString());
     for (const QJsonValue &c : controls) {
         const QJsonObject control = c.toObject();
         const QString type = control.value(QLatin1String("type")).toString();
@@ -293,6 +318,10 @@ QString formQml(const QJsonObject &form, const QJsonObject &project, const QStri
             const QString propName = prop.value(QLatin1String("name")).toString();
             if (!props.contains(propName) || props.value(propName) == prop.value(QLatin1String("default")))
                 continue;
+            if (prop.value(QLatin1String("type")).toString() == QLatin1String("icon")
+                && !isIcon(props.value(propName).toString()))
+                problem(name, QStringLiteral("its %1 \"%2\" isn't one of Wayland 95's icons")
+                                  .arg(prop.value(QLatin1String("label")).toString(), props.value(propName).toString()));
             if (prop.value(QLatin1String("type")).toString() == QLatin1String("image")) {
                 QString why;
                 const QString url = asset(props.value(propName).toString(), projectDir, assets, &why);
@@ -325,6 +354,15 @@ QString formQml(const QJsonObject &form, const QJsonObject &project, const QStri
                 continue;
             }
             const QString propType = prop.value(QLatin1String("type")).toString();
+            if (propType == QLatin1String("element")) {
+                // another element of the form, of the type it has to be
+                const QString target = props.value(propName).toString();
+                const QString of = prop.value(QLatin1String("of")).toString();
+                if (!target.isEmpty() && !typeOf.contains(target))
+                    problem(name, QStringLiteral("its %1 %2 isn't an element of this form").arg(prop.value(QLatin1String("label")).toString(), target));
+                else if (!target.isEmpty() && !of.isEmpty() && typeOf.value(target) != of)
+                    problem(name, QStringLiteral("its %1 %2 is a %3, not a %4").arg(prop.value(QLatin1String("label")).toString(), target, typeOf.value(target), of));
+            }
             if (propType == QLatin1String("graph")) {
                 // a graph of a table reads one that's in the project, and its fields
                 const QJsonObject g = props.value(propName).toObject();
@@ -379,6 +417,10 @@ QString formQml(const QJsonObject &form, const QJsonObject &project, const QStri
                 QJsonArray buttons = props.value(propName).toArray();
                 for (qsizetype i = 0; i < buttons.size(); ++i) {
                     QJsonObject b = buttons.at(i).toObject();
+                    const QString icon = b.value(QLatin1String("icon")).toString();
+                    if (!icon.isEmpty() && !isIcon(icon))
+                        problem(name, QStringLiteral("%1's icon \"%2\" isn't one of Wayland 95's icons")
+                                          .arg(b.value(QLatin1String("text")).toString().remove(QLatin1Char('&')), icon));
                     const QString picture = b.value(QLatin1String("picture")).toString();
                     if (picture.isEmpty())
                         continue;

@@ -1,0 +1,10 @@
+#!/bin/sh
+# Stand-in testparm for tests/services/run.sh: "workgroup = BROKEN" is the
+# test's way of settings Samba won't take; otherwise the real testparm
+# checks them, if it's installed
+echo "testparm $*" >>"${W95_FAKE_ROOT:?}/log"
+if grep -qs "workgroup = BROKEN" "$W95_FAKE_ROOT/etc/samba/wayland95.conf"; then
+    echo "Error loading services." >&2; exit 1
+fi
+[ -x /usr/bin/testparm ] && exec /usr/bin/testparm "$@"
+exit 0

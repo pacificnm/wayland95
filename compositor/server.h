@@ -22,6 +22,7 @@
 #include <wlr/types/wlr_relative_pointer_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_server_decoration.h>
 #include <wlr/types/wlr_session_lock_v1.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_decoration_v1.h>
@@ -52,6 +53,8 @@ struct settings {
 	char layout[64]; // "us", "de(nodeadkeys)"...
 	int repeat_delay, repeat_rate;
 	int double_click_ms;
+	// X11 programs drawn at the displays' own pixels (xscale.c)
+	bool sharp_x11;
 	// touchpad
 	bool tap_to_click, natural_scroll, disable_while_typing, middle_emulation;
 	double pointer_speed; // -1..1
@@ -141,6 +144,18 @@ struct server {
 	struct wl_listener new_xdg_toplevel;
 	struct wl_listener new_xdg_popup;
 	struct wl_listener new_xdg_decoration;
+	// KDE's older server-decoration protocol: how GTK 3 (and Firefox with
+	// its own title bar turned off) ask for the Win95 frame
+	struct wlr_server_decoration_manager *kde_decorations;
+	struct wl_listener new_kde_decoration;
+	struct wl_list kde_decos; // struct kde_deco.link
+	// X11 programs at the displays' own pixels (xscale.c): X11's
+	// coordinates are the desktop's times xscale; Xwayland's own xdg-output
+	double xscale;
+	int xscale_step; // desktop sizes that are whole X11 pixels: multiples of this
+	struct wl_global *xdg_output_global;
+	struct wl_list xdg_outputs; // struct xscale_output.link
+	struct wlr_xdg_output_manager_v1 *xdg_output_manager; // everyone else's
 	struct wl_list views; // struct view.link, front (top) first
 
 	struct wlr_layer_shell_v1 *layer_shell;
@@ -299,6 +314,7 @@ struct view {
 	struct wl_listener ftl_activate, ftl_close, ftl_minimize, ftl_maximize, ftl_fullscreen;
 
 	struct wl_listener map, unmap, commit, destroy;
+	struct wl_listener scale_commit; // X11 windows (xscale.c: after the scene's)
 	struct wl_listener request_move, request_resize, request_maximize;
 	struct wl_listener request_minimize, request_fullscreen, request_show_window_menu;
 	struct wl_listener set_title, set_app_id;
@@ -315,6 +331,7 @@ struct unmanaged {
 	struct wlr_scene_tree *scene_tree;
 	struct wl_listener associate, dissociate, map, unmap, destroy;
 	struct wl_listener request_configure, set_geometry;
+	struct wl_listener scale_commit; // (xscale.c: after the scene's)
 };
 
 struct layer_surface {
@@ -436,6 +453,18 @@ void xdg_init(struct server *server);
 
 // xwayland.c
 void xwayland_init(struct server *server);
+
+// xscale.c: X11 programs at the displays' own pixels
+void xscale_init(struct server *server);
+void xscale_update(struct server *server); // the displays or the setting changed
+void xscale_xwayland_ready(struct server *server);
+bool xscale_global_visible(struct server *server, const struct wl_client *client, const struct wl_global *global);
+void xscale_apply(struct server *server, struct wlr_scene_tree *tree); // an X11 surface committed
+int xscale_to_x(struct server *server, double v);   // desktop -> X11
+int xscale_from_x(struct server *server, double v); // X11 -> desktop
+int xscale_snap(struct server *server, int size); // an X11 window's size, made exact (no stretching)
+// a point in a surface from the scene (desktop units) -> the surface's own
+void xscale_surface_point(struct server *server, struct wlr_surface *surface, double *sx, double *sy);
 
 // layers.c
 void layers_init(struct server *server);

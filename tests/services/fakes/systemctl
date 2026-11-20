@@ -28,6 +28,17 @@ stop() {
     case "$1" in wg-quick@*) rm -rf "$root/sys/class/net/$name" ;; esac
 }
 status=0
+if [ "$cmd" = show ]; then
+    # (Control Panel's question: -p Id,LoadState,... UNITS)
+    for unit in "$@"; do
+        case "$unit" in -*|Id,*) continue ;; esac
+        [ -e "$root/units/$unit" ] && load=loaded || load=not-found
+        [ -e "$root/active/$unit" ] && act=active || act=inactive
+        [ -e "$root/enabled/$unit" ] && en=enabled || en=disabled
+        printf 'Id=%s\nLoadState=%s\nActiveState=%s\nUnitFileState=%s\n\n' "$unit" "$load" "$act" "$en"
+    done
+    exit 0
+fi
 for unit in "$@"; do
     case "$cmd" in
         is-enabled) [ -e "$root/enabled/$unit" ] || status=1 ;;

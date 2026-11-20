@@ -42,7 +42,7 @@ QtObject {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.bottom: parent.bottom
-            width: 100
+            anchors.right: parent.right // (more icons: more columns)
             onMenuRequested: (entry, x, y) => shell.showIconMenu(entry, x, y)
         }
     }
@@ -286,6 +286,12 @@ QtObject {
         case DesktopKeys.Print: shell.printScreen(); break;
         case DesktopKeys.StartMenu: taskbar.toggleStartMenu(); break;
         case DesktopKeys.TaskManager: Launcher.launch("win95sysmon"); break;
+        // the media keys: whichever program is playing (or played last)
+        case DesktopKeys.MediaPlayPause: Ui.MediaPlayers.playPause(); break;
+        case DesktopKeys.MediaPause: Ui.MediaPlayers.pause(); break;
+        case DesktopKeys.MediaStop: Ui.MediaPlayers.stop(); break;
+        case DesktopKeys.MediaNext: Ui.MediaPlayers.next(); break;
+        case DesktopKeys.MediaPrevious: Ui.MediaPlayers.previous(); break;
         case DesktopKeys.Capture:
             if (screenCapture.active)
                 screenCapture.close();
@@ -316,7 +322,8 @@ QtObject {
         }
     }
 
-    // --- a desktop icon's menu: Open, and the Recycle Bin's Empty --------
+    // --- a desktop icon's menu: Open, the Recycle Bin's Empty, and a
+    // shortcut's Open as Admin and Delete -----------------------------------
     // (the desktop and the pop-up layer both start at the screen's corner)
     function showIconMenu(entry, x, y) {
         taskbar.closePopups();
@@ -329,6 +336,12 @@ QtObject {
             items.push({ text: "P&roperties", action: function () { Launcher.launch("win95control", ["--applet", "system"]); } });
             items.push({ separator: true });
             items.push({ text: "&About Wayland 95", action: shell.showAbout });
+        }
+        if (entry.kind === "shortcut") {
+            // (Delete: into the Recycle Bin, so it's not asked about)
+            items.push({ text: "Open as &Admin (Root)", action: function () { DesktopShortcuts.openAsRoot(entry.path); } });
+            items.push({ separator: true });
+            items.push({ text: "&Delete", action: function () { DesktopShortcuts.remove(entry.path); } });
         }
         if (entry.kind === "bin") {
             items.push({ separator: true });

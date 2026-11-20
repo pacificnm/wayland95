@@ -1,0 +1,10 @@
+singleton W95 1.0 W95.qml
+Bevel 1.0 Bevel.qml
+Button95 1.0 Button95.qml
+TextField95 1.0 TextField95.qml
+ComboBox95 1.0 ComboBox95.qml
+ListPopup95 1.0 ListPopup95.qml
+RadioButton95 1.0 RadioButton95.qml
+Icon95 1.0 Icon95.qml
+Dialog95 1.0 Dialog95.qml
+Label95 1.0 Label95.qml

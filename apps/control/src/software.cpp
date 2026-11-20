@@ -46,7 +46,14 @@ enum : uint {
 };
 enum : uint { ExitSuccess = 1, ExitCancelled = 3 };
 
-QDBusConnection bus() { return QDBusConnection::systemBus(); }
+// The automated tests run desktops inside your session, which must never
+// talk to the real PackageKit (WAYLAND95_NO_SYSTEM_AGENTS): their programs
+// use the session bus, where a test may put its stand-in.
+QDBusConnection bus()
+{
+    return qEnvironmentVariableIsSet("WAYLAND95_NO_SYSTEM_AGENTS") ? QDBusConnection::sessionBus()
+                                                                    : QDBusConnection::systemBus();
+}
 
 QString statusText(uint status)
 {
@@ -687,12 +694,19 @@ void SoftwareCenter::loadDebPrograms()
 
     // programs: the packages that own the visible .desktop files
     auto entries = std::make_shared<QHash<QString, DesktopEntry>>();
+    // and each one's desktop file ID, as the Start menu knows it (the file
+    // may be a link to one by another name; in a subfolder, "kde4-foo.desktop")
+    auto ids = std::make_shared<QHash<QString, QStringList>>();
     for (const QString &dir : dataDirs()) {
         const QDir apps(dir + QStringLiteral("/applications"));
         QDirIterator it(apps.path(), { QStringLiteral("*.desktop") }, QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) {
-            const QString path = QFileInfo(it.next()).canonicalFilePath();
-            if (path.isEmpty() || entries->contains(path))
+            const QString found = it.next();
+            const QString path = QFileInfo(found).canonicalFilePath();
+            if (path.isEmpty())
+                continue;
+            (*ids)[path] << apps.relativeFilePath(found).replace(QLatin1Char('/'), QLatin1Char('-'));
+            if (entries->contains(path))
                 continue;
             // every program a package brings, even ones only for another
             // desktop's menus: they're still removable
@@ -710,7 +724,7 @@ void SoftwareCenter::loadDebPrograms()
     auto owners = std::make_shared<QSet<QString>>();
     auto *search = pk(QStringLiteral("SearchFiles"), { QVariant::fromValue(quint64(FilterInstalled)), QStringList(entries->keys()) }, false);
     connect(search, &PkTransaction::package, this, [owners](uint, const QString &id, const QString &) { owners->insert(id); });
-    connect(search, &PkTransaction::finished, this, [this, entries, owners](bool ok) {
+    connect(search, &PkTransaction::finished, this, [this, entries, ids, owners](bool ok) {
         if (!ok || owners->isEmpty()) {
             m_debPrograms.clear();
             finishLoad();
@@ -724,7 +738,7 @@ void SoftwareCenter::loadDebPrograms()
                 if (f.endsWith(QLatin1String(".desktop")) && entries->contains(f))
                     (*summaries)[id] << f;
         });
-        connect(files, &PkTransaction::finished, this, [this, entries, summaries](bool) {
+        connect(files, &PkTransaction::finished, this, [this, entries, ids, summaries](bool) {
             QHash<QString, const Program *> catalog;
             for (const Program &p : std::as_const(m_catalog))
                 if (p.source == QLatin1String("deb"))
@@ -742,6 +756,9 @@ void SoftwareCenter::loadDebPrograms()
                     if (QFileInfo(p).completeBaseName().endsWith(name))
                         main = entries->value(p);
                 const Program *known = paths.size() > 1 ? catalog.value(name) : nullptr;
+                QStringList desktopIds;
+                for (const QString &p : std::as_const(paths))
+                    desktopIds += ids->value(p);
                 list << QVariantMap{
                     { QStringLiteral("key"), QStringLiteral("deb:") + name },
                     { QStringLiteral("source"), QStringLiteral("deb") },
@@ -752,6 +769,7 @@ void SoftwareCenter::loadDebPrograms()
                     { QStringLiteral("icon"), known && !known->icon.isEmpty() ? known->icon : iconUrl(main.icon) },
                     { QStringLiteral("version"), idVersion(it.key()) },
                     { QStringLiteral("programCount"), paths.size() },
+                    { QStringLiteral("desktopIds"), desktopIds },
                 };
             }
             m_debPrograms = list;
@@ -784,6 +802,7 @@ void SoftwareCenter::loadFlatpakPrograms()
                     { QStringLiteral("summary"), f.value(4).trimmed() },
                     { QStringLiteral("icon"), iconUrl(id) },
                     { QStringLiteral("version"), f.at(2).trimmed() },
+                    { QStringLiteral("desktopIds"), QStringList{ id + QStringLiteral(".desktop") } },
                 };
             }
         }
@@ -791,6 +810,29 @@ void SoftwareCenter::loadFlatpakPrograms()
         m_flatpakPrograms = list;
         finishLoad();
     });
+}
+
+QVariantMap SoftwareCenter::programFor(const QString &desktopId) const
+{
+    for (const QVariant &v : m_programs) {
+        const QVariantMap p = v.toMap();
+        if (p.value(QStringLiteral("desktopIds")).toStringList().contains(desktopId))
+            return p;
+    }
+    return {};
+}
+
+QString SoftwareCenter::programName(const QString &desktopId) const
+{
+    for (const QString &dir : DesktopEntry::applicationDirs()) {
+        const QString path = dir + QLatin1Char('/') + desktopId;
+        if (QFileInfo::exists(path)) {
+            const QString name = DesktopEntry::read(path, desktopId).name;
+            if (!name.isEmpty())
+                return name;
+        }
+    }
+    return desktopId;
 }
 
 void SoftwareCenter::finishLoad()

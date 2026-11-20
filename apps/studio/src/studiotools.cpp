@@ -37,6 +37,11 @@ QVariantList StudioTools::elementProps(const QString &type) const
     return AppCompiler::elementProps(type).toVariantList();
 }
 
+QVariantList StudioTools::icons() const
+{
+    return AppCompiler::icons().toVariantList();
+}
+
 QString StudioTools::elementNameProblem(const QString &name) const
 {
     return AppCompiler::nameProblem(name, true);

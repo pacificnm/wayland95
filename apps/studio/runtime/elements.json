@@ -1,5 +1,5 @@
 {
-  "comment": "Wayland Studio's elements: what the Toolbox offers, what the Properties window edits and what the compiler writes. To add an element: write its App<Name>.qml (root: AppElement), list it in CMakeLists.txt and describe it here. Property types: string, text (several lines), int, real, bool, color, font, enum (values), list (one per line), field, table, form, image, menu and toolbar (items, in the Menu Editor), graph (an object, in the Graph Editor), timezone (this computer's zones), media (a sound or video file, put inside the program like a picture). An enum with `examples` (date or time) shows each format with now in it. `label`: its name in the Toolbox, if not its type (which code and projects use). `initial`: what a new element starts with, if not the default. `editor`: a dialog that opens as soon as one is added (graph). `dock`: it sits across the top of the form (x, y and width are the Studio's). `common` properties belong to every element; an element opts into the `appearance` and `data` sets.",
+  "comment": "Wayland Studio's elements: what the Toolbox offers, what the Properties window edits and what the compiler writes. To add an element: write its App<Name>.qml (root: AppElement), list it in CMakeLists.txt and describe it here. Property types: string, text (several lines), int, real, bool, color, font, enum (values), list (one per line), field, table, form, image, menu and toolbar (items, in the Menu Editor), graph (an object, in the Graph Editor), timezone (this computer's zones), media (a sound or video file, put inside the program like a picture), icon (one of Wayland 95's icons: Win95Ui's icons.json, in the Icon chooser), element (the Name of another element on the form, of the type `of`). An enum with `examples` (date or time) shows each format with now in it. `label`: its name in the Toolbox, if not its type (which code and projects use). `initial`: what a new element starts with, if not the default. `editor`: a dialog that opens as soon as one is added (graph). `dock`: it sits across the top of the form (x, y and width are the Studio's). `common` properties belong to every element; an element opts into the `appearance` and `data` sets.",
 
   "common": [
     { "name": "visible", "type": "bool", "default": true, "label": "Visible" },
@@ -72,6 +72,7 @@
       "size": [80, 24], "sets": ["appearance"],
       "props": [
         { "name": "text", "type": "string", "default": "Button", "label": "Caption", "usesName": true },
+        { "name": "icon", "type": "icon", "default": "", "label": "Icon" },
         { "name": "isDefault", "type": "bool", "default": false, "label": "Default" }
       ],
       "events": [ { "name": "clicked", "signal": "clicked", "hint": "The button was pressed." } ]
@@ -225,6 +226,10 @@
         { "name": "volume", "type": "int", "default": 100, "label": "Volume" },
         { "name": "muted", "type": "bool", "default": false, "label": "Mute" },
         { "name": "showControls", "type": "bool", "default": true, "label": "ShowControls" },
+        { "name": "mediaKeys", "type": "bool", "default": false, "label": "MediaKeys" },
+        { "name": "equalizer", "type": "bool", "default": false, "label": "Equalizer" },
+        { "name": "eqPreset", "type": "enum", "values": ["Flat", "Rock", "Pop", "Jazz", "Classical", "Dance", "Metal", "Bass Boost", "Treble Boost", "Vocal", "Loudness", "Headphones"], "default": "Flat", "label": "EqPreset" },
+        { "name": "eqPreamp", "type": "int", "default": 0, "label": "EqPreamp" },
         { "name": "fillMode", "type": "enum", "values": ["Fit", "Stretch", "Crop"], "default": "Fit", "label": "FillMode" }
       ],
       "events": [
@@ -232,14 +237,66 @@
         { "name": "paused", "signal": "paused", "hint": "It was paused." },
         { "name": "stopped", "signal": "stopped", "hint": "It was stopped (Stop, or player1.stop())." },
         { "name": "finished", "signal": "finished", "hint": "It played to the end (a Loop one never does)." },
-        { "name": "failed", "signal": "failed", "hint": "It can't be played: player1.errorString says why." }
+        { "name": "failed", "signal": "failed", "hint": "It can't be played: player1.errorString says why." },
+        { "name": "loaded", "signal": "loaded", "hint": "The file is open: player1.duration and its tags (player1.title, artist, album, trackNumber...) are known." },
+        { "name": "positionChanged", "signal": "positionChanged", "hint": "It moved on (several times a second while it plays): player1.position, in milliseconds." },
+        { "name": "nextTrack", "signal": "nextTrack", "hint": "The keyboard's Next key, or the sound menu's ⏭, was pressed (MediaKeys): play the next one." },
+        { "name": "previousTrack", "signal": "previousTrack", "hint": "The keyboard's Previous key, or the sound menu's ⏮, was pressed (MediaKeys): play the one before." }
       ]
+    },
+    {
+      "type": "Visualizer", "component": "AppVisualizer", "prefix": "visualizer", "glyph": "▃▆",
+      "size": [152, 48], "sets": [],
+      "props": [
+        { "name": "player", "type": "element", "of": "MediaPlayer", "default": "", "label": "Player" },
+        { "name": "style", "type": "enum", "values": ["Spectrum", "Oscilloscope", "Meter"], "default": "Spectrum", "label": "Style" },
+        { "name": "bars", "type": "int", "default": 20, "label": "Bars" },
+        { "name": "showPeaks", "type": "bool", "default": true, "label": "ShowPeaks" },
+        { "name": "foreColor", "type": "color", "default": "", "label": "ForeColor" },
+        { "name": "backColor", "type": "color", "default": "", "label": "BackColor" },
+        { "name": "peakColor", "type": "color", "default": "", "label": "PeakColor" },
+        { "name": "borderStyle", "type": "enum", "values": ["None", "Single", "Sunken"], "default": "Sunken", "label": "BorderStyle" }
+      ],
+      "events": [ { "name": "clicked", "signal": "clicked", "hint": "It was clicked (to change its Style, say: vis1.style = \"Oscilloscope\")." } ]
+    },
+    {
+      "type": "Equalizer", "component": "AppEqualizer", "prefix": "equalizer", "glyph": "EQ",
+      "size": [392, 152], "sets": [],
+      "props": [
+        { "name": "player", "type": "element", "of": "MediaPlayer", "default": "", "label": "Player" },
+        { "name": "showPresets", "type": "bool", "default": true, "label": "ShowPresets" },
+        { "name": "showPreamp", "type": "bool", "default": true, "label": "ShowPreamp" }
+      ],
+      "events": [ { "name": "changed", "signal": "changed", "hint": "It was changed (on or off, a band, the preamp, a preset): eq1.player's equalizer, eqGains, eqPreamp." } ]
+    },
+    {
+      "type": "Slider", "component": "AppSlider", "prefix": "slider", "glyph": "↔",
+      "size": [160, 30], "sets": ["data"],
+      "props": [
+        { "name": "min", "type": "int", "default": 0, "label": "Min" },
+        { "name": "max", "type": "int", "default": 100, "label": "Max" },
+        { "name": "value", "type": "int", "default": 0, "label": "Value" },
+        { "name": "smallChange", "type": "int", "default": 1, "label": "SmallChange" },
+        { "name": "largeChange", "type": "int", "default": 10, "label": "LargeChange" },
+        { "name": "tickCount", "type": "int", "default": 11, "label": "TickCount" },
+        { "name": "orientation", "type": "enum", "values": ["Horizontal", "Vertical"], "default": "Horizontal", "label": "Orientation" }
+      ],
+      "events": [ { "name": "changed", "signal": "changed", "hint": "It was moved (dragged, clicked or with the keys): slider1.value." } ]
+    },
+    {
+      "type": "Timer", "component": "AppTimer", "prefix": "timer", "glyph": "⏱",
+      "size": [28, 28], "sets": [],
+      "props": [
+        { "name": "interval", "type": "int", "default": 1000, "label": "Interval" }
+      ],
+      "events": [ { "name": "timer", "signal": "timer", "hint": "Interval milliseconds have gone by (while it's Enabled): timer1.count is how many times." } ]
     },
     {
       "type": "Graph", "component": "AppGraph", "prefix": "graph", "glyph": "▥", "editor": "graph",
       "size": [320, 220], "sets": ["appearance"],
       "props": [
-        { "name": "graph", "type": "graph", "default": {}, "label": "Graph" }
+        { "name": "graph", "type": "graph", "default": {}, "label": "Graph" },
+        { "name": "plotColor", "type": "color", "default": "", "label": "PlotColor" }
       ],
       "events": [
         { "name": "clicked", "signal": "clicked", "hint": "A bar, point or slice was clicked: graph1.clickedLabel, clickedValue (a stock graph: the close), clickedSeries, clickedIndex (-1: not one), clickedItem (all of it)." }

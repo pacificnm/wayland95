@@ -133,21 +133,21 @@
        {
         "text": "New",
         "name": "newTool",
-        "glyph": "✚",
+        "icon": "new",
         "toolTip": "A new book",
         "action": "newRecord"
        },
        {
         "text": "Save",
         "name": "saveTool",
-        "glyph": "✔",
+        "icon": "save",
         "toolTip": "Save the book",
         "action": "save"
        },
        {
         "text": "Delete",
         "name": "deleteTool",
-        "glyph": "✖",
+        "icon": "delete",
         "toolTip": "Delete the book",
         "action": "deleteRecord"
        },
@@ -157,28 +157,28 @@
        {
         "text": "",
         "name": "firstTool",
-        "glyph": "«",
+        "icon": "first",
         "toolTip": "The first book",
         "action": "first"
        },
        {
         "text": "",
         "name": "previousTool",
-        "glyph": "‹",
+        "icon": "previous",
         "toolTip": "The book before",
         "action": "previous"
        },
        {
         "text": "",
         "name": "nextTool",
-        "glyph": "›",
+        "icon": "next",
         "toolTip": "The next book",
         "action": "next"
        },
        {
         "text": "",
         "name": "lastTool",
-        "glyph": "»",
+        "icon": "last",
         "toolTip": "The last book",
         "action": "last"
        },
@@ -188,7 +188,7 @@
        {
         "text": "Members",
         "name": "membersTool",
-        "glyph": "☺",
+        "icon": "people",
         "toolTip": "The club's members",
         "action": "openForm",
         "form": "MembersForm"

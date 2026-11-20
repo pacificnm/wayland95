@@ -74,6 +74,10 @@ suite_manual() {
     pointer click:500,361 wait:0.3 key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down key:Down wait:0.4
     pic menu-editor
     pointer click:832,592 wait:0.5
+    # the ToolBar under it: its Buttons (F4), New's Choose… beside Icon: the Icon chooser
+    pointer click:400,197 wait:0.5 click:1130,349 wait:0.3 key:F4 wait:0.8 click:543,243 wait:0.8
+    pic icon-chooser "$(middle 436 352)"
+    pointer key:Escape wait:0.3 click:832,592 wait:0.5
     # the code window: the form's code (its title bar selects the form), then a list after "form."
     pointer click:400,151 wait:0.4 click:177,109 wait:0.8
     pic code-window

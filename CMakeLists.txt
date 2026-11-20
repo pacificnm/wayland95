@@ -53,6 +53,8 @@ qt_add_executable(win95compositor
     src/launcher.cpp
     src/programmenu.h
     src/programmenu.cpp
+    src/desktopshortcuts.h
+    src/desktopshortcuts.cpp
     src/polkitagent.h
     src/polkitagent.cpp
     src/accessibility.h
@@ -231,6 +233,8 @@ configure_file(session/wayland95.desktop.in ${CMAKE_BINARY_DIR}/wayland95.deskto
 install(PROGRAMS session/wayland95-session DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES ${CMAKE_BINARY_DIR}/wayland95.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/wayland-sessions)
 install(FILES session/wayland95-portals.conf DESTINATION ${CMAKE_INSTALL_DATADIR}/xdg-desktop-portal)
+# the session's fonts (FONTCONFIG_FILE, from wayland95-session)
+install(FILES session/wayland95-fonts.conf DESTINATION ${CMAKE_INSTALL_DATADIR}/wayland95 RENAME fonts.conf)
 # win95portal: D-Bus starts it on demand; xdg-desktop-portal only looks for
 # backends in its own folder (/usr/share/... whatever our prefix is)
 configure_file(session/org.freedesktop.impl.portal.desktop.wayland95.service.in
@@ -240,6 +244,12 @@ install(FILES ${CMAKE_BINARY_DIR}/org.freedesktop.impl.portal.desktop.wayland95.
 set(WAYLAND95_PORTAL_DIR "/usr/share/xdg-desktop-portal/portals" CACHE PATH
     "Where xdg-desktop-portal looks for backends")
 install(FILES session/wayland95.portal DESTINATION ${WAYLAND95_PORTAL_DIR})
+
+# The login screen: an SDDM theme (sddm/wayland95). SDDM looks for themes only
+# in its own folder, whatever our prefix. Installing it doesn't switch to it:
+# /etc/sddm.conf.d/ does that (the live ISO's does, see live/config).
+set(WAYLAND95_SDDM_THEMES_DIR "/usr/share/sddm/themes" CACHE PATH "Where SDDM looks for login themes")
+install(DIRECTORY sddm/wayland95 DESTINATION ${WAYLAND95_SDDM_THEMES_DIR})
 
 # Control Panel > Services: its root helper, and the polkit action that lets
 # pkexec run it (polkit reads actions only from /usr/share, whatever our prefix)
@@ -252,3 +262,9 @@ set(WAYLAND95_SERVICES_HELPER "${CMAKE_INSTALL_FULL_LIBEXECDIR}/wayland95/waylan
 configure_file(session/org.wayland95.services.policy.in ${CMAKE_BINARY_DIR}/org.wayland95.services.policy @ONLY)
 set(WAYLAND95_POLKIT_ACTIONS_DIR "/usr/share/polkit-1/actions" CACHE PATH "Where polkit looks for actions")
 install(FILES ${CMAKE_BINARY_DIR}/org.wayland95.services.policy DESTINATION ${WAYLAND95_POLKIT_ACTIONS_DIR})
+# Start menu > Open as Admin (Root): the desktop's helper that runs a
+# program as root on the user's display, and its polkit action
+install(PROGRAMS session/wayland95-run-as-admin DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/wayland95)
+set(WAYLAND95_RUN_AS_ADMIN_HELPER "${CMAKE_INSTALL_FULL_LIBEXECDIR}/wayland95/wayland95-run-as-admin")
+configure_file(session/org.wayland95.run-as-admin.policy.in ${CMAKE_BINARY_DIR}/org.wayland95.run-as-admin.policy @ONLY)
+install(FILES ${CMAKE_BINARY_DIR}/org.wayland95.run-as-admin.policy DESTINATION ${WAYLAND95_POLKIT_ACTIONS_DIR})

@@ -95,6 +95,41 @@ The program.
 | `App.msgBox(text, title, icon, buttons, callback)` | A message box. |
 | `App.quit()` | End the program. |
 | `App.name`, `App.title`, `App.version`, `App.formNames` | The program's own. |
+| `App.testing` | True while a test runs it (Claude's `run_test`): its message boxes and file boxes are answered by the test, and its MediaPlayers make no sound. |
+
+### Files and folders
+
+The Win95 **Open**, **Select Folder** and **Save As** boxes, and what's in
+a folder. Like a message box, a box doesn't wait: what to do with the
+answer goes in its function.
+
+| | |
+|---|---|
+| `App.chooseFile(options, function (path) { })` | The Open box: one file (`""` if it was cancelled). |
+| `App.chooseFiles(options, function (paths) { })` | The Open box: several, with **Ctrl** and **Shift** (`[]` if cancelled). |
+| `App.chooseFolder(options, function (path) { })` | Select Folder. |
+| `App.chooseSaveFile(options, function (path) { })` | Save As (it asks before replacing a file). |
+| `App.listFiles(folder, patterns, recursive)` | The paths of the files in a folder that match (`"*.mp3 *.flac"`), and in its folders too with `recursive` true; in order, the way people count (`2` before `10`); 20000 at most. |
+| `App.fileInfo(path)` | `{ exists, isFile, isDir, path, name, baseName, suffix, folder, size, modified }`. |
+| `App.readTags(path, function (tags) { })` | A sound's or video's own tags, without playing it: `{ ok, title, artist, album, albumArtist, genre, trackNumber, year, duration, hasVideo, coverArt, error }` (`duration` in milliseconds; `coverArt` the picture inside it, as a file an Image shows). Several wait their turn. |
+
+The options, all of them optional: `title` (the box's), `folder` (where
+it starts: `~/Music`; blank, the home folder), `filters` (the **Files of
+type** list: `["Music (*.mp3 *.flac)", "All Files (*.*)"]`), and for Save
+As, `name` (a name to start with) and `suffix` (added if none is typed:
+`"m3u"`). A path can start with `~`.
+
+```
+App.chooseFolder({ title: "Add a Folder", folder: "~/Music" }, function (folder) {
+    if (folder === "")
+        return;
+    App.listFiles(folder, "*.mp3 *.flac *.ogg", true).forEach(function (path) {
+        App.readTags(path, function (t) {
+            Db.insert("Songs", { File: path, Title: t.title || App.fileInfo(path).baseName, Artist: t.artist });
+        });
+    });
+});
+```
 
 ### Db
 
@@ -161,9 +196,13 @@ set, and some have more:
 | DataGrid | `rows`, `currentIndex`, `currentRow`, `currentId`, `refresh()`, `select(index)`, `search`, `orderBy` |
 | Menu, ToolBar | `item`, `setEnabled(name, on)`, `setChecked(name, on)`, `setText(name, text)`, `itemNamed(name)` |
 | DateTimePicker | `value`, `text`, `date`, `clear()`, `setToday()`, `step(n)`, `openCalendar()` |
-| Graph | `refresh()`, `setData(labels, series)`, `itemAt(x, y)`, `labels`, `series`, `graphType`, `title`, `legend`, `stacked`, `showValues`; stock graphs: `tick(label, price, volume)`, `addBar(label, open, high, low, close, volume)`, `indicator(name)`, `maxBars`, `overlays`, `studies` ([Stock graphs](forms.md#stock-graphs)); in clicked: `clickedLabel`, `clickedValue`, `clickedSeries`, `clickedIndex`, `clickedItem` |
+| Graph | `refresh()`, `setData(labels, series)`, `itemAt(x, y)`, `labels`, `series`, `graphType`, `title`, `legend`, `stacked`, `showValues`, `plotColor`; stock graphs: `tick(label, price, volume)`, `addBar(label, open, high, low, close, volume)`, `indicator(name)`, `maxBars`, `overlays`, `studies` ([Stock graphs](forms.md#stock-graphs)); in clicked: `clickedLabel`, `clickedValue`, `clickedSeries`, `clickedIndex`, `clickedItem` |
 | AIChat | `send(text)`, `clear()`, `cancel()`, `addTool(name, description, inputs, function)`, `removeTool(name)`, `busy`, `lastReply`, `lastTool`, `errorString`, `messages`, `usage` ([An AI Chat in Your App](ai-chat.md)) |
-| MediaPlayer | `play()`, `pause()`, `stop()`, `toggle()`, `seek(ms)`, `source`, `isPlaying`, `position` and `duration` (milliseconds), `volume`, `muted`, `loop`, `hasVideo`, `title`, `errorString` |
+| MediaPlayer | `play()`, `pause()`, `stop()`, `toggle()`, `seek(ms)`, `source`, `isPlaying`, `position` and `duration` (milliseconds), `volume`, `muted`, `loop`, `hasVideo`, `title`, `errorString`, `clock(ms)` (`"3:05"`); its tags `artist`, `album`, `albumArtist`, `genre`, `trackNumber`, `year`, `coverArt`; what the sound's doing `levels`, `peaks`, `level`, `waveform`; `mediaKeys`; the equalizer `equalizer`, `eqGains`, `eqPreamp`, `eqFrequencies`, `eqPresets`, `eqPresetNow`, `setEqGain(band, dB)`, `applyEqPreset(name)` |
+| Equalizer | `player`, `target` (the MediaPlayer) |
+| Visualizer | `player`, `style`, `bars`, `analyzer` |
+| Slider | `value`, `min`, `max` |
+| Timer | `interval`, `enabled`, `start()`, `stop()`, `restart()`, `running`, `count` |
 
 ### Message boxes
 
@@ -223,6 +262,12 @@ statusLabel.text = form.errors[first];
 False, its Source a short sound), and in the form's saved code:
 `chime.play();`. A song from a field: `player1.source = form.record.File;
 player1.play();`.
+
+**A clock**: a Timer `clock` (Interval 1000), and in its timer code:
+
+```
+timeLabel.text = new Date().toLocaleTimeString();
+```
 
 **Ask an API for something that isn't a table**:
 

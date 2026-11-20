@@ -10,10 +10,11 @@ import Win95Ui
 //          edit of it blank starts from the placeholder) }]
 // type: string, int, real, bool, color, font, enum (values), choice (values
 //       as [{ value, label }]), list (strings, one per line), text (several
-//       lines), image (a file), media (a sound or video file), menu and
-//       toolbar (the Menu Editor), graph (the Graph Editor)
+//       lines), image (a file), media (a sound or video file), icon (one of
+//       Wayland 95's: the Icon chooser), menu and toolbar (the Menu Editor),
+//       graph (the Graph Editor)
 // `tools` supplies the dialogs: pickColor(value, cb), editText(title, text,
-// cb), pickFromList(title, items, current, cb), pickPicture(cb),
+// cb), pickFromList(title, items, current, cb), pickPicture(cb), pickIcon(name, cb),
 // editItems(kind, items, cb), editGraph(settings, cb).
 FocusScope {
     id: grid
@@ -37,7 +38,7 @@ FocusScope {
     function isText(type) { return type === "string" || type === "int" || type === "real" || type === "color" || type === "media"; }
     function hasList(type) { return type === "bool" || type === "enum" || type === "choice"; }
     function hasDialog(type) {
-        return type === "color" || type === "font" || type === "list" || type === "text" || type === "image" || type === "media"
+        return type === "color" || type === "font" || type === "list" || type === "text" || type === "image" || type === "media" || type === "icon"
             || type === "menu" || type === "toolbar" || type === "graph";
     }
 
@@ -55,6 +56,14 @@ FocusScope {
                             .map(function (it) { return String(it.text || it.name || "").replace(/&(.)/g, "$1"); }).join(", ");
         case "text":
             return String(v === undefined || v === null ? "" : v).replace(/\n/g, " ↵ ");
+        case "icon":
+            // its name in the chooser: "Save"
+            var all = StudioTools.icons();
+            for (var k = 0; k < all.length; ++k) {
+                if (all[k].name === v)
+                    return all[k].label;
+            }
+            return v === undefined || v === null ? "" : String(v);
         case "graph":
             // its type, and what it reads: "Pie: Books by Genre"
             v = v || {};
@@ -142,6 +151,8 @@ FocusScope {
             tools.editText(row.label, String(row.value || ""), function (text) { grid.commit(index, text); });
         } else if (row.type === "image") {
             tools.pickPicture(function (path) { grid.commit(index, path); });
+        } else if (row.type === "icon") {
+            tools.pickIcon(row.value, function (name) { grid.commit(index, name); });
         } else if (row.type === "media") {
             tools.pickMedia(function (path) { grid.commit(index, path); });
         } else if (row.type === "menu" || row.type === "toolbar") {
@@ -224,9 +235,16 @@ FocusScope {
                     border.color: Theme.text
                     border.width: 1
                 }
+                Icon95 {
+                    id: iconShown
+                    visible: rowItem.row.type === "icon" && !editor.visible && known
+                    x: 3
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: rowItem.row.type === "icon" ? rowItem.row.value || "" : ""
+                }
                 Text {
                     visible: !editor.visible
-                    x: swatch.visible ? 21 : 3
+                    x: swatch.visible ? 21 : iconShown.visible ? 22 : 3
                     width: parent.width - x - (button.visible ? button.width + 2 : 2)
                     anchors.verticalCenter: parent.verticalCenter
                     text: {

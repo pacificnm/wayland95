@@ -71,7 +71,7 @@ static void stop_listening(struct server *s)
 {
 	struct wl_listener *listeners[] = {
 		&s->new_output, &s->new_input, &s->new_layer_surface,
-		&s->new_xdg_toplevel, &s->new_xdg_popup, &s->new_xdg_decoration,
+		&s->new_xdg_toplevel, &s->new_xdg_popup, &s->new_xdg_decoration, &s->new_kde_decoration,
 		&s->cursor_motion, &s->cursor_motion_absolute, &s->cursor_button, &s->cursor_axis,
 		&s->cursor_frame, &s->swipe_begin, &s->swipe_update, &s->swipe_end, &s->pinch_begin,
 		&s->pinch_update, &s->pinch_end, &s->hold_begin, &s->hold_end,
@@ -224,7 +224,8 @@ int main(int argc, char *argv[])
 	// screenshots and screen recording (grim, the tests, screen sharing)
 	wlr_screencopy_manager_v1_create(server.display);
 	wlr_export_dmabuf_manager_v1_create(server.display);
-	wlr_xdg_output_manager_v1_create(server.display, server.output_layout);
+	server.xdg_output_manager = wlr_xdg_output_manager_v1_create(server.display, server.output_layout);
+	xscale_init(&server); // (Xwayland's own xdg-output: xscale.c)
 
 	// the window list for other programs (the taskbar)
 	server.foreign_toplevels = wlr_foreign_toplevel_manager_v1_create(server.display);

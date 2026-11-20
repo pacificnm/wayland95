@@ -1,0 +1,30 @@
+#!/bin/sh
+# Start > (right-click a program) > Open as Admin (Root): runs a program as
+# root on the user's own display. pkexec runs this as root with almost no
+# environment, so the desktop passes where its display is:
+#
+#   pkexec wayland95-run-as-admin WAYLAND_DISPLAY DISPLAY XAUTHORITY PROGRAM [ARGS...]
+#
+# WAYLAND_DISPLAY must be a full path (root has no runtime dir of the
+# user's to look it up in); DISPLAY and XAUTHORITY may be empty.
+set -e
+
+if [ "$#" -lt 4 ]; then
+    echo "usage: $0 WAYLAND_DISPLAY DISPLAY XAUTHORITY PROGRAM [ARGS...]" >&2
+    exit 2
+fi
+wayland=$1 x11=$2 xauth=$3
+shift 3
+
+export WAYLAND_DISPLAY="$wayland"
+[ -n "$x11" ] && export DISPLAY="$x11"
+[ -n "$xauth" ] && export XAUTHORITY="$xauth"
+# Wayland first, X11 if that's all a program does
+export QT_QPA_PLATFORM="wayland;xcb"
+export GDK_BACKEND="wayland,x11"
+# root has no session bus here: don't wait for the accessibility bus on it
+export NO_AT_BRIDGE=1
+# root's own runtime dir if it has one (Qt and GTK make a private one if not)
+[ -d /run/user/0 ] && export XDG_RUNTIME_DIR=/run/user/0
+
+exec "$@"

@@ -73,8 +73,8 @@ tools = s.request("tools/list")["result"]["tools"]
 names = [t["name"] for t in tools]
 want = ["studio_reference", "studio_manual", "new_project", "get_project", "set_app", "put_table", "remove_table",
         "put_form", "remove_form", "put_element", "remove_element", "set_code", "check_project", "show_form",
-        "build_program", "run_app"]
-check(names == want, "tools/list has the 16 tools", names)
+        "run_test", "build_program", "run_app"]
+check(names == want, "tools/list has the 17 tools", names)
 check(all(t["inputSchema"]["type"] == "object" and t["description"] for t in tools), "each with a description and an input schema")
 check("error" in s.request("tools/call", {"name": "nope", "arguments": {}}), "an unknown tool is a JSON-RPC error")
 check(s.request("resources/list").get("error", {}).get("code") == -32601, "a method it doesn't have: -32601")
@@ -181,6 +181,12 @@ r, t = s.call("put_element", path=proj, form="ContactsForm", element={"name": "s
 el = next(c for c in json.load(open(proj))["forms"][0]["controls"] if c["name"] == "saveButton")
 check(not r["isError"] and el["props"] == {"text": "Save it", "isDefault": True} and el["x"] == 188 and el["type"] == "Button",
       "put_element with merge changes only what's given", el)
+r, t = s.call("put_element", path=proj, form="ContactsForm", element={"name": "saveButton", "props": {"icon": "sparkle"}}, merge=True)
+check(r["isError"] and "icon is one of Wayland 95's icons" in t, "an icon that isn't one of Wayland 95's is refused", t)
+r, t = s.call("put_element", path=proj, form="ContactsForm", element={"name": "saveButton", "props": {"icon": "save"}}, merge=True)
+check(not r["isError"], "and one that is is taken (save)", t)
+_, icons = s.call("studio_reference", topic="elements", element="icons")
+check(icons.startswith("## Icons") and "`people` People" in icons, "studio_reference lists the icons' names", icons[:200])
 r, t = s.call("put_element", path=proj, form="ContactsForm", element={"name": "nothere", "props": {}}, merge=True)
 check(r["isError"], "merge needs the element to be there")
 r, t = s.call("set_code", path=proj, form="ContactsForm", element="saveButton", event="clicked", code="form.save();")
@@ -201,8 +207,20 @@ r, t = s.call("put_element", path=proj, form="ContactsForm", merge=True, element
     {"text": "&File", "name": "fileMenu", "items": [{"text": "&About", "name": "fileAbout", "action": "openForm", "form": "AboutForm"},
                                                     {"text": "&Fly", "name": "fileFly", "action": "fly"}]}]}})
 r, t = s.call("check_project", path=proj)
-check(r["isError"] and "Fone isn't a field" in t and "fileAbout opens AboutForm, which isn't in the project" in t
-      and "fileFly's action fly isn't one of" in t, "check_project: a field, a form to open and an action that aren't there", t)
+check(r["isError"] and "Fone isn't a field" in t and "File > About opens AboutForm, which isn't in the project" in t
+      and t.count("opens AboutForm") == 1
+      and "fileFly's action fly isn't one of" in t, "check_project: a field, a form to open (said once) and an action that aren't there", t)
+# a Visualizer's Player names a MediaPlayer of the form; a grid's columns may have widths
+r, t = s.call("put_element", path=proj, form="ContactsForm", element={"type": "Visualizer", "name": "vis1", "x": 8, "y": 8,
+                                                                      "props": {"player": "phoneBox"}})
+check(not r["isError"] and "vis1: its Player phoneBox is a TextBox, not a MediaPlayer" in t,
+      "a Visualizer whose Player isn't a MediaPlayer: said after the write", t)
+s.call("remove_element", path=proj, form="ContactsForm", name="vis1")
+r, t = s.call("put_element", path=proj, form="ContactsForm", element={"type": "DataGrid", "name": "widths", "x": 8, "y": 8,
+                                                                      "props": {"table": "Contacts", "columns": ["Name:180", "Email", "Kind: 60", "Nope:40", "Born:wide"]}})
+check("its column Nope isn't a field" in t and "\"Born:wide\" isn't a field's name, or a name and a width" in t
+      and "column Name" not in t and "column Kind" not in t and "column Email" not in t, "a DataGrid's columns with widths: the names are checked, a bad width said", t)
+s.call("remove_element", path=proj, form="ContactsForm", name="widths")
 s.call("put_element", path=proj, form="ContactsForm", merge=True, element={"name": "phoneBox", "props": {"field": "Phone"}})
 s.call("put_element", path=proj, form="ContactsForm", merge=True, element={"name": "menu1", "props": {"menus": form["controls"][-1]["props"]["menus"]}})
 
@@ -250,6 +268,44 @@ check(ev.stdout.split("\n")[:2] == ["true 1", "false Born,Email,Name"],
 
 r, t = s.call("run_app", path=proj)
 check(r["isError"] and "no desktop" in t, "run_app without a desktop says so", t)
+
+# run_test: the app driven off the screen, on a copy of its database
+script = """
+Test.type("ContactsForm", "nameBox", "Grace");
+Test.type("ContactsForm", "emailBox", "grace@example.com");
+Test.click("ContactsForm", "menu1", "fileSave");
+Test.equal(Db.count("Contacts"), 2, "File > Save adds Grace");
+Test.equal(Test.element("ContactsForm", "statusLabel").text, "Grace", "the form's current code ran");
+Test.type("ContactsForm", "nameBox", "");
+Test.click("ContactsForm", "menu1", "fileSave");
+Test.wait(200, function () {
+    Test.check(Test.lastMessage().indexOf("required") >= 0, "an empty Name: the message box says it's required");
+    Test.choose("~/songs/a.mp3");
+    App.chooseFile({ title: "Pick" }, function (p) { Test.log("got " + p); });
+    Test.equal(1, 2, "one that fails");
+});
+"""
+r, t = s.call("run_test", path=proj, script=script)
+check(r["isError"] and "[pass] File > Save adds Grace: 2" in t and "[pass] the form's current code ran" in t
+      and "[message warning]" in t and "[pass] an empty Name" in t
+      and '[file box] Open "Pick" -> ' + os.path.expanduser("~/songs/a.mp3") in t and "[log] got " + os.path.expanduser("~/songs/a.mp3") in t
+      and "[FAIL] one that fails: got 1, wanted 2" in t and "3 passed, 1 failed, 0 errors" in t,
+      "run_test: typed, a menu item, checks, a message box and a file box answered, a failure an error result", t)
+ev = subprocess.run([os.path.join(BUILD, "win95apprun"), "--eval", os.path.join(WORK, "count.js"), proj], capture_output=True, text=True,
+                    env=dict(os.environ, QT_QPA_PLATFORM="offscreen")) if open(os.path.join(WORK, "count.js"), "w").write('Test.out(String(Db.count("Contacts")));') else None
+check(ev.stdout.strip() == "1", "and the project's own database is as it was (Ada alone)", ev.stdout + ev.stderr)
+r, t = s.call("run_test", path=proj, script='Test.check(true, "fine");\nTest.element("ContactsForm", "nope");')
+check(r["isError"] and "[pass] fine" in t and "[error] test script, line 2: Error: ContactsForm has no element named nope" in t,
+      "a mistake in the script: an error, with its line", t)
+r, t = s.call("run_test", path=proj, script='Test.wait(10000, function () {});', timeout=1)
+check(r["isError"] and "timed out after 1 s" in t, "a wait longer than the timeout: it says it timed out", t)
+r, t = s.call("run_test", path=proj, script='var f = Test.form("ContactsForm");\nf.element("newButton").clicked.connect(function () { nothing(); });\nTest.click(f, "newButton");')
+check(r["isError"] and "[error]" in t and "nothing" in t, "a mistake in code a click runs: an error", t)
+mysql = json.load(open(proj))
+mysql["database"] = {"driver": "mysql", "host": "localhost", "name": "x", "user": "x", "password": ""}
+json.dump(mysql, open(os.path.join(WORK, "server.w95proj"), "w"))
+r, t = s.call("run_test", path=os.path.join(WORK, "server.w95proj"), script='Test.check(true, "x");')
+check(r["isError"] and "can't be copied for a test" in t, "a MySQL project isn't run without serverDatabase", t)
 
 # removing
 r, t = s.call("remove_element", path=proj, form="ContactsForm", name="menu1")

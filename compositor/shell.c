@@ -165,6 +165,8 @@ static void shell_bind(struct wl_client *client, void *data, uint32_t version, u
 static bool global_filter(const struct wl_client *client, const struct wl_global *global, void *data)
 {
 	struct server *server = data;
+	if (!xscale_global_visible(server, client, global))
+		return false;
 	if (global != server->shell_global || !server->shell_program)
 		return true;
 	return client == server->shell_client;
@@ -336,6 +338,12 @@ uint32_t shell_key_for(xkb_keysym_t sym, uint32_t modifiers)
 	case XKB_KEY_XF86AudioRaiseVolume: return WAYLAND95_SHELL_V1_KEY_VOLUME_UP;
 	case XKB_KEY_XF86AudioLowerVolume: return WAYLAND95_SHELL_V1_KEY_VOLUME_DOWN;
 	case XKB_KEY_XF86AudioMute: return WAYLAND95_SHELL_V1_KEY_VOLUME_MUTE;
+	// the media keys: the shell sends them to the program that's playing (MPRIS)
+	case XKB_KEY_XF86AudioPlay: return WAYLAND95_SHELL_V1_KEY_MEDIA_PLAY_PAUSE;
+	case XKB_KEY_XF86AudioPause: return WAYLAND95_SHELL_V1_KEY_MEDIA_PAUSE;
+	case XKB_KEY_XF86AudioStop: return WAYLAND95_SHELL_V1_KEY_MEDIA_STOP;
+	case XKB_KEY_XF86AudioNext: return WAYLAND95_SHELL_V1_KEY_MEDIA_NEXT;
+	case XKB_KEY_XF86AudioPrev: return WAYLAND95_SHELL_V1_KEY_MEDIA_PREVIOUS;
 	case XKB_KEY_XF86MonBrightnessUp: return WAYLAND95_SHELL_V1_KEY_BRIGHTNESS_UP;
 	case XKB_KEY_XF86MonBrightnessDown: return WAYLAND95_SHELL_V1_KEY_BRIGHTNESS_DOWN;
 	case XKB_KEY_XF86PowerOff: return WAYLAND95_SHELL_V1_KEY_POWER;

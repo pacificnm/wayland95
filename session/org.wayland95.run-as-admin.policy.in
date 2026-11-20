@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- Start menu > (right-click a program) > Open as Admin (Root): the
+     desktop's helper (wayland95-run-as-admin) runs the program as root,
+     through pkexec. An administrator's password every time: nothing is
+     remembered, since a program run this way can change anything. -->
+<policyconfig>
+  <vendor>Wayland 95</vendor>
+  <action id="org.wayland95.run-as-admin">
+    <description>Run a program as the administrator</description>
+    <message>To open a program as the administrator (root), type an administrator's password.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">@WAYLAND95_RUN_AS_ADMIN_HELPER@</annotate>
+  </action>
+</policyconfig>

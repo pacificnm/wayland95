@@ -17,7 +17,10 @@
 //   paste           report the clipboard; "paste-primary" the primary selection
 //   menu            open the right-click menu at the last press
 //
-//   w95probe-gtk [--title T] [--color RRGGBB] [--size WxH]
+//   w95probe-gtk [--title T] [--color RRGGBB] [--size WxH] [--headerbar]
+// (--headerbar: its own title bar, a GtkHeaderBar, as GNOME programs have;
+// --stripes: one-pixel black and white columns, to see whether it's shown
+// pixel for pixel)
 // Runs on Wayland, or X11 with GDK_BACKEND=x11.
 #include <gtk/gtk.h>
 #include <stdio.h>
@@ -26,6 +29,7 @@
 static GtkWidget *menu;
 static GdkEvent *last_press;
 static GdkRGBA color = {0.2, 0.6, 0.2, 1};
+static gboolean stripes;
 
 static void out(const char *fmt, ...)
 {
@@ -42,6 +46,15 @@ static gboolean on_draw(GtkWidget *w, cairo_t *cr, gpointer data)
 {
 	gdk_cairo_set_source_rgba(cr, &color);
 	cairo_paint(cr);
+	if (stripes) {
+		int width = gtk_widget_get_allocated_width(w), height = gtk_widget_get_allocated_height(w);
+		cairo_set_source_rgb(cr, 1, 1, 1);
+		cairo_paint(cr);
+		cairo_set_source_rgb(cr, 0, 0, 0);
+		for (int x = 0; x < width; x += 2)
+			cairo_rectangle(cr, x, 0, 1, height);
+		cairo_fill(cr);
+	}
 	return FALSE;
 }
 
@@ -154,9 +167,16 @@ int main(int argc, char *argv[])
 {
 	const char *title = "w95probe-gtk";
 	int width = 400, height = 300;
+	gboolean headerbar = FALSE;
 	gtk_init(&argc, &argv);
-	for (int i = 1; i + 1 < argc; ++i) {
-		if (strcmp(argv[i], "--title") == 0)
+	for (int i = 1; i < argc; ++i) {
+		if (strcmp(argv[i], "--headerbar") == 0)
+			headerbar = TRUE;
+		else if (strcmp(argv[i], "--stripes") == 0)
+			stripes = TRUE;
+		else if (i + 1 >= argc)
+			break;
+		else if (strcmp(argv[i], "--title") == 0)
 			title = argv[++i];
 		else if (strcmp(argv[i], "--color") == 0)
 			gdk_rgba_parse(&color, g_strdup_printf("#%s", argv[++i]));
@@ -167,6 +187,12 @@ int main(int argc, char *argv[])
 	GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_title(GTK_WINDOW(window), title);
 	gtk_window_set_default_size(GTK_WINDOW(window), width, height);
+	if (headerbar) {
+		GtkWidget *bar = gtk_header_bar_new();
+		gtk_header_bar_set_title(GTK_HEADER_BAR(bar), title);
+		gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(bar), TRUE);
+		gtk_window_set_titlebar(GTK_WINDOW(window), bar);
+	}
 	g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 	g_signal_connect(window, "configure-event", G_CALLBACK(on_configure), NULL);
 	g_signal_connect(window, "window-state-event", G_CALLBACK(on_state), NULL);

@@ -28,6 +28,18 @@ export XDG_SESSION_TYPE=wayland
 export XDG_CURRENT_DESKTOP=Wayland95
 export XDG_SESSION_DESKTOP=wayland95
 unset WAYLAND_DISPLAY DISPLAY WAYLAND_SOCKET
+# Programs' look in this session only (other desktops keep theirs): web
+# pages' and programs' plain "sans-serif" is the desktop's Liberation Sans
+# (fonts.conf), and GTK programs keep their scroll bars showing, as Win95's
+# did. (The shell gives GTK programs Wayland 95's theme and fonts, and
+# browsers the Win95 title bar, at login: src/programlook.cpp.)
+FONTS="$(dirname "$BIN")/share/wayland95/fonts.conf"
+[ -z "${FONTCONFIG_FILE:-}" ] && [ -f "$FONTS" ] && export FONTCONFIG_FILE="$FONTS"
+export GTK_OVERLAY_SCROLLING=0
+# ...and taken back from systemd's programs when the session ends
+# (Launcher::startSession gave them these)
+forget_env() { systemctl --user unset-environment FONTCONFIG_FILE GTK_OVERLAY_SCROLLING 2>/dev/null; }
+trap forget_env EXIT
 # the Qt compositor's settings, if this was started from its session
 unset QT_QPA_PLATFORM QT_QPA_EGLFS_INTEGRATION QT_QPA_EGLFS_ALWAYS_SET_MODE QT_QPA_EGLFS_KMS_CONFIG WAYLAND95_SESSION
 

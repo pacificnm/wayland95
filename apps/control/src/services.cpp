@@ -188,6 +188,11 @@ ServiceManager::ServiceManager(QObject *parent)
                          "if you allow it. Settings chooses the folder."),
           QStringLiteral("nginx"), QStringLiteral("NginxSettings.qml"),
           { QStringLiteral("nginx") }, {}, {} },
+        { QStringLiteral("samba"), QStringLiteral("Samba File Sharing"), QStringLiteral("server"),
+          QStringLiteral("Shares folders with other computers on the network: Windows (\\\\computer\\folder), "
+                         "Macs and Linux. Settings chooses the folders and who may use them."),
+          QStringLiteral("smbd"), QStringLiteral("SambaSettings.qml"),
+          { QStringLiteral("samba") }, {}, {} },
         { QStringLiteral("wireguard"), QStringLiteral("WireGuard VPN"), QStringLiteral("server"),
           QStringLiteral("Private, encrypted tunnels to other computers and networks (a VPN). Each tunnel has "
                          "its own keys and peers; Settings shows the ones this computer has."),
@@ -456,6 +461,9 @@ void ServiceManager::turnOn(const QString &id)
         done = id == QLatin1String("wireguard")
                 ? QStringLiteral("WireGuard is on: its tunnels connect now and whenever the computer starts. "
                                  "(If it has none yet, add one in Settings.)")
+                : id == QLatin1String("samba")
+                ? QStringLiteral("Samba is on. It starts whenever the computer starts.\n\n"
+                                 "Choose the folders to share in Settings.")
                 : d->name + QStringLiteral(" is on. It starts whenever the computer starts.");
     } else {
         done = d->name + QStringLiteral(" is installed.");
@@ -848,6 +856,116 @@ QVariantList ServiceManager::wireguardTunnels() const
     return list;
 }
 
+// ------------------------------------------------------------ login screen
+
+// W95_FAKE_ROOT: tests/services/run.sh's scratch copy of /etc and
+// /usr/share/sddm, so the Log On tab can be tried without changing the
+// computer (only ever read here)
+static QString systemPath(const QString &path)
+{
+    static const QString root = qEnvironmentVariable("W95_FAKE_ROOT");
+    return root + path;
+}
+
+QVariantMap ServiceManager::loginScreen() const
+{
+    QVariantMap out;
+
+    // which login screen the computer starts
+    QString dm;
+    const QFileInfo link(systemPath(QStringLiteral("/etc/systemd/system/display-manager.service")));
+    if (link.isSymLink())
+        dm = QFileInfo(link.symLinkTarget()).completeBaseName();
+    if (dm.isEmpty()) {
+        QFile f(systemPath(QStringLiteral("/etc/X11/default-display-manager")));
+        if (f.open(QIODevice::ReadOnly))
+            dm = QFileInfo(QString::fromUtf8(f.readAll()).trimmed()).fileName();
+    }
+    out.insert(QStringLiteral("displayManager"), dm);
+
+    const QString themes = systemPath(QStringLiteral("/usr/share/sddm/themes"));
+    out.insert(QStringLiteral("installed"), QFileInfo::exists(themes + QStringLiteral("/wayland95/Main.qml")));
+    out.insert(QStringLiteral("preview"),
+               QUrl::fromLocalFile(themes + QStringLiteral("/wayland95/preview.png")).toString());
+
+    // SDDM's settings: /usr/lib/sddm/sddm.conf.d, then /etc/sddm.conf.d (each
+    // in name order), then /etc/sddm.conf; a later [Theme] Current= wins
+    QStringList files;
+    for (const QString &dir : { QStringLiteral("/usr/lib/sddm/sddm.conf.d"), QStringLiteral("/etc/sddm.conf.d") }) {
+        const QDir d(systemPath(dir));
+        for (const QString &name : d.entryList({ QStringLiteral("*.conf") }, QDir::Files | QDir::Readable, QDir::Name))
+            files << d.filePath(name);
+    }
+    files << systemPath(QStringLiteral("/etc/sddm.conf"));
+
+    const QString ourFile = systemPath(QStringLiteral("/etc/sddm.conf.d/wayland95.conf"));
+    // the theme the files choose (and the file that chose it), with or
+    // without ours
+    auto chosen = [&files, &ourFile](bool withOurs, QString *from) {
+        QString theme;
+        for (const QString &path : files) {
+            if (!withOurs && path == ourFile)
+                continue;
+            QFile f(path);
+            if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+                continue;
+            bool inTheme = false;
+            const QStringList lines = QString::fromUtf8(f.readAll()).split(QLatin1Char('\n'));
+            for (QString line : lines) {
+                line = line.trimmed();
+                const int eq = line.indexOf(QLatin1Char('='));
+                if (line.startsWith(QLatin1Char('['))) {
+                    inTheme = line == QLatin1String("[Theme]");
+                } else if (inTheme && eq > 0 && line.left(eq).trimmed() == QLatin1String("Current")) {
+                    theme = line.mid(eq + 1).trimmed();
+                    if (from)
+                        *from = path;
+                }
+            }
+        }
+        return theme;
+    };
+    // a theme's own name (metadata.desktop's Name=) and picture; SDDM's
+    // default when none is chosen is Debian's (debian-theme)
+    auto describe = [&themes](const QString &theme, const QString &prefix, QVariantMap &into) {
+        const QString dir = themes + QLatin1Char('/') + (theme.isEmpty() ? QStringLiteral("debian-theme") : theme);
+        QString name = theme, picture;
+        QFile meta(dir + QStringLiteral("/metadata.desktop"));
+        if (meta.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            const QStringList lines = QString::fromUtf8(meta.readAll()).split(QLatin1Char('\n'));
+            for (const QString &line : lines) {
+                if (line.startsWith(QLatin1String("Name=")) && name == theme)
+                    name = line.mid(5).trimmed();
+                else if (line.startsWith(QLatin1String("Screenshot=")))
+                    picture = dir + QLatin1Char('/') + line.mid(11).trimmed();
+            }
+        }
+        into.insert(prefix + QStringLiteral("Name"), name);
+        into.insert(prefix + QStringLiteral("Preview"),
+                    !picture.isEmpty() && QFileInfo::exists(picture) ? QUrl::fromLocalFile(picture).toString() : QString());
+    };
+
+    QString from;
+    const QString current = chosen(true, &from);
+    const QString without = chosen(false, nullptr);
+    const bool hasOurFile = QFileInfo::exists(ourFile);
+    out.insert(QStringLiteral("current"), current);
+    out.insert(QStringLiteral("ours"), current == QLatin1String("wayland95"));
+    out.insert(QStringLiteral("ourFile"), hasOurFile);
+    out.insert(QStringLiteral("other"), without == QLatin1String("wayland95") ? QString() : without);
+    describe(current, QStringLiteral("current"), out);
+    describe(without == QLatin1String("wayland95") ? QString() : without, QStringLiteral("other"), out);
+
+    QString overridden;
+    if (hasOurFile && from != ourFile) {
+        overridden = from;
+        if (const QString root = qEnvironmentVariable("W95_FAKE_ROOT"); !root.isEmpty() && overridden.startsWith(root))
+            overridden = overridden.mid(root.size());
+    }
+    out.insert(QStringLiteral("overriddenBy"), overridden);
+    return out;
+}
+
 QVariantMap ServiceManager::sshConfig() const
 {
     QVariantMap raw;
@@ -1166,4 +1284,99 @@ QString ServiceManager::makeWebsite()
 void ServiceManager::openUrl(const QString &url) const
 {
     QDesktopServices::openUrl(QUrl(url));
+}
+
+// ---------------------------------------------------------------------------
+// Samba
+
+QVariantMap ServiceManager::sambaConfig() const
+{
+    const QString conf = systemPath(QStringLiteral("/etc/samba/smb.conf"));
+    const QString ours = systemPath(QStringLiteral("/etc/samba/wayland95.conf"));
+    if (!QFileInfo::exists(conf))
+        return {};
+    // smb.conf's [global] values, with ours read where it's included (the
+    // last value wins); the shares are the ones in ours
+    QString workgroup = QStringLiteral("WORKGROUP"), description = QStringLiteral("Samba %v");
+    bool included = false;
+    QVariantList shares;
+    const QString me = userName();
+    std::function<void(const QString &, bool)> read = [&](const QString &path, bool isOurs) {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+            return;
+        QString section;
+        QVariantMap share;
+        auto flush = [&] {
+            if (isOurs && !share.isEmpty() && !share.value(QStringLiteral("owner")).toString().isEmpty()) {
+                share.insert(QStringLiteral("mine"), share.value(QStringLiteral("owner")) == me);
+                shares << share;
+            }
+            share.clear();
+        };
+        while (!f.atEnd()) {
+            const QString line = QString::fromUtf8(f.readLine()).trimmed();
+            if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
+                flush();
+                section = line.mid(1, line.size() - 2).trimmed();
+                if (section.compare(QLatin1String("global"), Qt::CaseInsensitive) != 0) {
+                    // (defaults, as Samba has them)
+                    share = { { QStringLiteral("name"), section }, { QStringLiteral("comment"), QString() },
+                              { QStringLiteral("access"), QStringLiteral("read") }, { QStringLiteral("who"), QStringLiteral("me") } };
+                }
+                continue;
+            }
+            if (line.startsWith(QLatin1String("# wayland95: owner="))) {
+                if (!share.isEmpty())
+                    share.insert(QStringLiteral("owner"), line.mid(19).trimmed());
+                continue;
+            }
+            if (line.isEmpty() || line.startsWith(QLatin1Char('#')) || line.startsWith(QLatin1Char(';')) || !line.contains(QLatin1Char('=')))
+                continue;
+            const QString key = line.section(QLatin1Char('='), 0, 0).simplified().toLower();
+            const QString value = line.section(QLatin1Char('='), 1).trimmed();
+            if (section.isEmpty() || section.compare(QLatin1String("global"), Qt::CaseInsensitive) == 0) {
+                if (key == QLatin1String("workgroup"))
+                    workgroup = value;
+                else if (key == QLatin1String("server string"))
+                    description = value;
+                else if (key == QLatin1String("include") && !isOurs && value == ours) {
+                    included = true;
+                    read(ours, true);
+                }
+            } else if (!share.isEmpty()) {
+                const bool yes = value.compare(QLatin1String("yes"), Qt::CaseInsensitive) == 0;
+                if (key == QLatin1String("path"))
+                    share.insert(QStringLiteral("path"), value);
+                else if (key == QLatin1String("comment"))
+                    share.insert(QStringLiteral("comment"), value);
+                else if (key == QLatin1String("read only"))
+                    share.insert(QStringLiteral("access"), yes ? QStringLiteral("read") : QStringLiteral("full"));
+                else if (key == QLatin1String("guest ok"))
+                    share.insert(QStringLiteral("who"), yes ? QStringLiteral("anyone") : QStringLiteral("me"));
+            }
+        }
+        flush();
+    };
+    read(conf, false);
+
+    QVariantMap out{
+        { QStringLiteral("workgroup"), workgroup },
+        { QStringLiteral("description"), description },
+        { QStringLiteral("shares"), shares },
+        { QStringLiteral("ours"), included },
+    };
+    QProcess p;
+    p.start(QStringLiteral("/usr/sbin/smbd"), { QStringLiteral("--version") });
+    if (p.waitForFinished(5000)) {
+        static const QRegularExpression v(QStringLiteral("(\\d+\\.\\d+\\.\\d+)"));
+        out.insert(QStringLiteral("version"), v.match(QString::fromUtf8(p.readAllStandardOutput())).captured(1));
+    }
+    if (debug()) {
+        QStringList names;
+        for (const QVariant &s : std::as_const(shares))
+            names << s.toMap().value(QStringLiteral("name")).toString();
+        qInfo("services: samba %s \"%s\" shares %s", qPrintable(workgroup), qPrintable(description), qPrintable(names.join(QLatin1Char(','))));
+    }
+    return out;
 }

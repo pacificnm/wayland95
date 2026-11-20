@@ -17,10 +17,11 @@ command -v wg >/dev/null || { echo "Missing wg (sudo apt install wireguard-tools
 
 ROOT=$(mktemp -d /tmp/wayland95-services.XXXXXX)
 export W95_FAKE_ROOT=$ROOT
-mkdir -p "$ROOT/etc" "$ROOT/sys/class/net" "$ROOT/var/www/html" "$ROOT/srv" "$ROOT/home/user"
+mkdir -p "$ROOT/etc" "$ROOT/sys/class/net" "$ROOT/var/www/html" "$ROOT/srv" "$ROOT/home/user" "$ROOT/usr/share/sddm/themes"
 sed -e "s|^PATH=.*|PATH=$HERE/fakes:/usr/sbin:/usr/bin:/sbin:/bin|" \
     -e "s|/etc/|$ROOT/etc/|g" -e "s|/sys/class/net|$ROOT/sys/class/net|g" \
     -e "s|/var/www|$ROOT/var/www|g" -e "s|/srv|$ROOT/srv|g" \
+    -e "s|/usr/share/sddm|$ROOT/usr/share/sddm|g" \
     "$REPO/session/wayland95-services" >"$ROOT/helper"
 chmod +x "$ROOT/helper"
 if [ "${1:-}" = --setup ]; then
@@ -304,6 +305,138 @@ echo hi >"$ROOT/var/www/html/index.html"
 out=$(asme www-own 2>&1)
 [ $? -eq 0 ] && [ "$(stat -c %u "$ROOT/var/www/html/index.html")" = "$(id -u)" ]
 expect $? "www-own: /var/www/html becomes yours" "$out"
+
+# --- the login screen (Control Panel > Passwords > Log On) --------------------------------
+echo
+echo "== wayland95-services: the login screen"
+SDDMCONF=$ROOT/etc/sddm.conf.d/wayland95.conf
+out=$(helper login-theme wayland95 2>&1); [ $? -ne 0 ] && [ ! -e "$SDDMCONF" ]
+expect $? "login-theme wayland95 with the theme not installed: refused, nothing written" "$out"
+cp -r "$REPO/sddm/wayland95" "$ROOT/usr/share/sddm/themes/"
+out=$(helper login-theme wayland95 2>&1)
+[ $? -eq 0 ] && grep -qx '\[Theme\]' "$SDDMCONF" && grep -qx 'Current=wayland95' "$SDDMCONF" \
+    && [ "$(stat -c %a "$SDDMCONF")" = 644 ]
+expect $? "login-theme wayland95: /etc/sddm.conf.d/wayland95.conf chooses it (made the folder; readable by SDDM)" "$out"
+out=$(helper login-theme wayland95 2>&1); [ $? -eq 0 ] && [ "$(grep -c Current= "$SDDMCONF")" = 1 ]
+expect $? "(again: the same file, not a second setting)" "$out"
+echo "[Theme]" >"$ROOT/etc/sddm.conf.d/kde_settings.conf"
+out=$(helper login-theme default 2>&1); [ $? -eq 0 ] && [ ! -e "$SDDMCONF" ] && [ -e "$ROOT/etc/sddm.conf.d/kde_settings.conf" ]
+expect $? "login-theme default: removes only its own file" "$out"
+out=$(helper login-theme default 2>&1); expect $? "(again, with nothing to remove: fine)" "$out"
+for bad in "" "breeze" "../wayland95" "wayland95 extra"; do
+    out=$(helper login-theme $bad 2>&1); [ $? -ne 0 ] && [ ! -e "$SDDMCONF" ]
+    expect $? "login-theme '$bad': refused" "$out"
+done
+
+# --- Samba ------------------------------------------------------------------------------
+echo
+echo "== wayland95-services: Samba"
+SMB=$ROOT/etc/samba/smb.conf
+OURS=$ROOT/etc/samba/wayland95.conf
+ME=$(id -un)
+out=$(printf 'workgroup=HOME\n' | asme smb-config 2>&1); [ $? -ne 0 ] && [ ! -e "$OURS" ]
+expect $? "not installed: smb-config refuses" "$out"
+out=$(helper unit enable samba 2>&1); [ $? -ne 0 ]; expect $? "not installed: unit enable samba refuses" "$out"
+mkdir -p "$ROOT/etc/samba"
+printf '%s\n' "[global]" "   workgroup = WORKGROUP" "   server string = %h server (Samba, Debian)" \
+    "   map to guest = bad user" "[printers]" "   comment = All Printers" "   path = /var/tmp" "   printable = yes" \
+    "[print\$]" "   path = /var/lib/samba/printers" >"$SMB"
+cp "$SMB" "$ROOT/smb.conf.debian"
+: >"$ROOT/units/smbd.service"
+: >"$ROOT/units/nmbd.service"
+out=$(helper unit enable samba 2>&1)
+[ $? -eq 0 ] && [ -e "$ROOT/enabled/smbd.service" ] && [ -e "$ROOT/active/smbd.service" ] \
+    && [ -e "$ROOT/enabled/nmbd.service" ] && [ -e "$ROOT/active/nmbd.service" ]
+expect $? "unit enable samba: smbd and nmbd started, and at boot" "$out"
+out=$(helper unit disable smbd 2>&1)
+[ $? -eq 0 ] && [ ! -e "$ROOT/active/smbd.service" ] && [ ! -e "$ROOT/enabled/nmbd.service" ]
+expect $? "unit disable smbd (the Services list's name for it): both stopped" "$out"
+helper unit start samba >/dev/null 2>&1
+out=$(printf 'workgroup=HOME\n' | helper smb-config 2>&1); [ $? -ne 0 ] && [ ! -e "$OURS" ]
+expect $? "smb-config without pkexec's caller (PKEXEC_UID): refused" "$out"
+out=$(printf 'workgroup=HOME\n' | PKEXEC_UID=0 "$ROOT/helper" smb-config 2>&1); [ $? -ne 0 ] && [ ! -e "$OURS" ]
+expect $? "smb-config for root: refused" "$out"
+
+mkdir -p "$UHOME/Music" "$UHOME/My Documents" "$UHOME/.secret" "$ROOT/srv/media"
+ln -sfn "$UHOME/Music" "$UHOME/musiclink"
+: >"$ROOT/log"
+T=$(printf '\t')
+out=$(printf 'workgroup=HOMENET\ndescription=%%h (Jaimie'"'"'s computer)\nshare=Music%s%s%sread%sanyone%sSongs\nshare=My Documents%s%s%sfull%sme%s\n' \
+      "$T" "$UHOME/Music" "$T" "$T" "$T" "$T" "$UHOME/My Documents" "$T" "$T" "$T" | asme smb-config 2>&1)
+[ $? -eq 0 ] && grep -qx "   workgroup = HOMENET" "$OURS" && grep -qx "   server string = %h (Jaimie's computer)" "$OURS" \
+    && grep -qx "\[Music\]" "$OURS" && grep -qx "\[My Documents\]" "$OURS" && grep -qx "   path = $UHOME/My Documents" "$OURS" \
+    && [ "$(grep -c "force user = $ME" "$OURS")" = 2 ] && [ "$(stat -c %a "$OURS")" = 644 ]
+expect $? "smb-config: workgroup, description and two shared folders, each acting as you" "$out $(cat "$OURS")"
+sed -n '/^\[Music\]/,/^$/p' "$OURS" | grep -qx "   read only = yes" && sed -n '/^\[Music\]/,/^$/p' "$OURS" | grep -qx "   guest ok = yes" \
+    && sed -n '/^\[Music\]/,/^$/p' "$OURS" | grep -qx "   comment = Songs"
+expect $? "(Music: read-only, anyone, no password)" "$(cat "$OURS")"
+sed -n '/^\[My Documents\]/,/^$/p' "$OURS" | grep -qx "   read only = no" && sed -n '/^\[My Documents\]/,/^$/p' "$OURS" | grep -qx "   guest ok = no" \
+    && sed -n '/^\[My Documents\]/,/^$/p' "$OURS" | grep -qx "   valid users = $ME"
+expect $? "(My Documents: full access, you only, with your password)" "$(cat "$OURS")"
+[ "$(grep -c "veto files = /\.\*/" "$OURS")" = 2 ]; expect $? "(files starting with a dot are never shown)" "$(cat "$OURS")"
+[ "$(sed 's/[[:space:]]//g' "$SMB" | grep -cxF "include=$OURS")" = 1 ] && head -n 10 "$SMB" | cmp -s - "$ROOT/smb.conf.debian"
+expect $? "smb.conf includes it, at its end (the rest as it was)" "$(cat "$SMB")"
+grep -q "^testparm -s $SMB" "$ROOT/log" && grep -q "reload smbd.service" "$ROOT/log" && grep -q "restart nmbd.service" "$ROOT/log"
+expect $? "(checked by testparm; smbd reloaded, nmbd restarted for the new workgroup)" "$(cat "$ROOT/log")"
+if [ -x /usr/bin/testparm ]; then
+    shown=$(/usr/bin/testparm -s "$SMB" 2>/dev/null)
+    echo "$shown" | grep -q "workgroup = HOMENET" && echo "$shown" | grep -q "^\[My Documents\]" && echo "$shown" | grep -q "^\[Music\]" \
+        && echo "$shown" | grep -q "server string = %h (Jaimie's computer)"
+    expect $? "(the real testparm reads smb.conf with them: our workgroup wins, both shares there)" "$shown"
+fi
+printf 'share=Music%s%s%sread%sanyone%s\n' "$T" "$UHOME/Music" "$T" "$T" "$T" | asme smb-config >/dev/null 2>&1
+[ "$(sed 's/[[:space:]]//g' "$SMB" | grep -cxF "include=$OURS")" = 1 ] && ! grep -q "My Documents" "$OURS" \
+    && grep -qx "   workgroup = HOMENET" "$OURS" && grep -q "server string = %h (Jaimie's computer)" "$OURS"
+expect $? "again with one share: the other stops being shared; the workgroup and description stay; one include" "$(cat "$OURS")"
+
+# someone else's share is kept, and its name is theirs
+printf '%s\n' "[Bobs Files]" "   # wayland95: owner=bob" "   path = /home/bob/Files" "   force user = bob" "" >>"$OURS"
+printf 'share=Media%s%s%sfull%sanyone%sFor everyone\n' "$T" "$ROOT/srv/media" "$T" "$T" "$T" | asme smb-config >/dev/null 2>&1
+grep -qx "\[Bobs Files\]" "$OURS" && grep -qx "   path = /home/bob/Files" "$OURS" && grep -qx "\[Media\]" "$OURS" && ! grep -qx "\[Music\]" "$OURS"
+expect $? "another user's share is kept as it was; yours replaced (a folder of yours in /srv works too)" "$(cat "$OURS")"
+before=$(md5sum <"$OURS"); smbbefore=$(md5sum <"$SMB")
+same() { [ "$(md5sum <"$OURS")" = "$before" ] && [ "$(md5sum <"$SMB")" = "$smbbefore" ]; }
+for bad in "bobs files	$UHOME/Music	read	me	" "PRINTERS	$UHOME/Music	read	me	" "Homes	$UHOME/Music	read	me	" \
+           "Media	$UHOME/Music	read	me
+share=MEDIA	$ROOT/srv/media	read	me	" \
+           "Etc	/etc	read	me	" "Home	$UHOME	read	me	" "Secret	$UHOME/.secret	read	me	" "Link	$UHOME/musiclink	read	me	" \
+           "Rel	Music	read	me	" "Gone	$UHOME/nothere	read	me	" "Root	/	read	me	" \
+           "Bad;name	$UHOME/Music	read	me	" "print\$	$UHOME/Music	read	me	" " Lead	$UHOME/Music	read	me	" \
+           "Music	$UHOME/Music	write	me	" "Music	$UHOME/Music	read	everyone	" \
+           "Music	$UHOME/Music	read	me	50% off" "Music	$UHOME/Music	read	me	say \"hi\"" \
+           "Music	$UHOME/Music	read	me
+[global]"; do
+    out=$(printf 'share=%s\n' "$bad" | asme smb-config 2>&1)
+    [ $? -ne 0 ] && same
+    expect $? "smb-config refuses the share: $(echo "$bad" | tr '\t\n' '| ') (nothing changed)" "$out"
+done
+for bad in 'workgroup=' 'workgroup=MY GROUP' 'workgroup=ABCDEFGHIJKLMNOPQ' 'workgroup=-x' 'description=50%' \
+           'description=a\b' 'path=/etc' 'include=/etc/shadow'; do
+    out=$(printf '%s\n' "$bad" | asme smb-config 2>&1); [ $? -ne 0 ] && same
+    expect $? "smb-config refuses: $bad (nothing changed)" "$out"
+done
+out=$(printf 'workgroup=BROKEN\n' | asme smb-config 2>&1)
+[ $? -ne 0 ] && same && ! ls "$OURS".* "$SMB".* >/dev/null 2>&1
+expect $? "settings testparm won't take: both files put back, no copies left" "$out"
+rm -f "$OURS"; cp "$ROOT/smb.conf.debian" "$SMB"
+out=$(printf 'workgroup=BROKEN\n' | asme smb-config 2>&1)
+[ $? -ne 0 ] && [ ! -e "$OURS" ] && cmp -s "$SMB" "$ROOT/smb.conf.debian"
+expect $? "(the first time, too: smb.conf as it was, and no wayland95.conf)" "$out"
+
+# the Samba password
+: >"$ROOT/smbpasswd.log"
+out=$(printf 'pass word\n' | helper smb-password 2>&1); [ $? -ne 0 ] && [ ! -s "$ROOT/smbpasswd.log" ]
+expect $? "smb-password without pkexec's caller: refused" "$out"
+out=$(printf 'pass word;$(id)\n' | asme smb-password 2>&1)
+[ $? -eq 0 ] && [ "$(cat "$ROOT/smbpasswd.log")" = "smbpasswd -a -s $ME
+pass word;\$(id)
+pass word;\$(id)
+smbpasswd -e $ME" ]
+expect $? "smb-password: yours, given to smbpasswd on its stdin (twice), never as an argument" "$out $(cat "$ROOT/smbpasswd.log")"
+: >"$ROOT/smbpasswd.log"
+out=$(printf '\n' | asme smb-password 2>&1)
+[ $? -eq 0 ] && [ "$(cat "$ROOT/smbpasswd.log")" = "smbpasswd -x $ME" ]
+expect $? "smb-password with none: yours is taken away" "$out $(cat "$ROOT/smbpasswd.log")"
 
 # --- the other services still work ------------------------------------------------------
 out=$(helper unit start nosuch 2>&1); [ $? -ne 0 ]; expect $? "(an unknown service is still refused)" "$out"

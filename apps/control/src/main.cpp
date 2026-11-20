@@ -10,7 +10,7 @@
 
 Q_IMPORT_QML_PLUGIN(Win95UiPlugin)
 
-// usage: win95control [--applet accessibility|backup|bluetooth|datetime|display|fonts|hardware|keyboard|mouse|network|passwords|power|printers|problems|programs|regional|services|sounds|startup|system|taskbar [--tab N] [--check]]
+// usage: win95control [--applet accessibility|backup|bluetooth|datetime|display|fonts|hardware|keyboard|mouse|network|passwords|power|printers|problems|programs|regional|services|sounds|startup|system|taskbar [--tab N] [--check] [--uninstall DESKTOP-ID]]
 // With --applet, only that applet's window opens (Start > Settings >
 // Taskbar... uses this), optionally on tab N (0-based), like Win95's
 // "control desk.cpl,,2"; otherwise the Control Panel folder opens.
@@ -40,6 +40,11 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("initialTab"), tab);
     // --check: look for updates straight away (Start > Wayland 95 Update)
     engine.rootContext()->setContextProperty(QStringLiteral("initialCheck"), args.contains(QStringLiteral("--check")));
+    // --uninstall ID (Start menu > Uninstall...): Add/Remove Programs asks
+    // to remove the program with that desktop file ID
+    const int uninstallIdx = args.indexOf(QStringLiteral("--uninstall"));
+    engine.rootContext()->setContextProperty(QStringLiteral("initialUninstall"),
+                                             uninstallIdx != -1 && uninstallIdx + 1 < args.size() ? args.at(uninstallIdx + 1) : QString());
     engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Win95Control/Main.qml")));
     if (engine.rootObjects().isEmpty())
         return -1;

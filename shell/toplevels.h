@@ -113,6 +113,10 @@ public:
     Q_INVOKABLE void setMinimized(QObject *frame, bool minimized);
     Q_INVOKABLE void toggleFromTaskbar(int index);
     Q_INVOKABLE QObject *activeFrame() const;
+    // a program's window to the front (brought back if it's minimized): the
+    // one of this app id that was active last; false if it has none (the
+    // sound menu's Show the Player: an MPRIS player's DesktopEntry)
+    Q_INVOKABLE bool showApp(const QString &appId);
     // Alt+Tab's order: [{ frame, title, minimized }], the most recently
     // active first
     Q_INVOKABLE QVariantList switchOrder() const;

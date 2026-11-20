@@ -77,7 +77,7 @@ class SoftwareCenter : public QObject
     // "source" (built and installed with install.sh: not a package at all)
     Q_PROPERTY(QString desktopUpdates READ desktopUpdates NOTIFY desktopUpdatesChanged)
     Q_PROPERTY(QStringList flatpakRemotes READ flatpakRemotes NOTIFY catalogChanged)
-    // installed programs: [{ key, source, id, name, summary, icon, version, installation }]
+    // installed programs: [{ key, source, id, name, summary, icon, version, installation, desktopIds }]
     Q_PROPERTY(QVariantList programs READ programs NOTIFY programsChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
     Q_PROPERTY(bool catalogLoading READ catalogLoading NOTIFY catalogChanged)
@@ -119,6 +119,11 @@ public:
 
     // re-reads the installed programs
     Q_INVOKABLE void reload();
+    // the installed program (one of `programs`) a menu entry belongs to, by
+    // its desktop file ID ("org.gnome.Chess.desktop"); {} if none does
+    Q_INVOKABLE QVariantMap programFor(const QString &desktopId) const;
+    // that menu entry's name, for saying so ("" ID: the ID itself)
+    Q_INVOKABLE QString programName(const QString &desktopId) const;
     // programs from the catalogs: text matches names, summaries and
     // keywords; category from `categories` ("" for all); source "deb",
     // "flatpak" or "" for both. At most `limit` results, best first:

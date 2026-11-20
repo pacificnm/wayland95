@@ -78,7 +78,10 @@ AppElement {
     // (the Graph Editor's: what went wrong reading the table)
     property string problem: ""
 
-    defaultBack: "#ffffff"
+    // the colors: BackColor (around it) and PlotColor (behind the bars,
+    // lines and candles); blank, the desktop's, as the form's is
+    property string plotColor: ""
+    readonly property color plotFill: plotColor !== "" ? plotColor : Theme.window
 
     function refresh() {
         problem = "";
@@ -447,6 +450,7 @@ AppElement {
         lastPrice: element.settings.lastPrice
         showLast: element.settings.showLast
         backColor: element.fillColor
+        plotColor: element.plotFill
         textColor: element.textColor
         fontFamily: element.family
         fontSize: element.pixelSize

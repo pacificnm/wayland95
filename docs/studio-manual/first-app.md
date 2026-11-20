@@ -182,9 +182,11 @@ it to the front if it's open already), save, go to the next record, quit...
 *Open a form* is how a menu opens your other forms.
 
 Then double-click **ToolBar** in the Toolbox. Its **Buttons** open the
-same editor: give each button a **Caption**, a **Symbol** (a character
-like `✔`) or a **Picture**, a **ToolTip**, and an **Action**: New, Save,
-Delete, the four moves, and Members (*Open a form*, MembersForm).
+same editor: give each button a **Caption**, an **Icon** (**Choose…**
+shows Wayland 95's icons: New, Save, Delete, First, Previous, Next, Last,
+People...), a **ToolTip**, and an **Action**: New, Save, Delete, the four
+moves, and Members (*Open a form*, MembersForm). The four moves need no
+Caption: their icons say it.
 
 Press **F5**: the menu and the buttons work.
 

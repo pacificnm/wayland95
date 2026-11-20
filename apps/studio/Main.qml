@@ -139,9 +139,21 @@ Window {
             return [name === "" ? "(no DataTable)" : name + "?"];
         var chosen = control.props && control.props.columns && control.props.columns.length ? control.props.columns : null;
         var out = [];
-        for (var i = 0; i < table.fields.length; ++i) {
-            if (!chosen || chosen.indexOf(table.fields[i].name) >= 0)
-                out.push(table.fields[i].label || table.fields[i].name);
+        if (!chosen) {
+            for (var i = 0; i < table.fields.length; ++i)
+                out.push({ name: table.fields[i].name, label: table.fields[i].label || table.fields[i].name, width: 0 });
+        } else {
+            // in Columns' order, each with its width ("Title:180")
+            chosen.forEach(function (c) {
+                var m = /^\s*([^:]+?)\s*(?::\s*(\d+)\s*)?$/.exec(String(c));
+                var name = m ? m[1] : String(c).trim(), width = m && m[2] ? parseInt(m[2]) : 0;
+                var f = null;
+                for (var j = 0; j < table.fields.length; ++j)
+                    if (table.fields[j].name === name)
+                        f = table.fields[j];
+                if (f || name === "id" || name === "created_on" || name === "modified_on")
+                    out.push({ name: name, label: f ? (f.label || f.name) : name, width: width });
+            });
         }
         return out.length ? out : ["(no fields)"];
     }
@@ -869,6 +881,13 @@ Window {
             }
             if (p.type === "color" || p.type === "font")
                 r.placeholder = "(the desktop's)";
+            if (p.type === "icon")
+                r.placeholder = "(none)";
+            if (p.type === "element") {
+                r.type = "choice";
+                r.values = [{ value: "", label: "(none)" }].concat(form.controls.filter(function (o) { return !p.of || o.type === p.of; })
+                                                                       .map(function (o) { return { value: o.name, label: o.name }; }));
+            }
             if (p.type === "field") {
                 r.type = "choice";
                 r.values = fieldChoices;
@@ -896,6 +915,10 @@ Window {
         for (i = 0; i < props.length; ++i) {
             p = props[i];
             var r = row(p, c.props && c.props[p.name] !== undefined ? c.props[p.name] : p["default"], false);
+            if (p.name === "value" && c.type === "Slider")
+                r.hint = "Where it starts, from Min to Max (with a DataField: the field's number instead).";
+            if (p.name === "enabled" && c.type === "Timer")
+                r.hint = "Whether it's running. Code starts and stops it: timer1.enabled = true, or timer1.start().";
             if (p.name === "field" && c.type === "Label")
                 r.hint = "A Label with a DataField shows the field's value, not its Caption. For a caption beside a box, "
                        + "leave this blank and set the box's DataField.";
@@ -914,6 +937,8 @@ Window {
             toolTip: "What to say when the pointer rests on it.",
             foreColor: "The color of its text. Blank: the desktop's.",
             backColor: isForm ? "The form's color. Blank: the desktop's." : "The color behind it. Blank: the desktop's.",
+            plotColor: "The color behind the bars, lines and candles (BackColor is around them). Blank: the desktop's.",
+            icon: "One of Wayland 95's icons, left of its Caption (or alone, with no Caption): the … button opens the Icon chooser.",
             fontFamily: "The font of its text. Blank: the desktop's.",
             fontSize: "The size of its text in pixels. 0: the desktop's.",
             fontBold: "Bold text.", fontItalic: "Italic text.", fontUnderline: "Underlined text.",
@@ -925,7 +950,7 @@ Window {
             resizable: "Whether the window's size can be changed.",
             showErrors: "Show a message box listing what validation refused when Save fails (the elements are marked either way).",
             text: "The text it shows.",
-            columns: "The fields to show, in order. Blank: all of them.",
+            columns: "The fields to show, in order, one on each line. Blank: all of them. A width in pixels after a colon (Title:180); the others share what's left.",
             search: "Only records with this text in one of their text fields.",
             orderBy: "The field to sort by. Blank: the order they were added.",
             followForm: "Choosing a row shows that record in the form, when this lists the form's own DataTable.",
@@ -944,11 +969,29 @@ Window {
             loop: "Start again at the end, for ever.",
             volume: "How loud, from 0 to 100.",
             muted: "No sound (the speaker button changes it).",
+            equalizer: "Ten bands, 31 Hz to 16 kHz, -12 to +12 dB each (an Equalizer element shows them, or code: player1.eqGains). Played through the equalizer, the sound is about a tenth of a second behind the picture.",
+            eqPreset: "The equalizer's bands to start with: Flat, Rock, Pop, Jazz... (code: player1.applyEqPreset(\"Rock\")).",
+            eqPreamp: "The equalizer's preamp, in dB (-12 to +12): turn it down if raised bands make it too loud.",
+            showPresets: "The preset list and the Flat button across its top.",
+            showPreamp: "The preamp's slider, left of the bands.",
+            mediaKeys: "The keyboard's play, pause, next and previous keys, and the sound menu by the clock, control it, and show what it's playing (its title, artist and cover). Next and previous are its nextTrack and previousTrack events.",
             showControls: "Win95's ▶ ❚❚ ■, a position bar, the time and a speaker under it. False: only the picture (or nothing, for a sound).",
             fillMode: "How a video fits: Fit (all of it, bars at the sides), Stretch (to the shape), Crop (filled, the edges cut off).",
+            player: "The MediaPlayer on this form whose sound it shows.",
+            style: "Spectrum: a bar for each band of notes, low to high. Oscilloscope: the wave itself. Meter: how loud, across.",
+            bars: "How many bars Spectrum has (1 to 64).",
+            showPeaks: "A line over each bar where it last reached, falling slowly.",
+            peakColor: "The peaks' color. Blank: grey.",
+            min: "The value at the left (or the bottom).",
+            max: "The value at the right (or the top).",
+            smallChange: "How far an arrow key moves it, and the steps it stops at.",
+            largeChange: "How far Page Up and Page Down move it.",
+            tickCount: "How many tick marks under it (or beside it), from end to end. 0: none.",
+            orientation: "Across (Horizontal) or up and down (Vertical).",
+            interval: "How often its timer event runs, in milliseconds: 1000 is once a second. The program doesn't show a Timer; Enabled False stops it.",
             menus: "The menus and their items, in the Menu Editor (…): each item's Caption, Shortcut and Action (open a form, save...).",
-            buttons: "The buttons, in the Menu Editor (…): each one's Caption, symbol or picture, ToolTip and Action (open a form, save...).",
-            showCaptions: "Show each button's Caption beside its symbol or picture (a button with neither always shows it).",
+            buttons: "The buttons, in the Menu Editor (…): each one's Caption, icon (or symbol, or picture), ToolTip and Action (open a form, save...).",
+            showCaptions: "Show each button's Caption beside its icon (a button with no icon, symbol or picture always shows it).",
             mode: "A date (with a calendar), a date and a time, or a time (with ▲▼).",
             value: "What it starts with: 2030-01-01, 14:30, or from now: today, today+7, now+2h. Blank: nothing (or its DataField's).",
             dateFormat: "How the date shows: the computer's Short or Long way, a pattern, or Custom.",
@@ -1021,7 +1064,16 @@ Window {
             return;
         }
         var old = control.name;
-        change(function () { control.name = name; });
+        change(function () {
+            control.name = name;
+            // (a Visualizer's Player...: what names it follows it)
+            form.controls.forEach(function (o) {
+                propsOf(o.type).forEach(function (p) {
+                    if (p.type === "element" && o.props && o.props[p.name] === old)
+                        o.props[p.name] = name;
+                });
+            });
+        });
         selection = selection.map(function (n) { return n === old ? name : n; });
         if (codeObject === old)
             codeObject = name;
@@ -1129,7 +1181,10 @@ Window {
                         if (form.props.table === table.name && c.props && c.props.field === old)
                             c.props.field = value;
                         if (source === table.name && c.props && c.props.columns)
-                            c.props.columns = c.props.columns.map(function (n) { return n === old ? value : n; });
+                            c.props.columns = c.props.columns.map(function (n) {
+                                var m = /^\s*([^:]+?)\s*(:.*)?$/.exec(String(n));
+                                return m && m[1] === old ? value + (m[2] || "") : n;
+                            });
                     });
                 });
             });

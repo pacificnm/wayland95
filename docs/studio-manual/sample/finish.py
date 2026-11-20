@@ -24,16 +24,16 @@ books["controls"].append({"type": "Label", "name": "statusLabel", "x": 12, "y": 
                           "props": {"text": "", "borderStyle": "Sunken", "backColor": "#ffffe1"}, "events": {}})
 books["height"] = max(books["height"], bottom + 10 + 21 + 10)
 toolbar = {"type": "ToolBar", "name": "toolBar1", "height": 28, "props": {"buttons": [
-    {"text": "New", "name": "newTool", "glyph": "✚", "toolTip": "A new book", "action": "newRecord"},
-    {"text": "Save", "name": "saveTool", "glyph": "✔", "toolTip": "Save the book", "action": "save"},
-    {"text": "Delete", "name": "deleteTool", "glyph": "✖", "toolTip": "Delete the book", "action": "deleteRecord"},
+    {"text": "New", "name": "newTool", "icon": "new", "toolTip": "A new book", "action": "newRecord"},
+    {"text": "Save", "name": "saveTool", "icon": "save", "toolTip": "Save the book", "action": "save"},
+    {"text": "Delete", "name": "deleteTool", "icon": "delete", "toolTip": "Delete the book", "action": "deleteRecord"},
     {"separator": True},
-    {"text": "", "name": "firstTool", "glyph": "«", "toolTip": "The first book", "action": "first"},
-    {"text": "", "name": "previousTool", "glyph": "‹", "toolTip": "The book before", "action": "previous"},
-    {"text": "", "name": "nextTool", "glyph": "›", "toolTip": "The next book", "action": "next"},
-    {"text": "", "name": "lastTool", "glyph": "»", "toolTip": "The last book", "action": "last"},
+    {"text": "", "name": "firstTool", "icon": "first", "toolTip": "The first book", "action": "first"},
+    {"text": "", "name": "previousTool", "icon": "previous", "toolTip": "The book before", "action": "previous"},
+    {"text": "", "name": "nextTool", "icon": "next", "toolTip": "The next book", "action": "next"},
+    {"text": "", "name": "lastTool", "icon": "last", "toolTip": "The last book", "action": "last"},
     {"separator": True},
-    {"text": "Members", "name": "membersTool", "glyph": "☺", "toolTip": "The club's members", "action": "openForm", "form": "MembersForm"}]},
+    {"text": "Members", "name": "membersTool", "icon": "people", "toolTip": "The club's members", "action": "openForm", "form": "MembersForm"}]},
     "events": {}}
 menu = {"type": "Menu", "name": "menu1", "height": 20, "props": {"menus": [
     {"text": "&File", "name": "fileMenu", "items": [

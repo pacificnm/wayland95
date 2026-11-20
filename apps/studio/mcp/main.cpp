@@ -217,6 +217,9 @@ QString valueProblem(const QJsonObject &prop, const QJsonValue &v)
         return v.isArray() ? QString() : QStringLiteral("a list of items (studio_reference, topic format: Menus and toolbars)");
     if (type == QLatin1String("graph"))
         return v.isObject() ? QString() : QStringLiteral("an object (studio_manual forms.md: Graph)");
+    if (type == QLatin1String("icon"))
+        return v.isString() && (v.toString().isEmpty() || AppCompiler::isIcon(v.toString()))
+                   ? QString() : QStringLiteral("one of Wayland 95's icons (studio_reference, topic elements: Icons)");
     if (!v.isString())
         return QStringLiteral("a string");
     if (type == QLatin1String("enum")) {
@@ -551,8 +554,15 @@ QStringList crossChecks(const QJsonObject &project)
                 if (table.isEmpty())
                     out << QStringLiteral("%1: a DataGrid needs a table (its own, or the form's).").arg(where);
                 for (const QJsonValue &col : props.value(QLatin1String("columns")).toArray()) {
-                    if (indexNamed(tables, table) >= 0 && !fieldsOf(table).contains(col.toString()))
-                        out << QStringLiteral("%1: its column %2 isn't a field of %3.").arg(where, col.toString(), table);
+                    // "Title" or "Title:180" (a width in pixels)
+                    static const QRegularExpression spec(QStringLiteral("^\\s*([^:]+?)\\s*(?::\\s*(\\d+)\\s*)?$"));
+                    const QRegularExpressionMatch m = spec.match(col.toString());
+                    const QString colName = m.hasMatch() ? m.captured(1) : col.toString().trimmed();
+                    if (!m.hasMatch())
+                        out << QStringLiteral("%1: its column \"%2\" isn't a field's name, or a name and a width (\"Title:180\").").arg(where, col.toString());
+                    else if (indexNamed(tables, table) >= 0 && !fieldsOf(table).contains(colName)
+                             && colName != QLatin1String("created_on") && colName != QLatin1String("modified_on"))
+                        out << QStringLiteral("%1: its column %2 isn't a field of %3.").arg(where, colName, table);
                 }
             }
             // menu and toolbar items, and a menu's items inside its menus
@@ -570,9 +580,9 @@ QStringList crossChecks(const QJsonObject &project)
                 if (!actions.contains(action))
                     out << QStringLiteral("%1: the item %2's action %3 isn't one of: %4.")
                                .arg(where, str(item, "name"), action, actions.join(QStringLiteral(", ")));
-                else if (action == QLatin1String("openForm") && indexNamed(forms, str(item, "form")) < 0)
-                    out << QStringLiteral("%1: the item %2 opens %3, which isn't in the project (its \"form\").")
-                               .arg(where, str(item, "name"), str(item, "form").isEmpty() ? QStringLiteral("no form") : str(item, "form"));
+                // (an item that opens a form that isn't there: the compiler says so)
+                else if (action == QLatin1String("openForm"))
+                    continue;
                 else if (formTable.isEmpty() && QStringList{ QStringLiteral("newRecord"), QStringLiteral("save"),
                                                              QStringLiteral("deleteRecord"), QStringLiteral("first"),
                                                              QStringLiteral("previous"), QStringLiteral("next"),
@@ -685,8 +695,18 @@ QString elementsReference(const QString &only)
             s += describeProp(p.toObject()) + QLatin1Char('\n');
         s += QStringLiteral("\nEvents:\n") + describeEvents(e.value(QLatin1String("events")).toArray()) + QLatin1Char('\n');
     }
+    if (only.isEmpty() || only.compare(QLatin1String("icons"), Qt::CaseInsensitive) == 0) {
+        // the names an icon property, or a ToolBar button's "icon", can have
+        s += QStringLiteral("## Icons\n\nWayland 95's own 16x16 icons, for a Button's `icon` and a ToolBar button's "
+                            "`\"icon\"` (drawn grey when it's disabled). The name, then what it shows:\n\n");
+        QStringList all;
+        for (const QJsonValue &i : AppCompiler::icons())
+            all << QStringLiteral("`%1` %2").arg(i.toObject().value(QLatin1String("name")).toString(),
+                                               i.toObject().value(QLatin1String("label")).toString());
+        s += all.join(QStringLiteral(", ")) + QStringLiteral("\n");
+    }
     if (s.isEmpty())
-        s = QStringLiteral("There's no element type \"%1\". The types: %2.").arg(only, elementTypes().join(QStringLiteral(", ")));
+        s = QStringLiteral("There's no element type \"%1\". The types: %2 (or Icons).").arg(only, elementTypes().join(QStringLiteral(", ")));
     return s;
 }
 
@@ -825,7 +845,7 @@ QList<Tool> tools()
                schema({ { QStringLiteral("topic"), QJsonObject{ { QStringLiteral("type"), QStringLiteral("string") },
                                                                { QStringLiteral("enum"), QJsonArray{ QStringLiteral("format"), QStringLiteral("elements"), QStringLiteral("fields") } },
                                                                { QStringLiteral("description"), QStringLiteral("format (the default), elements or fields") } } },
-                        { QStringLiteral("element"), prop("string", QStringLiteral("With topic elements: one type, like TextBox")) } },
+                        { QStringLiteral("element"), prop("string", QStringLiteral("With topic elements: one type, like TextBox (or Icons: the icons' names)")) } },
                       {}),
                [](const QJsonObject &a) {
                    const QString topic = str(a, "topic");
@@ -1286,6 +1306,75 @@ QList<Tool> tools()
                        res.content.append(QJsonObject{ { QStringLiteral("type"), QStringLiteral("text") },
                                                        { QStringLiteral("text"), QStringLiteral("While it opened:\n") + r.err } });
                    return res;
+               } };
+
+    t << Tool{ QStringLiteral("run_test"),
+               QStringLiteral("Run the app off the screen (muted, on a copy of its SQLite database: the project's own data "
+                              "isn't changed) with a JavaScript test driving it as a person would, and say what happened: "
+                              "every check, message box, file box, log line, and mistake in the app's code (by form, element, "
+                              "event and line). The start form is open when the script starts; App, Db and the forms are in "
+                              "reach, and `Test`: Test.click(form, element[, menuItemName | gridRow]), Test.doubleClick(form, grid, "
+                              "row), Test.type(form, textBox, text[, pressEnter]), Test.pick(form, comboOrList, indexOrText | slider, "
+                              "value), Test.tick(form, timer), Test.answer(buttonTextOrIndex) for the next message box (else its "
+                              "first button), Test.choose(pathOrPaths) for the next file box (else it's cancelled), "
+                              "Test.check(ok, what), Test.equal(got, want, what), Test.log(...), Test.wait(ms, function), "
+                              "Test.done(), Test.element(form, name), Test.form(name), Test.open(name, args), Test.messages(), "
+                              "Test.lastMessage(). Message boxes and readTags answer after the code that asked goes on: "
+                              "Test.wait(200, ...) before checking what they did. It ends when nothing is left to wait for, at "
+                              "Test.done(), or at the timeout. An error result: a check failed, the code went wrong, or it timed out."),
+               schema({ { QStringLiteral("path"), prop("string", pathHelp) },
+                        { QStringLiteral("script"), prop("string", QStringLiteral("The test: JavaScript")) },
+                        { QStringLiteral("timeout"), prop("number", QStringLiteral("Seconds before it's stopped (default 20, at most 120)")) },
+                        { QStringLiteral("start"), prop("boolean", QStringLiteral("Open the start form first (default true)")) },
+                        { QStringLiteral("serverDatabase"), prop("boolean", QStringLiteral("A MySQL or PostgreSQL project: run on that database itself (its data can change). Without it, such a project isn't run.")) } },
+                      { QStringLiteral("path"), QStringLiteral("script") }),
+               [](const QJsonObject &a) {
+                   const Loaded l = loadArg(a);
+                   if (!l.ok())
+                       return fail(l.error);
+                   QTemporaryDir dir;
+                   if (!dir.isValid())
+                       return fail(QStringLiteral("There's nowhere to make the database's copy."));
+                   // the database: a copy of the SQLite file (or none: an empty one)
+                   const QJsonObject database = l.project.value(QLatin1String("database")).toObject();
+                   const QString driver = database.value(QLatin1String("driver")).toString(QStringLiteral("sqlite"));
+                   if (driver != QLatin1String("sqlite") && !a.value(QLatin1String("serverDatabase")).toBool())
+                       return fail(QStringLiteral("This project keeps its data in %1, which can't be copied for a test. "
+                                                  "serverDatabase: true runs it on that database itself (its data can change).").arg(driver));
+                   if (driver == QLatin1String("sqlite")) {
+                       const QString file = database.value(QLatin1String("file")).toString();
+                       const QString from = QFileInfo(file).isAbsolute() ? file : QFileInfo(l.path).absoluteDir().filePath(file);
+                       const QString to = QFileInfo(file).isAbsolute() ? dir.filePath(QFileInfo(file).fileName()) : dir.filePath(file);
+                       QDir().mkpath(QFileInfo(to).absolutePath());
+                       if (QFileInfo::exists(from) && !QFile::copy(from, to))
+                           return fail(QStringLiteral("%1 couldn't be copied for the test.").arg(from));
+                   }
+                   const QString script = dir.filePath(QStringLiteral("test.js"));
+                   QFile f(script);
+                   if (!f.open(QIODevice::WriteOnly) || f.write(str(a, "script").toUtf8()) < 0)
+                       return fail(QStringLiteral("The script couldn't be written."));
+                   f.close();
+                   const double timeout = qBound(1.0, a.value(QLatin1String("timeout")).toDouble(20), 120.0);
+                   QStringList args{ QStringLiteral("--test"), script, l.path, QStringLiteral("--timeout"), QString::number(timeout) };
+                   if (driver == QLatin1String("sqlite"))
+                       args << QStringLiteral("--data") << dir.path();
+                   if (a.contains(QLatin1String("start")) && !a.value(QLatin1String("start")).toBool())
+                       args << QStringLiteral("--no-start");
+                   const Ran r = runRunner(args, int(timeout * 1000) + 15000);
+                   if (!r.started)
+                       return fail(r.err);
+                   QString said = r.out;
+                   // (stderr: what didn't go through Qt, minus the video drivers' noise)
+                   QStringList extra;
+                   for (const QString &line : r.err.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+                       if (!line.contains(QLatin1String("VDPAU")) && !line.startsWith(QLatin1Char('[')))
+                           extra << line;
+                   }
+                   if (!extra.isEmpty())
+                       said += QStringLiteral("\n(stderr)\n") + extra.join(QLatin1Char('\n'));
+                   if (r.exitCode < 0)
+                       said += QStringLiteral("\nIt crashed or was stopped.");
+                   return text(said, r.exitCode != 0);
                } };
 
     t << Tool{ QStringLiteral("build_program"),

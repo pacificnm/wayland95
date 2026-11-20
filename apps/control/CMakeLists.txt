@@ -103,6 +103,7 @@ qt_add_qml_module(win95control
         MysqlSettings.qml
         SqliteSettings.qml
         NginxSettings.qml
+        SambaSettings.qml
     RESOURCE_PREFIX /qt/qml
 )
 

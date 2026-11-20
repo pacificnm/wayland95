@@ -83,6 +83,7 @@
      "width": 340,
      "height": 250,
      "props": {
+      "plotColor": "#c0c0c0",
       "graph": {
        "type": "Candlestick",
        "table": "Trades",

@@ -11,6 +11,10 @@ import Win95Shell
 //
 // Keyboard: Up/Down move, Right/Enter open a submenu, Left/Esc back out,
 // and an entry's underlined letter (first letter in submenus) picks it.
+//
+// Right-clicking a program (or the Menu key, Shift+F10) gives its menu:
+// Open, Open as Admin (Root), Add Shortcut to Desktop, and Uninstall...
+// (installed programs only: Control Panel > Add/Remove Programs removes it).
 FocusScope {
     id: menu
 
@@ -27,6 +31,8 @@ FocusScope {
     signal shutDownRequested()
     signal helpRequested()
     signal closed()
+    // something in a program's menu went wrong: the taskbar says so
+    signal problem(string title, string text)
 
     // main-menu entries; `key` is the index of the underlined letter
     readonly property var entries: [
@@ -119,11 +125,33 @@ FocusScope {
 
     readonly property int hot: hots[0] === undefined ? -1 : hots[0]
 
+    // submenu levels the menu can show (Programs > folder is two)
+    readonly property int maxLevels: 4
+
+    // Like Win95's MenuShowDelay: the pointer highlights an entry at once,
+    // but its submenu opens (and the old one closes) only once the pointer
+    // rests there, so sweeping down a menu doesn't open every folder on the
+    // way, and a diagonal move into a submenu can cross other entries.
+    readonly property int showDelay: 300
+    property var pendingPath: null
+    Timer {
+        id: showTimer
+        interval: menu.showDelay
+        onTriggered: {
+            if (menu.pendingPath)
+                menu.setPath(menu.pendingPath);
+            menu.pendingPath = null;
+        }
+    }
+
+    // one list for every empty folder, so it isn't rebuilt each time
+    readonly property var emptyList: [{ label: "(Empty)" }]
+
     function childrenOf(entry) {
         if (!entry || !entry.submenu)
             return [];
         var list = typeof entry.submenu === "string" ? submenus[entry.submenu] : entry.submenu;
-        return list.length ? list : [{ label: "(Empty)" }];
+        return list.length ? list : emptyList;
     }
     function levelEntries(level) {
         var list = entries;
@@ -148,7 +176,7 @@ FocusScope {
             return out;
         var origin = menu.mapToItem(null, 0, 0);
         var screenW = Window.width, screenH = Window.height;
-        for (var k = 1; k <= path.length; ++k) {
+        for (var k = 1; k <= Math.min(path.length, maxLevels); ++k) {
             var list = levelEntries(k);
             var w = 0;
             for (var j = 0; j < list.length; ++j) {
@@ -196,6 +224,7 @@ FocusScope {
     }
 
     function open() {
+        cancelPending();
         path = [];
         hots = [-1];
         depth = 0;
@@ -207,7 +236,9 @@ FocusScope {
     function close() {
         if (!visible)
             return;
+        itemMenu.close();
         visible = false;
+        cancelPending();
         path = [];
         closed();
     }
@@ -226,28 +257,49 @@ FocusScope {
         hots = h;
     }
 
-    // the pointer is over entry i of `level`: highlight it, and show its
-    // submenu (closing deeper ones)
+    // the pointer is over entry i of `level`: highlight it, and after
+    // showDelay show its submenu (closing deeper ones)
     function hover(level, i) {
         var e = levelEntries(level)[i];
         depth = level;
+        // back in a submenu: its parents' open entries are the hot ones again
+        var h = hots.slice(0, level + 1);
+        for (var k = 0; k < level && k < path.length; ++k)
+            h[k] = path[k];
+        hots = h;
         setHot(level, i);
         var p = path.slice(0, level);
         if (e && e.submenu)
             p.push(i);
-        setPath(p);
+        if (samePath(p, path)) {
+            cancelPending();
+            return;
+        }
+        pendingPath = p;
+        showTimer.restart();
+    }
+
+    function cancelPending() {
+        showTimer.stop();
+        pendingPath = null;
+    }
+
+    function samePath(a, b) {
+        return a.length === b.length && a.every(function (v, k) { return v === b[k]; });
     }
 
     // only a real change: a new path rebuilds the submenus under the pointer
     function setPath(p) {
-        if (p.length !== path.length || p.some(function (v, k) { return v !== path[k]; }))
+        if (!samePath(p, path))
             path = p;
     }
 
     function openSubmenu(level, i) {
         hover(level, i);
+        cancelPending();
         if (!levelEntries(level)[i].submenu)
             return;
+        setPath(path.slice(0, level).concat([i]));
         depth = level + 1;
         var list = levelEntries(level + 1);
         var first = 0;
@@ -278,6 +330,7 @@ FocusScope {
     }
 
     function back() {
+        cancelPending();
         if (depth === 0) {
             close();
             return;
@@ -297,6 +350,7 @@ FocusScope {
                 break;
         }
         setHot(depth, i);
+        cancelPending();
         setPath(path.slice(0, depth)); // moving closes what the old entry opened
     }
 
@@ -320,6 +374,14 @@ FocusScope {
             if (current >= 0)
                 activate(menu.depth, current);
             break;
+        case Qt.Key_Menu:
+            if (current >= 0)
+                showItemMenuAt(menu.depth, current);
+            break;
+        case Qt.Key_F10:
+            if ((event.modifiers & Qt.ShiftModifier) && current >= 0)
+                showItemMenuAt(menu.depth, current);
+            break;
         default: {
             // access keys: the underlined letter, or the first letter in
             // submenus; several entries with that letter take turns
@@ -340,6 +402,7 @@ FocusScope {
             } else if (matches.length > 1) {
                 var next = matches.find(function (m) { return m > current; });
                 setHot(menu.depth, next === undefined ? matches[0] : next);
+                cancelPending();
                 setPath(path.slice(0, menu.depth));
             }
             break;
@@ -349,6 +412,67 @@ FocusScope {
     }
 
     Bevel { anchors.fill: parent; raised: true; face: Theme.menu }
+
+    // --- a program's menu (right-click) ------------------------------------
+    // programs in the submenus have one: an installed one (desktopId) or one
+    // of Wayland 95's own (program, args)
+    function hasItemMenu(level, e) {
+        return level > 0 && !!e && !e.separator && !e.submenu && (!!e.desktopId || !!e.program);
+    }
+    // the menu for entry i of `level`, at (x, y) in this item's coordinates
+    function showItemMenu(level, i, x, y) {
+        var e = levelEntries(level)[i];
+        if (!hasItemMenu(level, e))
+            return;
+        cancelPending();
+        depth = level;
+        setHot(level, i);
+        var p = menu.mapToItem(itemMenu, x, y);
+        itemMenu.popup(p.x, p.y, [
+            { text: "&Open", action: function () { menu.activate(level, i); } },
+            { text: "Open as &Admin (Root)", action: function () { menu.openAsRoot(e); } },
+            { separator: true },
+            { text: "Add &Shortcut to Desktop", action: function () { menu.addShortcut(e); } },
+            { separator: true },
+            // (Wayland 95's own programs come with the desktop itself)
+            { text: "&Uninstall...", enabled: !!e.desktopId, action: function () { menu.uninstall(e); } },
+        ]);
+    }
+    // from the keyboard: under the entry, a little way in
+    function showItemMenuAt(level, i) {
+        var l = levels[level - 1];
+        if (!l)
+            return;
+        showItemMenu(level, i, l.x + 3 + Math.floor(i / l.rows) * l.colWidth + sz(24),
+                     l.y + 3 + (i % l.rows + 1) * subRowHeight);
+    }
+    function openAsRoot(e) {
+        close();
+        var ok = e.desktopId ? ProgramMenu.launchAsRoot(e.desktopId) : Launcher.launchAsRoot(e.program, e.args || []);
+        if (!ok)
+            problem("Open as Admin", "\"" + e.label + "\" can't be opened as the administrator. "
+                    + "Opening programs as root needs pkexec (sudo apt install pkexec).");
+    }
+    function addShortcut(e) {
+        close();
+        var error = e.desktopId ? DesktopShortcuts.addProgram(ProgramMenu.pathOf(e.desktopId))
+                                : DesktopShortcuts.addCommand(e.label, e.program, e.args || [], e.icon || "");
+        if (error)
+            problem("Add Shortcut to Desktop", error);
+    }
+    function uninstall(e) {
+        close();
+        // Add/Remove Programs finds the package and asks before removing it
+        Launcher.launch("win95control", ["--applet", "programs", "--uninstall", e.desktopId]);
+    }
+    Ui.Menu95 {
+        id: itemMenu
+        // over the whole pop-up parent, so a click anywhere else closes it
+        // (and only it: the Start menu stays open, as in Win95)
+        parent: menu.parent
+        z: 3000
+        onClosed: if (menu.visible) menu.forceActiveFocus()
+    }
 
     // --- sidebar ---------------------------------------------------------
     Rectangle {
@@ -462,21 +586,39 @@ FocusScope {
     }
 
     // --- cascading submenus ----------------------------------------------
+    // One fixed slot per level, not a Repeater over `levels`: that array is
+    // new whenever the path changes, and a Repeater given a new model
+    // rebuilds every flyout, so the open ones flashed as their rows and icons
+    // were made again. A slot rebuilds its rows only when its list changes.
     Repeater {
-        model: menu.levels
+        model: menu.maxLevels
         delegate: Item {
             id: flyout
-            required property var modelData
-            readonly property int level: modelData.level
-            x: modelData.x
-            y: modelData.y
-            width: modelData.width
-            height: modelData.height
+            required property int index
+            readonly property int level: index + 1
+            readonly property var modelData: menu.levels[index] || null
+            // the entries shown, reassigned only when the list itself changes
+            property var shown: null
+            function sync() {
+                var e = modelData ? modelData.entries : null;
+                if (e !== shown)
+                    shown = e;
+            }
+            onModelDataChanged: sync()
+            Component.onCompleted: sync()
+            readonly property int rows: modelData ? modelData.rows : 1
+            readonly property int colWidth: modelData ? modelData.colWidth : 0
+
+            visible: !!modelData
+            x: modelData ? modelData.x : 0
+            y: modelData ? modelData.y : 0
+            width: modelData ? modelData.width : 0
+            height: modelData ? modelData.height : 0
 
             Bevel { anchors.fill: parent; raised: true; face: Theme.menu }
 
             Repeater {
-                model: flyout.modelData.entries
+                model: flyout.shown
                 delegate: Item {
                     id: subRow
                     required property var modelData
@@ -485,9 +627,9 @@ FocusScope {
                     readonly property bool highlighted: menu.hots[flyout.level] === index
                     readonly property bool hasIcon: !!modelData.iconSource
 
-                    x: 3 + Math.floor(index / flyout.modelData.rows) * flyout.modelData.colWidth
-                    y: 3 + (index % flyout.modelData.rows) * menu.subRowHeight
-                    width: flyout.modelData.colWidth
+                    x: 3 + Math.floor(index / flyout.rows) * flyout.colWidth
+                    y: 3 + (index % flyout.rows) * menu.subRowHeight
+                    width: flyout.colWidth
                     height: menu.subRowHeight
 
                     Rectangle {
@@ -508,7 +650,9 @@ FocusScope {
                         fillMode: Image.PreserveAspectFit
                     }
                     MenuIcon {
-                        visible: !appIcon.visible && subRow.modelData.label !== "(Empty)"
+                        // not while the app's icon loads, or it flashes in first
+                        visible: (!subRow.hasIcon || appIcon.status === Image.Error)
+                                 && subRow.modelData.label !== "(Empty)"
                         x: 4
                         anchors.verticalCenter: parent.verticalCenter
                         size: menu.sz(16)
@@ -546,8 +690,16 @@ FocusScope {
                     MouseArea {
                         anchors.fill: parent
                         hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
                         onContainsMouseChanged: if (containsMouse) menu.hover(flyout.level, subRow.index)
-                        onClicked: menu.activate(flyout.level, subRow.index)
+                        onClicked: (mouse) => {
+                            if (mouse.button === Qt.RightButton) {
+                                var p = mapToItem(menu, mouse.x, mouse.y);
+                                menu.showItemMenu(flyout.level, subRow.index, p.x, p.y);
+                            } else {
+                                menu.activate(flyout.level, subRow.index);
+                            }
+                        }
                     }
                 }
             }

@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
-<!-- The Services control panel's helper (wayland95-services), run through
-     pkexec: an administrator's password, remembered for a few minutes so
-     several changes in a row ask only once. -->
+<!-- Control Panel's helper (wayland95-services: Services, the update
+     source, the login screen), run through pkexec: an administrator's
+     password, remembered for a few minutes so several changes in a row ask
+     only once. -->
 <policyconfig>
   <vendor>Wayland 95</vendor>
   <action id="org.wayland95.services">
-    <description>Change server settings</description>
-    <message>Services needs an administrator's password to change how this computer's servers run.</message>
+    <description>Change the computer's settings</description>
+    <message>Control Panel needs an administrator's password to change how this computer is set up.</message>
     <defaults>
       <allow_any>auth_admin</allow_any>
       <allow_inactive>auth_admin</allow_inactive>

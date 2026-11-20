@@ -20,8 +20,10 @@ apparmor
 # --- the desktop (built from this repository, see live/build.sh) ----------
 wayland95
 sddm
-# a login theme that isn't KDE's (sddm-theme-debian-breeze needs Plasma)
-sddm-theme-debian-maui
+# the login screen is Wayland 95's own SDDM theme (in the wayland95 package,
+# chosen in /etc/sddm.conf.d/wayland95.conf); no KDE theme, as
+# sddm-theme-debian-breeze needs Plasma. If it ever fails to load, SDDM falls
+# back to the theme built into it.
 libpam-systemd
 
 # --- installing to disk ---------------------------------------------------

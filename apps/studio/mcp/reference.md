@@ -16,7 +16,19 @@ window that has it open reloads it, so the user sees each change.
 4. `check_project`: compiles everything, the code too. Fix what it says.
 5. `show_form`: look at each form as it opens. Fix the layout until it
    looks right: aligned, nothing cut off, nothing overlapping.
-6. `run_app` starts it on the user's desktop for them to try;
+6. `run_test`: drive it as a person would (click, type, pick, answer the
+   message boxes) and check what it does, on a copy of its database. Run
+   one for what each form's code is for; fix what it finds. For example:
+
+   ```
+   Test.type("BooksForm", "titleBox", "Dune");
+   Test.click("BooksForm", "menu1", "fileSave");
+   Test.equal(Db.count("Books"), 1, "Save adds the book");
+   Test.answer("Yes");                      // the next message box
+   Test.click("BooksForm", "deleteButton");
+   Test.wait(200, function () { Test.equal(Db.count("Books"), 0, "Delete, Yes: it's gone"); });
+   ```
+7. `run_app` starts it on the user's desktop for them to try;
    `build_program` makes a program file (no Studio needed to run it).
 
 Every write is checked first and refused, with why, if it's wrong (an
@@ -121,6 +133,14 @@ event code, `forms.md` and `data-designer.md` say what everything does.
   Start the other elements below them.
 - Frame and Shape are drawn behind the other elements; put the elements
   that are "in" a Frame inside its rectangle (there is no nesting).
+- A Timer is only seen in the Studio (28x28; put it in a corner): its
+  `timer` event runs every `interval` ms while it's `enabled`.
+- A Visualizer's and an Equalizer's `player` is the Name of a MediaPlayer
+  on the same form. The equalizer is the MediaPlayer's (`equalizer`,
+  `eqPreset`, `eqPreamp`; code: `eqGains`, `setEqGain`, `applyEqPreset`);
+  an Equalizer (392x152) shows and changes it.
+- A DataGrid's `columns` can give widths: `["Title:180", "Artist",
+  "Length:48"]` (the ones without share what's left).
 
 ### Laying out a form the Windows 95 way
 
@@ -145,9 +165,18 @@ event code, `forms.md` and `data-designer.md` say what everything does.
 
 ```json
 { "type": "ToolBar", "name": "toolBar1", "height": 28, "props": { "buttons": [
-  { "text": "Save", "name": "saveTool", "glyph": "✔", "toolTip": "Save the book", "action": "save" },
+  { "text": "Save", "name": "saveTool", "icon": "save", "toolTip": "Save the book", "action": "save" },
+  { "text": "", "name": "nextTool", "icon": "next", "toolTip": "The next book", "action": "next" },
   { "separator": true } ] } }
 ```
+
+- A tool button shows an `icon`: one of Wayland 95's own (`new`, `save`,
+  `delete`, `first`, `previous`, `next`, `last`, `print`, `find`,
+  `people`...; studio_reference topic `elements`, element `Icons`, lists
+  them all). Use them rather than a `glyph` (a character, the old way) or
+  a `picture` file. With `showCaptions` (true by default) the text shows
+  beside the icon; a button with an empty text shows just its icon.
+- A Button can have an `icon` too (`props.icon`), left of its text.
 
 - `&` marks the access key (only in menu items: a Label or Button shows
   it as it is). Item names are unique on the form.
@@ -167,6 +196,12 @@ Event code is JavaScript, run with the form's elements by name and:
 - `Db`: `Db.select("Books", { where: { Genre: "Fiction" }, orderBy: "Title" })`,
   `Db.get`, `Db.insert`, `Db.update`, `Db.remove`, `Db.count`.
 - `AppDates`: dates as they're kept (`2026-11-17`, `14:30:00`).
+- Files: `App.chooseFile`, `chooseFiles`, `chooseFolder`, `chooseSaveFile`
+  (the Win95 boxes; `(options, function (answer) { })`, options `title`,
+  `folder`, `filters: ["Music (*.mp3)"]`, `name`, `suffix`),
+  `App.listFiles(folder, "*.mp3 *.flac", recursive)`, `App.fileInfo(path)`,
+  `App.readTags(path, function (tags) { })` (a media file's title,
+  artist, album... without playing it).
 
 `studio_manual` page `code.md` has all of it, with examples. A message
 box doesn't wait: what to do with the answer goes in its function.

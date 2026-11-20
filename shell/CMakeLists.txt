@@ -22,13 +22,22 @@ qt_add_executable(win95shell
     # services shared with the Qt compositor
     ${CMAKE_SOURCE_DIR}/src/launcher.h ${CMAKE_SOURCE_DIR}/src/launcher.cpp
     ${CMAKE_SOURCE_DIR}/src/programmenu.h ${CMAKE_SOURCE_DIR}/src/programmenu.cpp
+    ${CMAKE_SOURCE_DIR}/src/desktopshortcuts.h ${CMAKE_SOURCE_DIR}/src/desktopshortcuts.cpp
     ${CMAKE_SOURCE_DIR}/src/statusnotifier.h ${CMAKE_SOURCE_DIR}/src/statusnotifier.cpp
     ${CMAKE_SOURCE_DIR}/src/notifications.h ${CMAKE_SOURCE_DIR}/src/notifications.cpp
     ${CMAKE_SOURCE_DIR}/src/trashwatcher.h ${CMAKE_SOURCE_DIR}/src/trashwatcher.cpp
     ${CMAKE_SOURCE_DIR}/src/polkitagent.h ${CMAKE_SOURCE_DIR}/src/polkitagent.cpp
     ${CMAKE_SOURCE_DIR}/src/nmsecretagent.h ${CMAKE_SOURCE_DIR}/src/nmsecretagent.cpp
     ${CMAKE_SOURCE_DIR}/src/updatecheck.h ${CMAKE_SOURCE_DIR}/src/updatecheck.cpp
+    # other programs' look: GTK's theme and fonts, browsers' title bars
+    ${CMAKE_SOURCE_DIR}/src/programlook.h ${CMAKE_SOURCE_DIR}/src/programlook.cpp
 )
+qt_add_resources(win95shell programlook
+    PREFIX /programlook
+    BASE ${CMAKE_SOURCE_DIR}/src/programlook
+    FILES ${CMAKE_SOURCE_DIR}/src/programlook/gtk.css
+)
+pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
 # (layer-shell names an argument "namespace", a C++ keyword in the Qt
 # wrappers: generated from a copy with it renamed)
 file(READ ${CMAKE_SOURCE_DIR}/protocols/wlr/wlr-layer-shell-unstable-v1.xml layer_shell_xml)
@@ -48,6 +57,13 @@ target_include_directories(win95shell PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/apps/common
+)
+# Start menu > Open as Admin (Root) runs session/wayland95-run-as-admin
+# through pkexec: the installed copy, or the source tree's before it's installed
+include(GNUInstallDirs)
+target_compile_definitions(win95shell PRIVATE
+    WAYLAND95_RUN_AS_ADMIN_HELPER="${CMAKE_INSTALL_FULL_LIBEXECDIR}/wayland95/wayland95-run-as-admin"
+    WAYLAND95_RUN_AS_ADMIN_HELPER_SRC="${CMAKE_SOURCE_DIR}/session/wayland95-run-as-admin"
 )
 
 # the QML: the Qt compositor's files that make sense in a client (not its
@@ -84,6 +100,7 @@ target_link_libraries(win95shell PRIVATE
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus
     Qt6::WaylandClient Qt6::WaylandClientPrivate
     win95uiplugin
+    PkgConfig::GIO
 )
 set_target_properties(win95shell PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 install(TARGETS win95shell RUNTIME DESTINATION bin)

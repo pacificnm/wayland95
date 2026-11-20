@@ -1,8 +1,9 @@
 import QtQuick
 
 // Graph95: Wayland 95's own graphs, drawn on a Canvas the way a Windows 95
-// spreadsheet drew them: a white chart with a grey plot, black outlines,
-// a boxed legend.
+// spreadsheet drew them: black outlines, a boxed legend, in the desktop's
+// colors (the chart the color of a dialog, the plot the color of a list:
+// backColor and plotColor are their own if they're set).
 //
 //   Graph95 {
 //       type: "Column"            // Column, Bar, Line, Area, Pie, Doughnut, Scatter
@@ -58,9 +59,9 @@ Item {
     property int decimals: -1
     property string prefix: ""
     property string suffix: ""
-    property color backColor: "#ffffff"
-    property color plotColor: "#c0c0c0"
-    property color textColor: "#000000"
+    property color backColor: Theme.face
+    property color plotColor: Theme.window
+    property color textColor: Theme.text
     property string fontFamily: "Liberation Sans"
     property int fontSize: 11
     // what's shown when there's nothing to draw

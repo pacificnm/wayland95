@@ -117,6 +117,22 @@ public:
     Q_INVOKABLE QString makeWebsite();
     Q_INVOKABLE void openUrl(const QString &url) const;
 
+    // Samba: version, workgroup, description (its server string), ours (our
+    // settings file is included), shares: [{ name, path, comment, access
+    // ("read"/"full"), who ("me": with the owner's Samba password, or
+    // "anyone"), owner, mine }] (the ones Services made); empty if Samba
+    // isn't installed
+    Q_INVOKABLE QVariantMap sambaConfig() const;
+
+    // The login screen (Passwords > Log On), as SDDM will read its settings:
+    // displayManager ("sddm", "gdm3", "lightdm", ... or ""), installed (our
+    // theme is there), current (the theme SDDM uses; "" for its default),
+    // currentName (that theme's own name), ours (it's Wayland 95's), other /
+    // otherName / otherPreview (the theme SDDM would use without ours),
+    // ourFile (/etc/sddm.conf.d/wayland95.conf is there), overriddenBy (the
+    // file that wins over ours, if one does), preview (our theme's picture)
+    Q_INVOKABLE QVariantMap loginScreen() const;
+
 signals:
     void servicesChanged();
     void taskChanged();

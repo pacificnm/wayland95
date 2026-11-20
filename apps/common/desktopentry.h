@@ -18,6 +18,9 @@ struct DesktopEntry
     bool hidden = false;
     // X-GNOME-Autostart-enabled=false: an autostart entry that's turned off
     bool autostartOff = false;
+    // X-Wayland95-Icon: a shortcut to one of Wayland 95's own programs
+    // names its drawn icon (MenuIcon's kind: "calc", "notepad"...)
+    QString wayland95Icon;
 
     static DesktopEntry read(const QString &path, const QString &id = QString());
     // should appear in menus: an application, not hidden, runnable

@@ -4,10 +4,12 @@ import Win95Ui
 // ToolBar: a row of buttons across the top of the form (under its Menu).
 // `buttons` is what the Studio's Menu Editor makes:
 //
-//   [{ text: "Save", name: "saveButton", glyph: "✔", picture: "image://app/save.png",
+//   [{ text: "Save", name: "saveButton", icon: "save", picture: "image://app/save.png", glyph: "✔",
 //      toolTip: "Save the record", action: "save", form: "", enabled: true, checked: false },
 //    { separator: true }]
 //
+// A button shows its picture, or else its icon (Icon95's), or else its
+// glyph (a character), with its text beside it if ShowCaptions is on.
 // Pressing one runs its Action (form.runAction), then itemClicked with
 // `item` set to its name. Code can change a button:
 //
@@ -71,8 +73,9 @@ AppElement {
                 readonly property bool usable: !separator && modelData.enabled !== false && bar.enabled
                 readonly property bool down: (mouse.pressed && mouse.containsMouse) || !!modelData.checked
                 readonly property string picture: modelData.picture || ""
+                readonly property string iconName: modelData.icon || ""
                 readonly property string glyph: modelData.glyph || ""
-                readonly property string caption: bar.showCaptions || (picture === "" && glyph === "") ? (modelData.text || "") : ""
+                readonly property string caption: bar.showCaptions || (picture === "" && iconName === "" && glyph === "") ? (modelData.text || "") : ""
                 width: separator ? 8 : Math.max(content.implicitWidth + 12, parent.height)
                 height: parent.height
 
@@ -103,8 +106,15 @@ AppElement {
                         fillMode: Image.PreserveAspectFit
                         opacity: button.usable ? 1 : 0.4
                     }
+                    Icon95 {
+                        visible: button.picture === "" && button.iconName !== ""
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: visible ? 16 : 0
+                        name: button.iconName
+                        enabled: button.usable
+                    }
                     EtchedText {
-                        visible: button.picture === "" && button.glyph !== ""
+                        visible: button.picture === "" && button.iconName === "" && button.glyph !== ""
                         anchors.verticalCenter: parent.verticalCenter
                         text: button.glyph
                         enabled: button.usable

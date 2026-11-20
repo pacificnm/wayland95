@@ -1,22 +1,26 @@
 import QtQuick
 import Win95Shell
 
-// A simple desktop icon grid. Icons are drawn as plain generic shapes
-// (not Microsoft's actual icon artwork - that's trademarked/copyrighted)
-// just to get recognizable placeholders on the desktop. Double-clicking
-// one is a no-op hook for now; wire `onDoubleClicked` up to a real action
-// (launching a file manager, opening a settings window, etc.) later.
+// The desktop's icons, in columns down the left as in Win95: My Computer
+// and the rest first, then the user's shortcuts (DesktopShortcuts: the
+// .desktop files in ~/Desktop), each with the little shortcut arrow. The
+// built-in icons are drawn as plain generic shapes (not Microsoft's actual
+// icon artwork - that's trademarked/copyrighted).
 GridView {
     id: grid
     cellWidth: 80
     cellHeight: 80
     interactive: false
+    flow: GridView.FlowTopToBottom
 
-    // an icon was right-clicked: its entry (label, kind, program, arg), and
-    // where, in this item's coordinates (the desktop shows its menu)
+    // an icon was right-clicked: its entry (label, kind, program, arg; a
+    // shortcut's kind is "shortcut", with its path), and where, in this
+    // item's coordinates (the desktop shows its menu)
     signal menuRequested(var entry, real x, real y)
     function open(entry) {
-        if (entry.program)
+        if (entry.kind === "shortcut")
+            DesktopShortcuts.open(entry.path);
+        else if (entry.program)
             Launcher.launch(entry.program, entry.program === "win95control" ? ["--applet", entry.arg]
                                            : entry.arg ? [entry.arg] : []);
     }
@@ -46,21 +50,28 @@ GridView {
         rect(24, 26, 3, 2, "#00c000");    // power light
     }
 
-    model: ListModel {
-        ListElement { label: "My Computer"; kind: "computer"; program: "win95files";    arg: "computer:" }
-        ListElement { label: "Network";     kind: "network";  program: "win95control";  arg: "network" }
-        ListElement { label: "Recycle Bin"; kind: "bin";      program: "win95files";    arg: "trash:" }
-        ListElement { label: "Terminal";    kind: "terminal"; program: "win95terminal"; arg: "" }
-    }
+    readonly property var builtIn: [
+        { label: "My Computer", kind: "computer", program: "win95files",    arg: "computer:" },
+        { label: "Network",     kind: "network",  program: "win95control",  arg: "network" },
+        { label: "Recycle Bin", kind: "bin",      program: "win95files",    arg: "trash:" },
+        { label: "Terminal",    kind: "terminal", program: "win95terminal", arg: "" },
+    ]
+    model: builtIn.concat(DesktopShortcuts.shortcuts.map(function (s) {
+        return { label: s.label, kind: "shortcut", iconSource: s.iconSource, icon: s.icon, path: s.path };
+    }))
 
     delegate: Item {
+        id: cell
+        required property var modelData
+        readonly property string kind: modelData.kind
         width: grid.cellWidth
         height: grid.cellHeight
 
         property bool selected: false
 
         Column {
-            anchors.centerIn: parent
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 8
             spacing: 4
 
             Item {
@@ -70,13 +81,13 @@ GridView {
 
                 Canvas {
                     // a monitor on a desktop case
-                    visible: kind === "computer"
+                    visible: cell.kind === "computer"
                     anchors.fill: parent
                     onPaint: grid.drawComputer(getContext("2d"), 0, 0, 1)
                 }
                 Canvas {
                     // three small computers wired to each other
-                    visible: kind === "network"
+                    visible: cell.kind === "network"
                     anchors.fill: parent
                     onPaint: {
                         var ctx = getContext("2d");
@@ -92,9 +103,46 @@ GridView {
                         grid.drawComputer(ctx, 8, 17, 0.5);
                     }
                 }
+                // a shortcut: the program's own icon, or a Wayland 95
+                // program's drawn one, with the shortcut arrow over its corner
+                Image {
+                    id: shortcutImage
+                    visible: cell.kind === "shortcut" && !!cell.modelData.iconSource && status === Image.Ready
+                    anchors.fill: parent
+                    sourceSize: Qt.size(32, 32)
+                    source: cell.kind === "shortcut" ? (cell.modelData.iconSource || "") : ""
+                    asynchronous: true
+                    fillMode: Image.PreserveAspectFit
+                }
+                MenuIcon {
+                    visible: cell.kind === "shortcut" && !shortcutImage.visible
+                    size: 32
+                    kind: cell.modelData.icon || "app"
+                }
+                Canvas {
+                    visible: cell.kind === "shortcut"
+                    x: 0; y: 23
+                    width: 9; height: 9
+                    onPaint: {
+                        // white box, black frame, a black arrow curving up-right
+                        var ctx = getContext("2d");
+                        ctx.fillStyle = "#000000";
+                        ctx.fillRect(0, 0, 9, 9);
+                        ctx.fillStyle = "#ffffff";
+                        ctx.fillRect(1, 1, 7, 7);
+                        ctx.fillStyle = "#000000";
+                        ctx.fillRect(4, 2, 3, 1);
+                        ctx.fillRect(6, 2, 1, 3);
+                        ctx.fillRect(5, 3, 1, 1);
+                        ctx.fillRect(4, 4, 1, 1);
+                        ctx.fillRect(3, 5, 1, 2);
+                        ctx.fillRect(2, 6, 1, 1);
+                    }
+                }
+
                 Rectangle {
                     // a little black console window with a prompt
-                    visible: kind === "terminal"
+                    visible: cell.kind === "terminal"
                     anchors.fill: parent
                     anchors.margins: 3
                     color: "#c0c0c0"
@@ -117,7 +165,7 @@ GridView {
                     // a wire-mesh wastebasket; crumpled paper pokes out of
                     // the top while the Recycle Bin has anything in it
                     id: binIcon
-                    visible: kind === "bin"
+                    visible: cell.kind === "bin"
                     anchors.fill: parent
                     readonly property bool full: TrashWatcher.full
                     onFullChanged: requestPaint()
@@ -193,15 +241,21 @@ GridView {
 
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
-                color: parent.parent.selected ? Theme.selectionBlue : "transparent"
-                width: label.implicitWidth + 4
-                height: label.implicitHeight + 2
+                color: cell.selected ? Theme.selectionBlue : "transparent"
+                width: label.width + 4
+                height: label.height + 2
 
+                // long names wrap onto a second line, then end in "..."
                 Text {
                     id: label
                     anchors.centerIn: parent
-                    text: model.label
+                    width: Math.min(implicitWidth, grid.cellWidth - 6)
+                    text: cell.modelData.label
                     color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSize
                 }
@@ -213,17 +267,16 @@ GridView {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             onClicked: (mouse) => {
                 if (mouse.button === Qt.RightButton) {
-                    parent.selected = true;
+                    cell.selected = true;
                     var p = mapToItem(grid, mouse.x, mouse.y);
-                    grid.menuRequested({ label: model.label, kind: model.kind, program: model.program, arg: model.arg },
-                                       p.x, p.y);
+                    grid.menuRequested(cell.modelData, p.x, p.y);
                 } else {
-                    parent.selected = !parent.selected;
+                    cell.selected = !cell.selected;
                 }
             }
             onDoubleClicked: (mouse) => {
                 if (mouse.button === Qt.LeftButton)
-                    grid.open({ program: model.program, arg: model.arg });
+                    grid.open(cell.modelData);
             }
         }
     }

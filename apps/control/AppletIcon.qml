@@ -303,6 +303,17 @@ Canvas {
             rect(15, 26, 2, 4, "#000000");
             rect(8, 29, 16, 2, "#000000");
             break;
+        case "samba":
+            // a folder on the network: a cable down from it to a line with
+            // other computers on it
+            frame(3, 5, 26, 16, "#ffff80");
+            frame(3, 2, 11, 5, "#ffff80");
+            rect(4, 6, 24, 1, "#ffffff");
+            rect(15, 21, 2, 5, "#000000");
+            rect(1, 26, 30, 2, "#000000");
+            frame(1, 28, 6, 4, "#008080");
+            frame(25, 28, 6, 4, "#008080");
+            break;
         case "wireguard":
             // two computers joined by a tunnel, with a padlock on it
             frame(1, 6, 10, 9, "#c0c0c0"); frame(3, 8, 6, 5, "#008080");

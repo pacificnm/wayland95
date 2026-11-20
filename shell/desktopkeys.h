@@ -103,6 +103,11 @@ public:
         Capture = 10, // Ctrl+Shift+5
         StartMenu = 11, // Ctrl+Esc
         TaskManager = 12, // Ctrl+Shift+Esc
+        MediaPlayPause = 13, // the media keys (MPRIS: MediaPlayers)
+        MediaPause = 14,
+        MediaStop = 15,
+        MediaNext = 16,
+        MediaPrevious = 17,
     };
     Q_ENUM(Key)
 

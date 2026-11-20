@@ -206,6 +206,8 @@ void Wayland95Settings::load()
                                                  QLatin1String(standard.name)).toString();
 
     const bool showClock = m_settings.value(QStringLiteral("Taskbar/ShowClock"), true).toBool();
+    const bool otherPrograms = m_settings.value(QStringLiteral("Appearance/OtherPrograms"), true).toBool();
+    const bool sharpX11 = m_settings.value(QStringLiteral("Display/SharpX11"), true).toBool();
     const bool clock24 = m_settings.value(QStringLiteral("Taskbar/Clock24Hour"), false).toBool();
     const bool showVolume = m_settings.value(QStringLiteral("Taskbar/ShowVolume"), true).toBool();
     const bool showNotifications = m_settings.value(QStringLiteral("Taskbar/ShowNotifications"), true).toBool();
@@ -234,7 +236,7 @@ void Wayland95Settings::load()
                                                  QStringLiteral("Wayland 95 Default")).toString();
 
     const bool differs = bg != m_backgroundColor || wallpaper != m_wallpaper || mode != m_wallpaperMode
-        || colors != m_colors || colorScheme != m_colorScheme || showClock != m_showClock
+        || colors != m_colors || colorScheme != m_colorScheme || showClock != m_showClock || otherPrograms != m_otherProgramsLook || sharpX11 != m_sharpX11
         || clock24 != m_clock24Hour || showVolume != m_showVolume || showNotifications != m_showNotifications || doNotDisturb != m_doNotDisturb || showNetwork != m_showNetwork || showBluetooth != m_showBluetooth || showBattery != m_showBattery || showDrives != m_showDrives || showAppIcons != m_showAppIcons || startMenuSize != m_startMenuSize || layout != m_keyboardLayout || delay != m_keyRepeatDelay
         || rate != m_keyRepeatRate || flash != m_cursorFlashTime || dblClick != m_doubleClickInterval
         || sounds != m_sounds || soundScheme != m_soundScheme;
@@ -286,6 +288,8 @@ void Wayland95Settings::load()
     m_colors = colors;
     m_colorScheme = colorScheme;
     m_showClock = showClock;
+    m_otherProgramsLook = otherPrograms;
+    m_sharpX11 = sharpX11;
     m_clock24Hour = clock24;
     m_showVolume = showVolume;
     m_showNotifications = showNotifications;
@@ -744,6 +748,22 @@ void Wayland95Settings::setShowClock(bool on)
         return;
     m_showClock = on;
     store(QStringLiteral("Taskbar/ShowClock"), on);
+}
+
+void Wayland95Settings::setOtherProgramsLook(bool on)
+{
+    if (on == m_otherProgramsLook)
+        return;
+    m_otherProgramsLook = on;
+    store(QStringLiteral("Appearance/OtherPrograms"), on);
+}
+
+void Wayland95Settings::setSharpX11(bool on)
+{
+    if (on == m_sharpX11)
+        return;
+    m_sharpX11 = on;
+    store(QStringLiteral("Display/SharpX11"), on);
 }
 
 void Wayland95Settings::setClock24Hour(bool on)

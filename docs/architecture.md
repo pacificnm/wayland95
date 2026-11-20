@@ -74,6 +74,7 @@ one file per concern):
 | `dialog.c` | `xdg-dialog-v1`: which windows are modal dialogs; bringing forward a window that waits on one gives the dialog the keyboard, as in Windows 95 |
 | `xdg.c` | xdg-shell: toplevels, popups (placed and kept on screen with `wlr_xdg_popup_unconstrain_from_box`) |
 | `xwayland.c` | X11 windows through `wlr_xwayland` (its window manager is part of wlroots) |
+| `xscale.c` | X11 programs at a scaled display's own pixels: X11's coordinates are the desktop's times the largest display scale; Xwayland gets an xdg-output of its own with those numbers (the global filter hides wlroots' from it, and its from everyone else), and 96 times that DPI in its resources (`Xft.dpi`, set by a helper that starts Xwayland before any program, so the first gets it too); X11 surfaces are shown that much smaller, pixel for pixel (their sizes kept to whole desktop pixels), and pointer positions given to them that much bigger. Control Panel's Display/SharpX11 turns it off |
 | `decoration.c` | the Win95 frame: title bar (active/inactive gradients, bold title cut short with "..."), minimize/maximize/close buttons, 3-D borders, an invisible 4-pixel grab zone outside the border for resizing; drawn with cairo and pango into one scene buffer behind the program, re-drawn only when its size, title, state or the colour scheme changes |
 | `layers.c` | layer-shell surfaces (the shell's panels), exclusive zones (the taskbar's edge), keyboard interactivity |
 | `shell.c` | `wayland95-shell-v1`, the shell's private protocol (below) |
@@ -83,8 +84,11 @@ one file per concern):
 
 Window frames are server-side (`xdg-decoration`): programs that leave
 decorations to the desktop (no preference, or server side: Qt, Electron)
-get the Win95 frame, as now. Programs that ask to draw their own, or don't
-use xdg-decoration (GTK), keep doing so. X11 programs get the frame unless
+get the Win95 frame, as now. GTK 3 asks through KDE's older
+server-decoration protocol instead (offered in server mode): windows
+without a header bar get the frame, and so does Firefox with its Title Bar
+box. Programs that ask to draw their own (GTK header bars, Chromium with
+its own title bar) keep doing so. X11 programs get the frame unless
 their `_MOTIF_WM_HINTS` ask for none. The frame looks as the Qt
 compositor's did (3-pixel bevel, 22-pixel title bar, 16x14 buttons) and
 behaves as Win95's: drag the title bar to move, the edges and corners to

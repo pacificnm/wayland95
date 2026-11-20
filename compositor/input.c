@@ -20,6 +20,8 @@
 #include <wlr/util/edges.h>
 #include <wlr/util/region.h>
 
+#include <wlr/xwayland.h>
+
 #include "server.h"
 #include "wayland95-shell-v1-protocol.h"
 
@@ -287,9 +289,10 @@ void input_key(struct server *server, struct keyboard *keyboard, uint32_t time, 
 		uint32_t shell_key = 0;
 		for (int i = 0; i < nsyms && !shell_key; ++i)
 			shell_key = shell_key_for(syms[i], mods);
-		// locked: the volume, brightness and power keys still work; the
-		// Start menu, System Monitor and screen pictures don't
-		if (server->locked && shell_key >= WAYLAND95_SHELL_V1_KEY_PRINT)
+		// locked: the volume, brightness, power and media keys still work;
+		// the Start menu, System Monitor and screen pictures don't
+		if (server->locked && shell_key >= WAYLAND95_SHELL_V1_KEY_PRINT
+				&& shell_key <= WAYLAND95_SHELL_V1_KEY_TASK_MANAGER)
 			shell_key = 0;
 		if (shell_key && keycode < KEY_CNT && !shortcuts_inhibited(server)
 				&& shell_send_key(server, shell_key, true)) {
@@ -664,8 +667,9 @@ static void pointer_focus(struct server *server, uint32_t time)
 	// even outside it (dragging a scroll bar, selecting text)
 	if (server->press_surface && server->seat->pointer_state.button_count > 0
 			&& server->seat->pointer_state.focused_surface == server->press_surface) {
-		wlr_seat_pointer_notify_motion(server->seat, time,
-				server->cursor->x - server->press_ox, server->cursor->y - server->press_oy);
+		double gx = server->cursor->x - server->press_ox, gy = server->cursor->y - server->press_oy;
+		xscale_surface_point(server, server->press_surface, &gx, &gy); // (X11's are bigger)
+		wlr_seat_pointer_notify_motion(server->seat, time, gx, gy);
 		return;
 	}
 	server->press_surface = NULL;
@@ -674,6 +678,7 @@ static void pointer_focus(struct server *server, uint32_t time)
 	struct wlr_surface *surface = NULL;
 	struct view *view = view_from_surface_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy, NULL);
 	if (surface) {
+		xscale_surface_point(server, surface, &sx, &sy); // (X11's are bigger)
 		wlr_seat_pointer_notify_enter(server->seat, surface, sx, sy);
 		wlr_seat_pointer_notify_motion(server->seat, time, sx, sy);
 	} else {
@@ -738,11 +743,13 @@ static void cursor_motion(struct wl_listener *listener, void *data)
 			return; // the pointer stays put
 		}
 		// confined: stop at the region's edge
+		// (in the surface's own units: X11's are the desktop's times xscale)
 		double sx = server->seat->pointer_state.sx, sy = server->seat->pointer_state.sy;
+		double k = wlr_xwayland_surface_try_from_wlr_surface(c->surface) ? server->xscale : 1.0;
 		double cx, cy;
-		if (wlr_region_confine(&c->region, sx, sy, sx + dx, sy + dy, &cx, &cy)) {
-			dx = cx - sx;
-			dy = cy - sy;
+		if (wlr_region_confine(&c->region, sx, sy, sx + dx * k, sy + dy * k, &cx, &cy)) {
+			dx = (cx - sx) / k;
+			dy = (cy - sy) / k;
 		}
 	}
 	wlr_cursor_move(server->cursor, &event->pointer->base, dx, dy);

@@ -14,6 +14,18 @@ import Win95Ui
 //
 //   player1.play()  pause()  stop()  seek(ms)     player1.source = "/home/me/song.mp3"
 //   player1.isPlaying  position  duration (ms)    player1.hasVideo  title  errorString
+//   player1.artist  album  albumArtist  genre  trackNumber  year   (the file's tags, once it's loaded)
+//   player1.levels  peaks  level  waveform        what the sound is doing now (a Visualizer draws them)
+//   player1.coverArt                              the file's own picture, as a file:// URL (an Image's picture)
+//
+// MediaKeys: the keyboard's play, pause, next and previous keys and the
+// sound menu by the clock control it, and show what it's playing (MPRIS).
+// Next and previous are its nextTrack and previousTrack events.
+//
+// Equalizer: ten bands (31 Hz to 16 kHz), -12 to +12 dB each, and a
+// preamp; EqPreset starts it as one of the presets (Flat, Rock, Pop...).
+//   player1.eqGains = [4, 3, 0, ...]   player1.setEqGain(0, 6)   player1.applyEqPreset("Rock")
+//   player1.eqFrequencies  eqPresets  eqPreamp     (an Equalizer element shows them all)
 AppElement {
     id: player
 
@@ -24,12 +36,27 @@ AppElement {
     property int volume: 100
     property bool muted: false
     property bool showControls: true
+    property bool mediaKeys: false
+    property bool equalizer: false
+    property string eqPreset: "Flat"
+    property int eqPreamp: 0
+    // the bands' gains in dB, from 31 Hz up (EqPreset's, until code or an Equalizer changes them)
+    property var eqGains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    readonly property var eqFrequencies: analyzer.frequencies
+    readonly property var eqPresets: analyzer.presetNames
+    // the preset the gains are now ("Custom" if they're none of them)
+    readonly property string eqPresetNow: { var p = analyzer.presetOf(eqGains); return p !== "" ? p : "Custom"; }
     property string fillMode: "Fit"
     signal started()
     signal paused()
     signal stopped()
     signal finished()
     signal failed()
+    // the file is open: its length and tags are known
+    signal loaded()
+    // the Next key, or the sound menu's ⏭ (MediaKeys): the app plays the next one
+    signal nextTrack()
+    signal previousTrack()
 
     defaultBack: "#000000"
     activeFocusOnTab: !designMode && showControls
@@ -58,12 +85,119 @@ AppElement {
         var t = media.metaData.stringValue(MediaMetaData.Title);
         return t ? t : (designMode ? String(source).replace(/^.*\//, "") : fileName);
     }
+    // the file's own tags ("" or 0 when it hasn't them)
+    function tag(key) { var t = media.metaData.stringValue(key); return t ? String(t).trim() : ""; }
+    readonly property string artist: { media.metaData; var a = tag(MediaMetaData.ContributingArtist); return a !== "" ? a : tag(MediaMetaData.Author); }
+    readonly property string album: { media.metaData; return tag(MediaMetaData.AlbumTitle); }
+    readonly property string albumArtist: { media.metaData; return tag(MediaMetaData.AlbumArtist); }
+    readonly property string genre: { media.metaData; return tag(MediaMetaData.Genre); }
+    // ("3", or "3/8": the third of eight)
+    readonly property int trackNumber: { media.metaData; return parseInt(String(media.metaData.stringValue(MediaMetaData.TrackNumber))) || 0; }
+    readonly property int year: {
+        media.metaData;
+        var d = media.metaData.value(MediaMetaData.Date);
+        if (d instanceof Date && !isNaN(d.getTime()))
+            return d.getFullYear();
+        return parseInt(String(media.metaData.stringValue(MediaMetaData.Date)).substring(0, 4)) || 0;
+    }
+
+    // (a test run: never heard, never on the sound menu)
+    readonly property bool testing: !!(form && form.app && form.app.testing)
+    // the file's own picture (its cover), saved in the program's cache: "" if it hasn't one
+    readonly property string coverArt: {
+        media.metaData;
+        if (designMode)
+            return "";
+        var art = media.metaData.value(MediaMetaData.CoverArtImage);
+        if (!art)
+            art = media.metaData.value(MediaMetaData.ThumbnailImage);
+        return art ? mpris.imageUrl(art) : "";
+    }
+
+    // MediaKeys: the desktop sees it as a player (MPRIS) and sends it the keys
+    MprisService {
+        id: mpris
+        active: player.mediaKeys && !player.designMode && player.form !== null && !player.testing
+        identity: player.form && player.form.app ? player.form.app.title : "Wayland Studio"
+        desktopEntry: player.form && player.form.app ? player.form.app.name : ""
+        playbackStatus: player.isPlaying ? "Playing" : player.isPaused ? "Paused" : "Stopped"
+        title: player.title
+        artist: player.artist !== "" ? player.artist : player.albumArtist
+        album: player.album
+        artUrl: player.coverArt
+        length: player.duration
+        position: player.position
+        volume: Math.max(0, Math.min(100, player.volume)) / 100
+        onPlayRequested: player.play()
+        onPauseRequested: player.pause()
+        onPlayPauseRequested: player.toggle()
+        onStopRequested: player.stop()
+        onNextRequested: player.nextTrack()
+        onPreviousRequested: player.previousTrack()
+        onSeekRequested: (ms) => { player.seek(ms); mpris.seeked(ms); }
+        onVolumeRequested: (v) => player.volume = Math.round(v * 100)
+        // (its window to the front: brought back if it's minimized)
+        onRaiseRequested: {
+            if (player.form && player.form.app)
+                player.form.app.showForm(player.form.formName);
+        }
+    }
+
+    // what the sound is doing (a Visualizer's): the bands low to high (0 to
+    // 1), their peaks, how loud (0 to 1), and the wave (-1 to 1)
+    readonly property alias analyzer: analyzer
+    readonly property var levels: analyzer.levels
+    readonly property var peaks: analyzer.peaks
+    readonly property real level: analyzer.level
+    readonly property var waveform: analyzer.waveform
+    AudioAnalyzer {
+        id: analyzer
+        // the equalizer: the player's own output muted, this one's heard instead
+        equalizer: player.equalizer && !player.designMode
+        gains: player.eqGains
+        preamp: player.eqPreamp
+        volume: Math.max(0, Math.min(100, player.volume)) / 100
+        audible: !player.muted && !player.testing
+    }
+    // (30 times a second while it plays, and until the bars have fallen;
+    // the player's position comes in steps, so it's carried on between them)
+    Timer {
+        interval: 33
+        repeat: true
+        running: !player.designMode && (player.isPlaying || player.level > 0 || fading)
+        property bool fading: false
+        property int lastPosition: -1
+        property double seenAt: 0
+        onTriggered: {
+            var now = Date.now();
+            if (media.position !== lastPosition) {
+                lastPosition = media.position;
+                seenAt = now;
+            }
+            var at = player.isPlaying ? lastPosition + Math.min(250, now - seenAt) : lastPosition;
+            analyzer.update(at, player.isPlaying);
+            fading = player.isPlaying || analyzer.level > 0;
+        }
+    }
 
     function play() { if (!designMode && playing !== "") media.play(); }
     function pause() { media.pause(); }
-    function stop() { media.stop(); }
-    function seek(ms) { media.position = Math.max(0, Math.min(Number(ms) || 0, media.duration > 0 ? media.duration : Number(ms) || 0)); }
+    function stop() { media.stop(); analyzer.flush(); }
+    function seek(ms) { analyzer.clear(); media.position = Math.max(0, Math.min(Number(ms) || 0, media.duration > 0 ? media.duration : Number(ms) || 0)); }
     function toggle() { if (isPlaying) pause(); else play(); }
+    function setEqGain(band, db) {
+        var g = eqGains.slice();
+        if (band < 0 || band >= g.length)
+            return;
+        g[band] = Math.max(-12, Math.min(12, Number(db) || 0));
+        eqGains = g;
+    }
+    function applyEqPreset(name) {
+        var g = analyzer.preset(String(name));
+        if (g.length === 10)
+            eqGains = g;
+    }
+    onEqPresetChanged: applyEqPreset(eqPreset)
 
     // "1:05", "1:02:09"
     function clock(ms) {
@@ -78,9 +212,12 @@ AppElement {
         loops: player.loop ? MediaPlayer.Infinite : 1
         audioOutput: AudioOutput {
             volume: Math.max(0, Math.min(100, player.volume)) / 100
-            muted: player.muted
+            // (a test run's are never heard)
+            // (with the equalizer on, it's heard through the analyzer's own stream)
+            muted: player.muted || player.testing || analyzer.equalizer
         }
         videoOutput: video
+        audioBufferOutput: player.designMode ? null : analyzer
         property bool wasPlaying: false
         onPlaybackStateChanged: {
             if (playbackState === MediaPlayer.PlayingState) {
@@ -104,13 +241,24 @@ AppElement {
             player.errorString = errorString !== "" ? errorString : "It can't be played.";
             player.failed();
         }
+        onMediaStatusChanged: {
+            if (mediaStatus === MediaPlayer.LoadedMedia && !announced) {
+                announced = true;
+                player.loaded();
+            }
+        }
+        property bool announced: false
         onSourceChanged: {
+            announced = false;
+            analyzer.clear();
             player.errorString = "";
             if (player.autoPlay && source !== "" && !player.designMode)
                 play();
         }
     }
     Component.onCompleted: {
+        if (eqPreset !== "Flat")
+            applyEqPreset(eqPreset);
         if (autoPlay && playing !== "" && !designMode)
             media.play();
     }

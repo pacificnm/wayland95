@@ -87,6 +87,7 @@ DesktopEntry DesktopEntry::read(const QString &path, const QString &id)
         else if (key == "NoDisplay") e.noDisplay = value == QLatin1String("true");
         else if (key == "Hidden") e.hidden = value == QLatin1String("true");
         else if (key == "X-GNOME-Autostart-enabled") e.autostartOff = value == QLatin1String("false");
+        else if (key == "X-Wayland95-Icon") e.wayland95Icon = value;
     }
     return e;
 }

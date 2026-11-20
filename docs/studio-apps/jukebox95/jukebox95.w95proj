@@ -1,0 +1,1052 @@
+{
+    "app": {
+        "name": "jukebox95",
+        "startForm": "PlayerForm",
+        "title": "Jukebox 95",
+        "version": "1.0"
+    },
+    "database": {
+        "driver": "sqlite",
+        "file": "jukebox95.db"
+    },
+    "format": 1,
+    "forms": [
+        {
+            "code": {
+                "general": "// Title, Artist and Album from where the file is. Under a Music folder:\n// Music/artist/album/05-title.mp3 (the folders' names, - and _ as spaces).\n// Elsewhere: \"Artist - Title.mp3\", and the folder it's in as the album.\nfunction words(s) {\n    s = String(s || \"\").replace(/[-_]+/g, \" \").replace(/\\s+/g, \" \").trim();\n    return s.replace(/(^|\\s)(\\S)/g, function (m, sp, c) { return sp + c.toUpperCase(); });\n}\nfunction guess(path) {\n    var clean = String(path).trim().replace(/[?#].*$/, \"\");\n    var web = /^[a-z]+:\\/\\//i.test(clean);\n    var parts = clean.replace(/^[a-z]+:\\/\\/[^\\/]*/i, \"\").split(\"/\").filter(function (p) { return p !== \"\"; });\n    var file = parts.length ? decodeURIComponent(parts[parts.length - 1]) : \"\";\n    var dirs = parts.slice(0, -1);\n    // the file's name, less its extension and one track number (\"05-\", \"05. \", \"05 \")\n    var base = file.replace(/\\.[A-Za-z0-9]{2,5}$/, \"\").replace(/^\\d{1,3}(\\s*[-.]\\s*|\\s+)/, \"\");\n    var artist = \"\", album = \"\", title = \"\";\n    var music = -1;\n    for (var i = 0; i < dirs.length; ++i)\n        if (dirs[i].toLowerCase() === \"music\")\n            music = i;\n    var dash = base.indexOf(\" - \");\n    if (dash > 0) {\n        artist = base.substring(0, dash).trim();\n        title = base.substring(dash + 3).trim();\n    } else {\n        title = base;\n    }\n    if (music >= 0 && !web) {\n        var under = dirs.slice(music + 1);\n        if (under.length >= 1 && dash < 0) {\n            artist = words(under[0]);\n            // \"the-doors-break-on-through\": the artist's name at the front goes\n            if (base.toLowerCase().indexOf(under[0].toLowerCase() + \"-\") === 0)\n                title = base.substring(under[0].length + 1);\n        }\n        if (under.length >= 2)\n            album = under[under.length - 1];\n    } else if (!web && dirs.length >= 1) {\n        album = dirs[dirs.length - 1];\n    }\n    // \"1982-the-number-of-the-beast\": the year goes\n    album = words(album.replace(/^\\d{4}\\s*[-. ]\\s*/, \"\"));\n    // a slug (\"hallowed-be-thy-name\") as words; a name with spaces as it is\n    title = title.indexOf(\" \") < 0 ? words(title) : title.trim();\n    return { Title: title || file, Artist: artist, Album: album, File: String(path).trim() };\n}// --- adding songs: each one's own tags (title, artist, album, length),\n// or a guess from where it is when it has none\nfunction addPaths(paths, done) {\n    paths = paths.map(function (p) { return String(p).trim().replace(/^file:\\/\\//, \"\"); })\n                 .filter(function (p) { return p !== \"\"; });\n    var result = { added: 0, there: 0, refused: [] };\n    var pos = Db.count(\"Tracks\"), left = paths.length;\n    if (left === 0) {\n        if (done) done(result);\n        return;\n    }\n    statusLabel.text = \"ADDING \" + left + \"...\";\n    paths.forEach(function (path) {\n        if (path.indexOf(\"%\") >= 0)\n            path = decodeURIComponent(path);\n        if (Db.count(\"Tracks\", { File: path }) > 0) {\n            result.there += 1;\n            finishOne();\n            return;\n        }\n        var position = ++pos;\n        App.readTags(path, function (t) {\n            var g = guess(path), track = {\n                File: path,\n                Title: t.title || g.Title,\n                Artist: t.artist || t.albumArtist || g.Artist,\n                Album: t.album || g.Album,\n                Position: position\n            };\n            if (t.duration > 0)\n                track.Length = player1.clock(t.duration);\n            var r = Db.insert(\"Tracks\", track);\n            if (r.ok)\n                result.added += 1;\n            else\n                result.refused.push(path + \": \" + (r.messages || []).join(\" \"));\n            finishOne();\n        });\n    });\n    function finishOne() {\n        left -= 1;\n        if (left > 0)\n            return;\n        reorder();\n        statusLabel.text = player1.isPlaying ? \"▶ PLAYING\" : \"■ STOPPED\";\n        if (done) done(result);\n    }\n}\n\nfunction said(result) {\n    var text = result.added + (result.added === 1 ? \" song\" : \" songs\") + \" added.\";\n    if (result.there > 0)\n        text += \"\\n\" + result.there + \" were on the playlist already.\";\n    if (result.refused.length > 0)\n        text += \"\\n\" + result.refused.length + \" couldn't be added:\\n\" + result.refused.slice(0, 5).join(\"\\n\") + (result.refused.length > 5 ? \"\\n...\" : \"\");\n    return text;\n}\n\nproperty string musicFolder: \"~/Music\"\nfunction addFiles() {\n    App.chooseFiles({ title: \"Add Files\", folder: musicFolder,\n                      filters: [\"Music (*.mp3 *.flac *.ogg *.m4a *.wav *.opus)\", \"Video (*.mp4 *.webm *.mkv)\", \"All Files (*.*)\"] },\n                    function (paths) {\n        if (paths.length === 0)\n            return;\n        musicFolder = App.fileInfo(paths[0]).folder;\n        addPaths(paths, function (r) { if (r.refused.length > 0) form.msgBox(said(r), \"Add Files\", \"warning\"); });\n    });\n}\nfunction addFolder() {\n    App.chooseFolder({ title: \"Add Folder\", folder: musicFolder }, function (folder) {\n        if (folder === \"\")\n            return;\n        musicFolder = folder;\n        var paths = App.listFiles(folder, \"*.mp3 *.flac *.ogg *.m4a *.wav *.opus\", true);\n        if (paths.length === 0) {\n            form.msgBox(\"There's no music in \" + folder + \" (or in its folders).\", \"Add Folder\", \"info\");\n            return;\n        }\n        addPaths(paths, function (r) { form.msgBox(said(r), \"Add Folder\", r.refused.length > 0 ? \"warning\" : \"info\"); });\n    });\n}\n\n// --- the display: the time, and a title too long for it going round\nproperty string marquee: \"\"\nproperty int marqueeAt: 0\nfunction tick() {\n    timeLabel.text = player1.duration > 0 || player1.isPlaying ? player1.clock(player1.position) : \"0:00\";\n    var full = nowText;\n    if (full.length <= 22) {\n        nowLabel.text = full;\n        return;\n    }\n    if (marquee !== full + \"   ***   \") {\n        marquee = full + \"   ***   \";\n        marqueeAt = 0;\n    }\n    if (player1.isPlaying)\n        marqueeAt = (marqueeAt + 1) % marquee.length;\n    nowLabel.text = (marquee + marquee).substring(marqueeAt, marqueeAt + 22);\n}\nproperty string nowText: \"Jukebox 95\"\n\n// --- settings, kept in the Settings table\nfunction setting(name) {\n    var r = Db.select(\"Settings\", { where: { Name: name } });\n    return r.length ? r[0].Value : \"\";\n}\nfunction saveSetting(name, value) {\n    var r = Db.select(\"Settings\", { where: { Name: name } });\n    if (r.length)\n        Db.update(\"Settings\", r[0].id, { Value: String(value) });\n    else\n        Db.insert(\"Settings\", { Name: name, Value: String(value) });\n}\n\n// --- the equalizer: under the playlist (View > Equalizer, or the EQ in the display)\nfunction showEq(on) {\n    eq1.visible = on;\n    form.height = on ? 622 : 462;\n    menu1.setChecked(\"viewEq\", on);\n    saveSetting(\"showEqualizer\", on ? \"yes\" : \"no\");\n}\nfunction eqChanged() {\n    eqLabel.foreColor = player1.equalizer ? \"#00e000\" : \"#205020\";\n    saveSetting(\"equalizer\", JSON.stringify({ on: player1.equalizer, gains: player1.eqGains, preamp: player1.eqPreamp }));\n}\nfunction restoreEq() {\n    var e = setting(\"equalizer\");\n    if (e !== \"\") {\n        try {\n            e = JSON.parse(e);\n            player1.eqGains = e.gains;\n            player1.eqPreamp = e.preamp || 0;\n            player1.equalizer = !!e.on;\n        } catch (x) {\n            console.warn(\"the saved equalizer can't be read: \" + x);\n        }\n    }\n    eqLabel.foreColor = player1.equalizer ? \"#00e000\" : \"#205020\";\n    showEq(setting(\"showEqualizer\") === \"yes\");\n}\n\n// the play order (track ids), where the playing song is in it, and which it is\nproperty var order: []\nproperty int at: -1\nproperty var playingId: null\n// songs that failed in a row (so a list of missing files doesn't go round forever)\nproperty int failures: 0\n// whether the song playing has been counted (Plays, LastPlayed) yet\nproperty bool counted: true\n\nfunction stars(n) {\n    n = Math.max(0, Math.min(5, n || 0));\n    return \"★★★★★\".substring(0, n) + \"☆☆☆☆☆\".substring(0, 5 - n);\n}\n\n// the order again: by Position, or shuffled with the playing song first\nfunction reorder() {\n    var ids = Db.select(\"Tracks\", { orderBy: \"Position\" }).map(function (t) { return t.id; });\n    if (shuffleBox.checked) {\n        for (var i = ids.length - 1; i > 0; --i) {\n            var j = Math.floor(Math.random() * (i + 1));\n            var s = ids[i]; ids[i] = ids[j]; ids[j] = s;\n        }\n        var k = ids.indexOf(playingId);\n        if (k > 0) {\n            ids.splice(k, 1);\n            ids.unshift(playingId);\n        }\n    }\n    order = ids;\n    at = order.indexOf(playingId);\n    showCount();\n    // (the playing song may have been changed or taken away)\n    if (playingId !== null)\n        show(Db.get(\"Tracks\", playingId));\n}\n\nfunction showCount() {\n    if (order.length === 0)\n        countLabel.text = \"No songs: Add Files or Add Folder\";\n    else if (at >= 0)\n        countLabel.text = \"Track \" + (at + 1) + \" of \" + order.length;\n    else\n        countLabel.text = order.length + (order.length === 1 ? \" song\" : \" songs\");\n}\n\nfunction show(t) {\n    nowText = t && t.id ? (t.Artist ? t.Artist + \" - \" : \"\") + t.Title : \"Jukebox 95\";\n    starsLabel.text = t && t.id ? stars(t.Rating) + (t.Length ? \"   \" + t.Length : \"\") : \"\";\n    tick();\n}\n\nfunction selectRow(id) {\n    for (var i = 0; i < grid.rows.length; ++i) {\n        if (String(grid.rows[i].id) === String(id)) {\n            grid.select(i);\n            return;\n        }\n    }\n}\n\nfunction playId(id) {\n    var t = Db.get(\"Tracks\", id);\n    if (!t.id)\n        return false;\n    playingId = t.id;\n    if (order.indexOf(t.id) < 0)\n        reorder();\n    at = order.indexOf(t.id);\n    counted = false;\n    show(t);\n    showCount();\n    selectRow(t.id);\n    coverImage.picture = \"\";\n    player1.source = t.File;\n    player1.play();\n    return true;\n}\n\n// auto: the song ended by itself (then the end of the list stops, unless Repeat)\nfunction next(auto) {\n    if (order.length === 0)\n        return;\n    var i = at + 1;\n    if (i >= order.length) {\n        if (auto && !repeatBox.checked) {\n            player1.stop();\n            at = -1;\n            showCount();\n            return;\n        }\n        i = 0;\n    }\n    playId(order[i]);\n}\n\nfunction previous() {\n    if (order.length === 0)\n        return;\n    if (player1.position > 3000 || at < 0) {\n        player1.seek(0);\n        return;\n    }\n    var i = at - 1;\n    if (i < 0)\n        i = repeatBox.checked ? order.length - 1 : 0;\n    playId(order[i]);\n}\n\nfunction playPause() {\n    if (player1.isPlaying)\n        player1.pause();\n    else if (playingId !== null && player1.source !== \"\" && (grid.currentId === null || String(grid.currentId) === String(playingId)))\n        player1.play();\n    else if (grid.currentId !== null)\n        playId(grid.currentId);\n    else if (order.length > 0)\n        playId(order[0]);\n}\n\n// it started: one more play (the first time, not after a pause), and its length\nfunction songStarted() {\n    failures = 0;\n    if (playingId === null)\n        return;\n    var t = Db.get(\"Tracks\", playingId), change = {};\n    if (!t.id)\n        return;\n    if (!counted) {\n        counted = true;\n        change.Plays = (t.Plays || 0) + 1;\n        change.LastPlayed = AppDates.stored(\"now\", \"Date and Time\");\n    }\n    if (!t.Length && player1.duration > 0)\n        change.Length = player1.clock(player1.duration);\n    if (Object.keys(change).length > 0)\n        Db.update(\"Tracks\", t.id, change);\n}\n\nfunction editSong() {\n    if (grid.currentId === null)\n        form.msgBox(\"Choose a song in the list first.\", \"Edit Song\", \"info\");\n    else\n        App.openForm(\"SongForm\", { id: grid.currentId });\n}\n\nfunction removeSong() {\n    var t = grid.currentRow;\n    if (!t) {\n        form.msgBox(\"Choose a song in the list first.\", \"Remove Song\", \"info\");\n        return;\n    }\n    form.msgBox(\"Take \\\"\" + t.Title + \"\\\" off the playlist? (The file stays where it is.)\", \"Remove Song\", \"question\", [\"Yes\", \"No\"], function (answer) {\n        if (answer !== 0)\n            return;\n        if (String(t.id) === String(playingId)) {\n            player1.stop();\n            player1.source = \"\";\n            playingId = null;\n            show(null);\n            statusLabel.text = \"■ STOPPED\";\n        }\n        Db.remove(\"Tracks\", t.id);\n        reorder();\n    });\n}\n\nfunction setShuffle(on) {\n    shuffleBox.checked = on;\n    menu1.setChecked(\"playShuffle\", on);\n    reorder();\n}\n\nfunction setRepeat(on) {\n    repeatBox.checked = on;\n    menu1.setChecked(\"playRepeat\", on);\n}",
+                "load": "reorder();\nshow(null);\nrestoreEq();"
+            },
+            "controls": [
+                {
+                    "events": {
+                        "itemClicked": "switch (menu1.item) {\ncase \"fileAdd\": addFiles(); break;\ncase \"fileAddFolder\": addFolder(); break;\ncase \"filePaste\": App.openForm(\"AddForm\"); break;\ncase \"fileNew\": App.openForm(\"SongForm\", {}); break;\ncase \"fileEdit\": editSong(); break;\ncase \"fileRemove\": removeSong(); break;\ncase \"playPlay\": playPause(); break;\ncase \"playStop\": player1.stop(); break;\ncase \"playPrevious\": previous(); break;\ncase \"playNext\": next(false); break;\ncase \"playShuffle\": setShuffle(!shuffleBox.checked); break;\ncase \"playRepeat\": setRepeat(!repeatBox.checked); break;\ncase \"viewEq\": showEq(!eq1.visible); break;\n}"
+                    },
+                    "height": 20,
+                    "name": "menu1",
+                    "props": {
+                        "menus": [
+                            {
+                                "items": [
+                                    {
+                                        "name": "fileAdd",
+                                        "shortcut": "Ctrl+O",
+                                        "text": "Add &Files..."
+                                    },
+                                    {
+                                        "name": "fileAddFolder",
+                                        "shortcut": "Ctrl+L",
+                                        "text": "Add F&older..."
+                                    },
+                                    {
+                                        "name": "filePaste",
+                                        "text": "&Paste Paths..."
+                                    },
+                                    {
+                                        "name": "fileNew",
+                                        "text": "&New Song..."
+                                    },
+                                    {
+                                        "name": "fileEdit",
+                                        "shortcut": "Ctrl+E",
+                                        "text": "&Edit Song..."
+                                    },
+                                    {
+                                        "name": "fileRemove",
+                                        "text": "&Remove Song"
+                                    },
+                                    {
+                                        "separator": true
+                                    },
+                                    {
+                                        "action": "quit",
+                                        "name": "fileExit",
+                                        "text": "E&xit"
+                                    }
+                                ],
+                                "name": "fileMenu",
+                                "text": "&File"
+                            },
+                            {
+                                "items": [
+                                    {
+                                        "name": "playPlay",
+                                        "shortcut": "Ctrl+P",
+                                        "text": "&Play/Pause"
+                                    },
+                                    {
+                                        "name": "playStop",
+                                        "shortcut": "Ctrl+T",
+                                        "text": "&Stop"
+                                    },
+                                    {
+                                        "separator": true
+                                    },
+                                    {
+                                        "name": "playPrevious",
+                                        "shortcut": "Ctrl+B",
+                                        "text": "P&revious"
+                                    },
+                                    {
+                                        "name": "playNext",
+                                        "shortcut": "Ctrl+N",
+                                        "text": "&Next"
+                                    },
+                                    {
+                                        "separator": true
+                                    },
+                                    {
+                                        "name": "playShuffle",
+                                        "shortcut": "Ctrl+H",
+                                        "text": "S&huffle"
+                                    },
+                                    {
+                                        "name": "playRepeat",
+                                        "shortcut": "Ctrl+R",
+                                        "text": "Re&peat"
+                                    }
+                                ],
+                                "name": "playMenu",
+                                "text": "&Play"
+                            },
+                            {
+                                "items": [
+                                    {
+                                        "name": "viewEq",
+                                        "shortcut": "Ctrl+G",
+                                        "text": "&Equalizer"
+                                    }
+                                ],
+                                "name": "viewMenu",
+                                "text": "&View"
+                            },
+                            {
+                                "items": [
+                                    {
+                                        "action": "openForm",
+                                        "form": "AboutForm",
+                                        "name": "helpAbout",
+                                        "text": "&About Jukebox 95"
+                                    }
+                                ],
+                                "name": "helpMenu",
+                                "text": "&Help"
+                            }
+                        ]
+                    },
+                    "type": "Menu",
+                    "width": 480,
+                    "x": 0,
+                    "y": 0
+                },
+                {
+                    "height": 60,
+                    "name": "lcdBack",
+                    "props": {
+                        "backColor": "#000000",
+                        "borderColor": "#404040"
+                    },
+                    "type": "Shape",
+                    "width": 464,
+                    "x": 8,
+                    "y": 28
+                },
+                {
+                    "height": 17,
+                    "name": "statusLabel",
+                    "props": {
+                        "backColor": "#000000",
+                        "foreColor": "#00a000",
+                        "text": "■ STOPPED"
+                    },
+                    "type": "Label",
+                    "width": 92,
+                    "x": 16,
+                    "y": 32
+                },
+                {
+                    "events": {
+                        "clicked": "showEq(!eq1.visible);"
+                    },
+                    "height": 17,
+                    "name": "eqLabel",
+                    "props": {
+                        "alignment": "Right",
+                        "backColor": "#000000",
+                        "fontBold": true,
+                        "foreColor": "#205020",
+                        "text": "EQ",
+                        "toolTip": "The equalizer (Ctrl+G): bright when it's on"
+                    },
+                    "type": "Label",
+                    "width": 24,
+                    "x": 108,
+                    "y": 32
+                },
+                {
+                    "height": 32,
+                    "name": "timeLabel",
+                    "props": {
+                        "backColor": "#000000",
+                        "fontBold": true,
+                        "fontFamily": "DejaVu Sans Mono",
+                        "fontSize": 26,
+                        "foreColor": "#00e000",
+                        "text": "0:00"
+                    },
+                    "type": "Label",
+                    "width": 116,
+                    "x": 16,
+                    "y": 50
+                },
+                {
+                    "height": 17,
+                    "name": "countLabel",
+                    "props": {
+                        "alignment": "Right",
+                        "backColor": "#000000",
+                        "foreColor": "#00a000",
+                        "text": ""
+                    },
+                    "type": "Label",
+                    "width": 156,
+                    "x": 140,
+                    "y": 32
+                },
+                {
+                    "height": 17,
+                    "name": "nowLabel",
+                    "props": {
+                        "backColor": "#000000",
+                        "fontBold": true,
+                        "foreColor": "#00e000",
+                        "text": "Jukebox 95"
+                    },
+                    "type": "Label",
+                    "width": 156,
+                    "x": 140,
+                    "y": 50
+                },
+                {
+                    "height": 17,
+                    "name": "starsLabel",
+                    "props": {
+                        "alignment": "Right",
+                        "backColor": "#000000",
+                        "foreColor": "#00a000",
+                        "text": ""
+                    },
+                    "type": "Label",
+                    "width": 156,
+                    "x": 140,
+                    "y": 68
+                },
+                {
+                    "height": 52,
+                    "name": "coverImage",
+                    "props": {
+                        "backColor": "#000000",
+                        "sizeMode": "Fit",
+                        "toolTip": "The song's own picture"
+                    },
+                    "type": "Image",
+                    "width": 52,
+                    "x": 304,
+                    "y": 32
+                },
+                {
+                    "events": {
+                        "clicked": "vis1.style = vis1.style === \"Spectrum\" ? \"Oscilloscope\" : vis1.style === \"Oscilloscope\" ? \"Meter\" : \"Spectrum\";"
+                    },
+                    "height": 52,
+                    "name": "vis1",
+                    "props": {
+                        "bars": 16,
+                        "borderStyle": "None",
+                        "player": "player1"
+                    },
+                    "type": "Visualizer",
+                    "width": 108,
+                    "x": 360,
+                    "y": 32
+                },
+                {
+                    "events": {
+                        "failed": "statusLabel.text = \"✖ CAN'T PLAY THIS\";\nfailures += 1;\nif (failures < order.length)\n    next(true);",
+                        "finished": "songStarted();\nstatusLabel.text = \"■ STOPPED\";\nnext(true);",
+                        "loaded": "coverImage.picture = player1.coverArt;",
+                        "nextTrack": "next(false);",
+                        "paused": "statusLabel.text = \"❚❚ PAUSED\";",
+                        "previousTrack": "previous();",
+                        "started": "statusLabel.text = \"▶ PLAYING\";\nsongStarted();",
+                        "stopped": "statusLabel.text = \"■ STOPPED\";"
+                    },
+                    "height": 26,
+                    "name": "player1",
+                    "props": {
+                        "mediaKeys": true,
+                        "volume": 80
+                    },
+                    "type": "MediaPlayer",
+                    "width": 464,
+                    "x": 8,
+                    "y": 92
+                },
+                {
+                    "events": {
+                        "timer": "tick();"
+                    },
+                    "height": 28,
+                    "name": "clock",
+                    "props": {
+                        "interval": 250
+                    },
+                    "type": "Timer",
+                    "width": 28,
+                    "x": 444,
+                    "y": 4
+                },
+                {
+                    "events": {
+                        "clicked": "previous();"
+                    },
+                    "height": 24,
+                    "name": "prevButton",
+                    "props": {
+                        "icon": "previous",
+                        "text": "",
+                        "toolTip": "Previous (Ctrl+B)"
+                    },
+                    "type": "Button",
+                    "width": 32,
+                    "x": 8,
+                    "y": 126
+                },
+                {
+                    "events": {
+                        "clicked": "playPause();"
+                    },
+                    "height": 24,
+                    "name": "playButton",
+                    "props": {
+                        "icon": "play",
+                        "text": "",
+                        "toolTip": "Play (Ctrl+P)"
+                    },
+                    "type": "Button",
+                    "width": 32,
+                    "x": 40,
+                    "y": 126
+                },
+                {
+                    "events": {
+                        "clicked": "player1.pause();"
+                    },
+                    "height": 24,
+                    "name": "pauseButton",
+                    "props": {
+                        "icon": "pause",
+                        "text": "",
+                        "toolTip": "Pause (Ctrl+P)"
+                    },
+                    "type": "Button",
+                    "width": 32,
+                    "x": 72,
+                    "y": 126
+                },
+                {
+                    "events": {
+                        "clicked": "player1.stop();"
+                    },
+                    "height": 24,
+                    "name": "stopButton",
+                    "props": {
+                        "icon": "stop",
+                        "text": "",
+                        "toolTip": "Stop (Ctrl+T)"
+                    },
+                    "type": "Button",
+                    "width": 32,
+                    "x": 104,
+                    "y": 126
+                },
+                {
+                    "events": {
+                        "clicked": "next(false);"
+                    },
+                    "height": 24,
+                    "name": "nextButton",
+                    "props": {
+                        "icon": "next",
+                        "text": "",
+                        "toolTip": "Next (Ctrl+N)"
+                    },
+                    "type": "Button",
+                    "width": 32,
+                    "x": 136,
+                    "y": 126
+                },
+                {
+                    "events": {
+                        "clicked": "setShuffle(shuffleBox.checked);"
+                    },
+                    "height": 17,
+                    "name": "shuffleBox",
+                    "props": {
+                        "text": "Shuffle"
+                    },
+                    "type": "CheckBox",
+                    "width": 72,
+                    "x": 184,
+                    "y": 130
+                },
+                {
+                    "events": {
+                        "clicked": "setRepeat(repeatBox.checked);"
+                    },
+                    "height": 17,
+                    "name": "repeatBox",
+                    "props": {
+                        "text": "Repeat"
+                    },
+                    "type": "CheckBox",
+                    "width": 72,
+                    "x": 256,
+                    "y": 130
+                },
+                {
+                    "height": 17,
+                    "name": "volLabel",
+                    "props": {
+                        "alignment": "Right",
+                        "text": "Volume"
+                    },
+                    "type": "Label",
+                    "width": 48,
+                    "x": 328,
+                    "y": 130
+                },
+                {
+                    "events": {
+                        "changed": "player1.volume = volumeSlider.value;"
+                    },
+                    "height": 30,
+                    "name": "volumeSlider",
+                    "props": {
+                        "largeChange": 20,
+                        "max": 100,
+                        "min": 0,
+                        "smallChange": 5,
+                        "tickCount": 6,
+                        "toolTip": "How loud (Left and Right, or drag)",
+                        "value": 80
+                    },
+                    "type": "Slider",
+                    "width": 92,
+                    "x": 380,
+                    "y": 123
+                },
+                {
+                    "height": 2,
+                    "name": "rule1",
+                    "props": {
+                        "borderColor": "#808080",
+                        "shape": "Horizontal Line"
+                    },
+                    "type": "Shape",
+                    "width": 464,
+                    "x": 8,
+                    "y": 158
+                },
+                {
+                    "height": 17,
+                    "name": "searchLabel",
+                    "props": {
+                        "text": "Search:"
+                    },
+                    "type": "Label",
+                    "width": 48,
+                    "x": 8,
+                    "y": 170
+                },
+                {
+                    "events": {
+                        "changed": "grid.search = searchBox.text;"
+                    },
+                    "height": 21,
+                    "name": "searchBox",
+                    "props": {
+                        "toolTip": "Show only the songs with this in their title, artist or album"
+                    },
+                    "type": "TextBox",
+                    "width": 120,
+                    "x": 56,
+                    "y": 168
+                },
+                {
+                    "events": {
+                        "clicked": "addFiles();"
+                    },
+                    "height": 24,
+                    "name": "addButton",
+                    "props": {
+                        "icon": "add",
+                        "text": "Files...",
+                        "toolTip": "Add songs (Ctrl+O)"
+                    },
+                    "type": "Button",
+                    "width": 68,
+                    "x": 184,
+                    "y": 167
+                },
+                {
+                    "events": {
+                        "clicked": "addFolder();"
+                    },
+                    "height": 24,
+                    "name": "folderButton",
+                    "props": {
+                        "icon": "folder",
+                        "text": "Folder...",
+                        "toolTip": "Add a folder's songs, and its folders' (Ctrl+L)"
+                    },
+                    "type": "Button",
+                    "width": 68,
+                    "x": 256,
+                    "y": 167
+                },
+                {
+                    "events": {
+                        "clicked": "editSong();"
+                    },
+                    "height": 24,
+                    "name": "editButton",
+                    "props": {
+                        "icon": "edit",
+                        "text": "Edit..."
+                    },
+                    "type": "Button",
+                    "width": 68,
+                    "x": 328,
+                    "y": 167
+                },
+                {
+                    "events": {
+                        "clicked": "removeSong();"
+                    },
+                    "height": 24,
+                    "name": "removeButton",
+                    "props": {
+                        "icon": "remove",
+                        "text": "Remove"
+                    },
+                    "type": "Button",
+                    "width": 72,
+                    "x": 400,
+                    "y": 167
+                },
+                {
+                    "events": {
+                        "rowActivated": "playId(grid.currentId);"
+                    },
+                    "height": 256,
+                    "name": "grid",
+                    "props": {
+                        "columns": [
+                            "Position:32",
+                            "Title",
+                            "Artist:112",
+                            "Album:112",
+                            "Length:48"
+                        ],
+                        "followForm": false,
+                        "orderBy": "Position",
+                        "table": "Tracks"
+                    },
+                    "type": "DataGrid",
+                    "width": 464,
+                    "x": 8,
+                    "y": 198
+                },
+                {
+                    "events": {
+                        "changed": "eqChanged();"
+                    },
+                    "height": 152,
+                    "name": "eq1",
+                    "props": {
+                        "player": "player1",
+                        "visible": false
+                    },
+                    "type": "Equalizer",
+                    "width": 464,
+                    "x": 8,
+                    "y": 462
+                }
+            ],
+            "height": 462,
+            "name": "PlayerForm",
+            "props": {
+                "title": "Jukebox 95"
+            },
+            "width": 480
+        },
+        {
+            "code": {
+                "current": "form.title = form.isNew ? \"New Song\" : \"Song: \" + form.record.Title;\nratingBox.currentIndex = form.record.Rating || 0;\nstatsLabel.text = form.isNew ? \"\" : \"Played \" + (form.record.Plays || 0) + \" times\" + (form.record.Length ? \", \" + form.record.Length : \"\");",
+                "general": "// Title, Artist and Album from where the file is. Under a Music folder:\n// Music/artist/album/05-title.mp3 (the folders' names, - and _ as spaces).\n// Elsewhere: \"Artist - Title.mp3\", and the folder it's in as the album.\nfunction words(s) {\n    s = String(s || \"\").replace(/[-_]+/g, \" \").replace(/\\s+/g, \" \").trim();\n    return s.replace(/(^|\\s)(\\S)/g, function (m, sp, c) { return sp + c.toUpperCase(); });\n}\nfunction guess(path) {\n    var clean = String(path).trim().replace(/[?#].*$/, \"\");\n    var web = /^[a-z]+:\\/\\//i.test(clean);\n    var parts = clean.replace(/^[a-z]+:\\/\\/[^\\/]*/i, \"\").split(\"/\").filter(function (p) { return p !== \"\"; });\n    var file = parts.length ? decodeURIComponent(parts[parts.length - 1]) : \"\";\n    var dirs = parts.slice(0, -1);\n    // the file's name, less its extension and one track number (\"05-\", \"05. \", \"05 \")\n    var base = file.replace(/\\.[A-Za-z0-9]{2,5}$/, \"\").replace(/^\\d{1,3}(\\s*[-.]\\s*|\\s+)/, \"\");\n    var artist = \"\", album = \"\", title = \"\";\n    var music = -1;\n    for (var i = 0; i < dirs.length; ++i)\n        if (dirs[i].toLowerCase() === \"music\")\n            music = i;\n    var dash = base.indexOf(\" - \");\n    if (dash > 0) {\n        artist = base.substring(0, dash).trim();\n        title = base.substring(dash + 3).trim();\n    } else {\n        title = base;\n    }\n    if (music >= 0 && !web) {\n        var under = dirs.slice(music + 1);\n        if (under.length >= 1 && dash < 0) {\n            artist = words(under[0]);\n            // \"the-doors-break-on-through\": the artist's name at the front goes\n            if (base.toLowerCase().indexOf(under[0].toLowerCase() + \"-\") === 0)\n                title = base.substring(under[0].length + 1);\n        }\n        if (under.length >= 2)\n            album = under[under.length - 1];\n    } else if (!web && dirs.length >= 1) {\n        album = dirs[dirs.length - 1];\n    }\n    // \"1982-the-number-of-the-beast\": the year goes\n    album = words(album.replace(/^\\d{4}\\s*[-. ]\\s*/, \"\"));\n    // a slug (\"hallowed-be-thy-name\") as words; a name with spaces as it is\n    title = title.indexOf(\" \") < 0 ? words(title) : title.trim();\n    return { Title: title || file, Artist: artist, Album: album, File: String(path).trim() };\n}",
+                "load": "if (form.args && form.args.id)\n    form.loadRecord(form.args.id);\nelse {\n    form.newRecord();\n    form.setField(\"Position\", Db.count(\"Tracks\") + 1);\n}",
+                "saved": "var p = App.form(\"PlayerForm\");\nif (p)\n    p.reorder();"
+            },
+            "controls": [
+                {
+                    "height": 17,
+                    "name": "fileLabel",
+                    "props": {
+                        "text": "File:"
+                    },
+                    "type": "Label",
+                    "width": 64,
+                    "x": 12,
+                    "y": 14
+                },
+                {
+                    "events": {
+                        "clicked": "App.chooseFile({ title: \"Song\", folder: form.record.File ? App.fileInfo(form.record.File).folder : \"~/Music\", filters: [\"Music (*.mp3 *.flac *.ogg *.m4a *.wav *.opus)\", \"All Files (*.*)\"] }, function (path) {\n    if (path !== \"\")\n        form.setField(\"File\", path);\n});"
+                    },
+                    "height": 21,
+                    "name": "browseButton",
+                    "props": {
+                        "text": "...",
+                        "toolTip": "Choose the file"
+                    },
+                    "type": "Button",
+                    "width": 24,
+                    "x": 360,
+                    "y": 12
+                },
+                {
+                    "height": 21,
+                    "name": "fileBox",
+                    "props": {
+                        "field": "File"
+                    },
+                    "type": "TextBox",
+                    "width": 276,
+                    "x": 80,
+                    "y": 12
+                },
+                {
+                    "events": {
+                        "clicked": "var path = fileBox.text, g = guess(path);\nApp.readTags(path, function (t) {\n    form.setField(\"Title\", t.title || g.Title);\n    form.setField(\"Artist\", t.artist || t.albumArtist || g.Artist);\n    form.setField(\"Album\", t.album || g.Album);\n    if (t.duration > 0)\n        form.setField(\"Length\", Math.floor(t.duration / 60000) + \":\" + (\"0\" + Math.floor(t.duration / 1000) % 60).slice(-2));\n    statsLabel.text = t.ok ? \"Read from its tags\" : (App.fileInfo(path).exists ? \"No tags: a guess from its name\" : \"There's no such file\");\n});"
+                    },
+                    "height": 24,
+                    "name": "guessButton",
+                    "props": {
+                        "text": "From the File",
+                        "toolTip": "Fill in Title, Artist, Album and Length from the file's own tags (or from its name and folders)"
+                    },
+                    "type": "Button",
+                    "width": 120,
+                    "x": 80,
+                    "y": 40
+                },
+                {
+                    "height": 17,
+                    "name": "titleLabel",
+                    "props": {
+                        "text": "Title:"
+                    },
+                    "type": "Label",
+                    "width": 64,
+                    "x": 12,
+                    "y": 76
+                },
+                {
+                    "height": 21,
+                    "name": "titleBox",
+                    "props": {
+                        "field": "Title"
+                    },
+                    "type": "TextBox",
+                    "width": 304,
+                    "x": 80,
+                    "y": 74
+                },
+                {
+                    "height": 17,
+                    "name": "artistLabel",
+                    "props": {
+                        "text": "Artist:"
+                    },
+                    "type": "Label",
+                    "width": 64,
+                    "x": 12,
+                    "y": 106
+                },
+                {
+                    "height": 21,
+                    "name": "artistBox",
+                    "props": {
+                        "field": "Artist"
+                    },
+                    "type": "TextBox",
+                    "width": 304,
+                    "x": 80,
+                    "y": 104
+                },
+                {
+                    "height": 17,
+                    "name": "albumLabel",
+                    "props": {
+                        "text": "Album:"
+                    },
+                    "type": "Label",
+                    "width": 64,
+                    "x": 12,
+                    "y": 136
+                },
+                {
+                    "height": 21,
+                    "name": "albumBox",
+                    "props": {
+                        "field": "Album"
+                    },
+                    "type": "TextBox",
+                    "width": 304,
+                    "x": 80,
+                    "y": 134
+                },
+                {
+                    "height": 17,
+                    "name": "ratingLabel",
+                    "props": {
+                        "text": "Rating:"
+                    },
+                    "type": "Label",
+                    "width": 64,
+                    "x": 12,
+                    "y": 166
+                },
+                {
+                    "events": {
+                        "changed": "form.setField(\"Rating\", ratingBox.currentIndex);"
+                    },
+                    "height": 21,
+                    "name": "ratingBox",
+                    "props": {
+                        "currentIndex": 0,
+                        "items": [
+                            "☆☆☆☆☆",
+                            "★☆☆☆☆",
+                            "★★☆☆☆",
+                            "★★★☆☆",
+                            "★★★★☆",
+                            "★★★★★"
+                        ]
+                    },
+                    "type": "ComboBox",
+                    "width": 120,
+                    "x": 80,
+                    "y": 164
+                },
+                {
+                    "height": 17,
+                    "name": "statsLabel",
+                    "props": {
+                        "alignment": "Right",
+                        "text": ""
+                    },
+                    "type": "Label",
+                    "width": 172,
+                    "x": 212,
+                    "y": 166
+                },
+                {
+                    "events": {
+                        "clicked": "if (!form.record.Title && form.record.File) {\n    var g = guess(form.record.File);\n    form.setField(\"Title\", g.Title);\n}\nif (form.save())\n    form.close();"
+                    },
+                    "height": 24,
+                    "name": "saveButton",
+                    "props": {
+                        "icon": "save",
+                        "isDefault": true,
+                        "text": "Save"
+                    },
+                    "type": "Button",
+                    "width": 76,
+                    "x": 228,
+                    "y": 200
+                },
+                {
+                    "events": {
+                        "clicked": "form.close();"
+                    },
+                    "height": 24,
+                    "name": "cancelButton",
+                    "props": {
+                        "text": "Cancel"
+                    },
+                    "type": "Button",
+                    "width": 76,
+                    "x": 310,
+                    "y": 200
+                }
+            ],
+            "height": 236,
+            "name": "SongForm",
+            "props": {
+                "resizable": false,
+                "table": "Tracks",
+                "title": "Song"
+            },
+            "width": 396
+        },
+        {
+            "code": {
+                "general": "\nfunction addAll() {\n    var lines = pathsBox.text.split(/\\r?\\n/);\n    var p = App.form(\"PlayerForm\");\n    if (!p)\n        p = App.openForm(\"PlayerForm\");\n    if (lines.join(\"\").trim() === \"\") {\n        form.msgBox(\"Paste the songs' paths in the box first, one on each line.\", \"Paste Paths\", \"info\");\n        return;\n    }\n    addButton.enabled = false;\n    p.addPaths(lines, function (r) {\n        addButton.enabled = true;\n        pathsBox.text = \"\";\n        form.msgBox(p.said(r), \"Paste Paths\", r.refused.length > 0 ? \"warning\" : \"info\", [\"OK\"], function () {\n            if (r.refused.length === 0)\n                form.close();\n        });\n    });\n}\n"
+            },
+            "controls": [
+                {
+                    "height": 17,
+                    "name": "helpLabel",
+                    "props": {
+                        "text": "Paste the songs' paths here, one on each line. A folder's, from a Terminal:"
+                    },
+                    "type": "Label",
+                    "width": 416,
+                    "x": 12,
+                    "y": 12
+                },
+                {
+                    "height": 21,
+                    "name": "commandBox",
+                    "props": {
+                        "fontFamily": "Monospace",
+                        "readOnly": true,
+                        "text": "find ~/Music/iron-maiden -name '*.mp3' | sort",
+                        "toolTip": "Copy this into a Terminal, with your own folder"
+                    },
+                    "type": "TextBox",
+                    "width": 416,
+                    "x": 12,
+                    "y": 30
+                },
+                {
+                    "height": 192,
+                    "name": "pathsBox",
+                    "props": {
+                        "multiLine": true
+                    },
+                    "type": "TextBox",
+                    "width": 416,
+                    "x": 12,
+                    "y": 60
+                },
+                {
+                    "events": {
+                        "clicked": "addAll();"
+                    },
+                    "height": 24,
+                    "name": "addButton",
+                    "props": {
+                        "icon": "add",
+                        "isDefault": true,
+                        "text": "Add"
+                    },
+                    "type": "Button",
+                    "width": 76,
+                    "x": 270,
+                    "y": 264
+                },
+                {
+                    "events": {
+                        "clicked": "form.close();"
+                    },
+                    "height": 24,
+                    "name": "cancelButton",
+                    "props": {
+                        "text": "Cancel"
+                    },
+                    "type": "Button",
+                    "width": 76,
+                    "x": 352,
+                    "y": 264
+                }
+            ],
+            "height": 300,
+            "name": "AddForm",
+            "props": {
+                "resizable": false,
+                "title": "Paste Paths"
+            },
+            "width": 440
+        },
+        {
+            "code": {
+                "load": "versionLabel.text = \"Version \" + App.version;"
+            },
+            "controls": [
+                {
+                    "height": 52,
+                    "name": "aboutBack",
+                    "props": {
+                        "backColor": "#000000",
+                        "borderColor": "#404040"
+                    },
+                    "type": "Shape",
+                    "width": 276,
+                    "x": 12,
+                    "y": 12
+                },
+                {
+                    "height": 20,
+                    "name": "nameLabel",
+                    "props": {
+                        "alignment": "Center",
+                        "backColor": "#000000",
+                        "fontBold": true,
+                        "fontSize": 14,
+                        "foreColor": "#00e000",
+                        "text": "JUKEBOX 95"
+                    },
+                    "type": "Label",
+                    "width": 260,
+                    "x": 20,
+                    "y": 18
+                },
+                {
+                    "height": 17,
+                    "name": "versionLabel",
+                    "props": {
+                        "alignment": "Center",
+                        "backColor": "#000000",
+                        "foreColor": "#00a000",
+                        "text": "Version 1.0"
+                    },
+                    "type": "Label",
+                    "width": 260,
+                    "x": 20,
+                    "y": 40
+                },
+                {
+                    "height": 17,
+                    "name": "madeLabel",
+                    "props": {
+                        "alignment": "Center",
+                        "text": "Made in Wayland Studio, by Claude."
+                    },
+                    "type": "Label",
+                    "width": 276,
+                    "x": 12,
+                    "y": 74
+                },
+                {
+                    "events": {
+                        "clicked": "form.close();"
+                    },
+                    "height": 24,
+                    "name": "okButton",
+                    "props": {
+                        "isDefault": true,
+                        "text": "OK"
+                    },
+                    "type": "Button",
+                    "width": 76,
+                    "x": 112,
+                    "y": 112
+                }
+            ],
+            "height": 148,
+            "name": "AboutForm",
+            "props": {
+                "resizable": false,
+                "title": "About Jukebox 95"
+            },
+            "width": 300
+        }
+    ],
+    "tables": [
+        {
+            "fields": [
+                {
+                    "maxLength": 120,
+                    "name": "Title",
+                    "required": true,
+                    "type": "text"
+                },
+                {
+                    "maxLength": 120,
+                    "name": "Artist",
+                    "type": "text"
+                },
+                {
+                    "maxLength": 120,
+                    "name": "Album",
+                    "type": "text"
+                },
+                {
+                    "maxLength": 255,
+                    "message": "File is a path (/... or ~/...) or a web address.",
+                    "name": "File",
+                    "pattern": "(/|~/|https?://).+",
+                    "required": true,
+                    "type": "text",
+                    "unique": true
+                },
+                {
+                    "maxLength": 10,
+                    "name": "Length",
+                    "type": "text"
+                },
+                {
+                    "default": 0,
+                    "max": 5,
+                    "min": 0,
+                    "name": "Rating",
+                    "type": "integer"
+                },
+                {
+                    "default": 0,
+                    "min": 0,
+                    "name": "Plays",
+                    "type": "integer"
+                },
+                {
+                    "label": "Last Played",
+                    "name": "LastPlayed",
+                    "type": "datetime"
+                },
+                {
+                    "label": "#",
+                    "min": 1,
+                    "name": "Position",
+                    "type": "integer"
+                },
+                {
+                    "auto": "created",
+                    "name": "Added",
+                    "type": "datetime"
+                }
+            ],
+            "label": "Tracks",
+            "name": "Tracks"
+        },
+        {
+            "fields": [
+                {
+                    "maxLength": 40,
+                    "name": "Name",
+                    "required": true,
+                    "type": "text",
+                    "unique": true
+                },
+                {
+                    "name": "Value",
+                    "type": "memo"
+                }
+            ],
+            "label": "Settings",
+            "name": "Settings"
+        }
+    ]
+}

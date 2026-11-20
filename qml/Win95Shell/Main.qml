@@ -40,7 +40,7 @@ WaylandCompositor {
                     anchors.top: parent.top
                     anchors.left: parent.left
                     anchors.bottom: taskbar.top
-                    width: 100
+                    anchors.right: parent.right // (more icons: more columns)
                 }
 
                 // every mapped client's WindowFrame gets parented here

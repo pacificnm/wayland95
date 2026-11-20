@@ -30,6 +30,41 @@ PropertySheet {
         AddProgramsWindow {}
     }
 
+    // Start menu > (right-click a program) > Uninstall... (win95control
+    // --uninstall ID): the installed program that menu entry belongs to,
+    // once the list is read; tasks.remove() asks before removing it
+    property string pendingUninstall: ""
+    function uninstall(desktopId) {
+        pendingUninstall = desktopId;
+        tryUninstall();
+    }
+    function tryUninstall() {
+        if (!pendingUninstall || Software.loading)
+            return;
+        var id = pendingUninstall;
+        pendingUninstall = "";
+        var program = Software.programFor(id);
+        if (!program.key) {
+            sheet.messageBox.show("Add/Remove Programs", "\"" + Software.programName(id) + "\" can't be removed here: it isn't "
+                                  + "part of an installed " + Software.packageSource + " package or Flatpak app.",
+                                  "info", ["OK"]);
+            return;
+        }
+        if (program.source === "deb" && program.id === "wayland95") {
+            sheet.messageBox.show("Add/Remove Programs", "\"" + Software.programName(id) + "\" comes with Wayland 95 itself, "
+                                  + "so it can't be removed on its own.", "info", ["OK"]);
+            return;
+        }
+        var i = Software.programs.findIndex(function (p) { return p.key === program.key; });
+        if (i >= 0)
+            installed.select(i);
+        tasks.remove(program);
+    }
+    Connections {
+        target: Software
+        function onLoadingChanged() { sheet.tryUninstall(); }
+    }
+
     // updates are looked up (from the lists already downloaded) when the
     // tab is first opened
     onCurrentTabChanged: if (currentTab === 1 && !Software.updatesChecked && anything) Software.checkUpdates(false)

@@ -13,12 +13,19 @@
 #   my-role NAME [admin]  a MySQL account for NAME, logging on as that user
 #   my-password NAME      < a password for NAME's logons over the network
 #                           (none: no network logons)
+#   unit ... samba        smbd (and nmbd, if it's there)
+#   smb-config            < workgroup= description= share=NAME\tFOLDER\tread|full\tme|anyone\tCOMMENT ...
+#                           (the caller's shared folders: all of them; each
+#                           acts as its owner, who must own the folder)
+#   smb-password          < the caller's Samba password (none: taken away)
 #   unit ... nginx
 #   nginx-config          < listen= port= root= autoindex=  (the website's
 #                           folder: in /var/www, /srv or the caller's home,
 #                           which nginx is then let into, read-only)
 #   www-own               /var/www/html becomes the caller's, to edit
 #   update-source         Wayland 95's update repository, for apt
+#   login-theme wayland95|default   the login screen: Wayland 95's own SDDM
+#                           theme, or whatever SDDM used before
 #   unit ... wireguard | wireguard:NAME   every tunnel, or one (wg-quick@NAME)
 #   wg-list               the tunnels (/etc/wireguard/NAME.conf): NAME enabled active
 #   wg-show NAME          one tunnel's settings and state, without its secrets
@@ -92,7 +99,31 @@ my_grants() { # NAME HOST ADMIN
     return 0
 }
 
-# ------------------------------------------------------------ WireGuard
+# ------------------------------------------------------------ Samba
+SMB_CONF=/etc/samba/smb.conf
+SMB_OURS=/etc/samba/wayland95.conf
+smb_installed() {
+    [ -f "$SMB_CONF" ] && systemctl cat smbd.service >/dev/null 2>&1 || die "Samba isn't installed."
+}
+# pkexec's caller: uid, user, home
+smb_caller() {
+    uid=${PKEXEC_UID:-}
+    case "$uid" in ''|*[!0-9]*) die "Run this through pkexec." ;; esac
+    [ "$uid" != 0 ] || die "Share folders as yourself, not as root."
+    entry=$(getent passwd "$uid") || die "No such user: $uid."
+    user=${entry%%:*}
+    home=$(echo "$entry" | cut -d: -f6)
+    [ -n "$user" ] && [ -n "$home" ] && [ "$home" != / ] || die "No home folder for user $uid."
+}
+# a description or a folder's comment, as smb.conf will read it: one line
+# with no quotes or backslashes, and % only for Samba's %h, %v and %L
+smb_text() { # what value
+    case "$2" in *[[:cntrl:]\"\\]*) die "$1 can't have \" or \\ in it." ;; esac
+    case "$(printf '%s' "$2" | sed 's/%[hvL]//g')" in *%*) die "$1 can't have % in it (only %h, %v or %L)." ;; esac
+    [ ${#2} -le 80 ] || die "$1 can have 80 characters at most."
+}
+smb_lower() { printf '%s' "$1" | tr 'A-Z' 'a-z'; }
+
 wg_name() {
     case "$1" in ''|*[!A-Za-z0-9_=+.-]*) die "Not a usable tunnel name: $1 (letters, digits, - and _)";; esac
     [ ${#1} -le 15 ] || die "A tunnel's name can have 15 characters at most."
@@ -298,11 +329,20 @@ case "$cmd" in
 unit)
     [ $# -eq 2 ] || die "usage: unit ACTION SERVICE"
     action=$1
+    all=no
     case "$2" in
         ssh) units=$(ssh_units) ;;
         postgresql) units=postgresql.service ;;
-        mysql) units=""; systemctl cat mariadb.service >/dev/null 2>&1 && units=mariadb.service ;;
+        mysql|mariadb) units=""; systemctl cat mariadb.service >/dev/null 2>&1 && units=mariadb.service ;;
         nginx) units=""; systemctl cat nginx.service >/dev/null 2>&1 && units=nginx.service ;;
+        samba|smbd)
+            # smbd shares the folders; nmbd (if there) answers to the
+            # computer's name, for older Windows' Network Neighborhood
+            units="" all=yes
+            if systemctl cat smbd.service >/dev/null 2>&1; then
+                systemctl cat nmbd.service >/dev/null 2>&1 && units="nmbd.service "
+                units="${units}smbd.service"
+            fi ;;
         wireguard|wireguard:*)
             command -v wg-quick >/dev/null || die "WireGuard isn't installed."
             if [ "$2" = wireguard ]; then names=$(wg_names); else names=${2#wireguard:}; wg_name "$names"; fi
@@ -319,17 +359,20 @@ unit)
         *) die "Unknown service: $2" ;;
     esac
     [ -n "$units" ] || die "$2 isn't installed."
+    # what's started: the last unit (ssh's service, not its socket), or all
+    main=${units##* }
+    [ "$all" = no ] || main=$units
     case "$action" in
         enable)
             if [ "$2" = ssh ] && systemctl is-enabled -q ssh.socket 2>/dev/null; then
                 systemctl start ssh.socket
             else
-                systemctl enable --now "${units##* }"
+                systemctl enable --now $main
             fi ;;
         disable) systemctl disable --now $units ;;
-        start) systemctl start "${units##* }" ;;
+        start) systemctl start $main ;;
         stop) systemctl stop $units ;;
-        restart) systemctl restart "${units##* }" ;;
+        restart) systemctl restart $main ;;
         *) die "Unknown action: $action" ;;
     esac
     ;;
@@ -695,6 +738,151 @@ wg-delete)
     systemctl disable --now "wg-quick@$1.service" 2>/dev/null || true
     rm -f "/etc/wireguard/$1.conf"
     ;;
+smb-config)
+    # Samba's workgroup and description, and the caller's shared folders
+    # (all of them: the ones not given stop being shared). Other people's
+    # shares are kept as they are. Each share acts as its owner (force
+    # user), so it only gives what the owner could reach anyway.
+    smb_caller
+    smb_installed
+    tab=$(printf '\t')
+    workgroup="" description="" wg_given=no desc_given=no
+    if [ -f "$SMB_OURS" ]; then
+        workgroup=$(sed -n '/^\[global\]/,/^\[/s/^[[:space:]]*workgroup[[:space:]]*=[[:space:]]*//p' "$SMB_OURS" | head -n 1)
+        description=$(sed -n '/^\[global\]/,/^\[/s/^[[:space:]]*server string[[:space:]]*=[[:space:]]*//p' "$SMB_OURS" | head -n 1)
+        others=$(awk -v me="$user" '
+            function flush() { if (name != "" && tolower(name) != "global" && owner != me) printf "%s", buf; buf = ""; name = ""; owner = "" }
+            /^[ \t]*\[.*\][ \t]*$/ { flush(); name = $0; gsub(/^[ \t]*\[|\][ \t]*$/, "", name) }
+            /^[ \t]*# wayland95: owner=/ { owner = $0; sub(/^[ \t]*# wayland95: owner=/, "", owner) }
+            name != "" { buf = buf $0 "\n" }
+            END { flush() }' "$SMB_OURS")
+    else
+        others=""
+    fi
+    # names in use: smb.conf's own shares (printers...) and everyone else's
+    taken=$( { sed -n 's/^[[:space:]]*\[\(.*\)\][[:space:]]*$/\1/p' "$SMB_CONF"
+               printf '%s\n' "$others" | sed -n 's/^\[\(.*\)\]$/\1/p'; } | tr 'A-Z' 'a-z')
+    names="" shares="" count=0
+    while IFS='=' read -r key value; do
+        case "$key" in
+            '') continue ;;
+            workgroup)
+                case "$value" in ''|[.-]*|*[!A-Za-z0-9_.-]*) die "A workgroup's name has letters, digits, - _ and . in it." ;; esac
+                [ ${#value} -le 15 ] || die "A workgroup's name can have 15 characters at most."
+                workgroup=$value wg_given=yes ;;
+            description)
+                smb_text "The description" "$value"
+                description=$value desc_given=yes ;;
+            share)
+                # NAME <tab> FOLDER <tab> read|full <tab> me|anyone <tab> COMMENT
+                IFS=$tab read -r name path access who comment <<EOF
+$value
+EOF
+                count=$((count + 1))
+                [ "$count" -le 200 ] || die "That's too many shared folders."
+                case "$name" in ''|[\ .]*|*\ ) die "Not a usable share name: \"$name\"" ;; esac
+                case "$name" in *[!A-Za-z0-9\ _.-]*) die "A share's name can have letters, digits, spaces, - _ and . in it (not \"$name\")." ;; esac
+                [ ${#name} -le 80 ] || die "A share's name can have 80 characters at most."
+                low=$(smb_lower "$name")
+                case "$low" in global|homes|printers) die "\"$name\" is one of Samba's own names." ;; esac
+                if printf '%s\n' "$taken" "$names" | grep -qxF -- "$low"; then
+                    die "There's already a shared folder called \"$name\"."
+                fi
+                names="$names
+$low"
+                case "$access" in read|full) ;; *) die "access: read or full" ;; esac
+                case "$who" in me|anyone) ;; *) die "who: me or anyone" ;; esac
+                smb_text "A shared folder's comment" "$comment"
+                # the folder: a real one of the caller's, by its own name
+                case "$path" in /?*) ;; *) die "A shared folder must be given by its full path." ;; esac
+                case "$path" in *[[:cntrl:]\"\\%]*|*\ ) die "A shared folder's name can't have \" \\ or % in it, or end in a space." ;; esac
+                [ -d "$path" ] || die "There's no folder $path."
+                real=$(realpath -e -- "$path") || die "There's no folder $path."
+                [ "$real" = "${path%/}" ] || die "Give the folder by its own name, not a link ($path is $real)."
+                case "$real/" in */.*) die "A hidden folder can't be shared ($real)." ;; esac
+                [ "$real" != "$home" ] || die "Your whole home folder can't be shared: choose a folder in it."
+                [ "$(stat -c %u -- "$real")" = "$uid" ] || die "$real isn't yours, so you can't share it."
+                ro=no; [ "$access" = read ] && ro=yes
+                section="[$name]
+   # wayland95: owner=$user
+   path = $real
+   comment = $comment
+   read only = $ro
+   force user = $user
+   # (files starting with a dot are never shown nor made)
+   veto files = /.*/
+   delete veto files = no"
+                if [ "$who" = anyone ]; then
+                    section="$section
+   guest ok = yes"
+                else
+                    section="$section
+   guest ok = no
+   valid users = $user"
+                fi
+                shares="$shares$section
+
+" ;;
+            *) die "Unknown Samba setting: $key" ;;
+        esac
+    done
+    backup_ours=""
+    if [ -e "$SMB_OURS" ]; then
+        backup_ours=$(mktemp "$SMB_OURS.old.XXXXXX")
+        cp -p "$SMB_OURS" "$backup_ours"
+    fi
+    backup_conf=$(mktemp "$SMB_CONF.old.XXXXXX")
+    cp -p "$SMB_CONF" "$backup_conf"
+    {
+        echo "# Written by the Wayland 95 Services control panel; changes here are overwritten."
+        echo "# smb.conf includes this at its end, so these settings win over its own."
+        echo "[global]"
+        [ -z "$workgroup" ] || echo "   workgroup = $workgroup"
+        [ -z "$description" ] || echo "   server string = $description"
+        echo "   map to guest = bad user"
+        echo
+        [ -z "$others" ] || printf '%s\n' "$others"
+        printf '%s' "$shares"
+    } | put "$SMB_OURS"
+    if ! sed 's/[[:space:]]//g' "$SMB_CONF" | grep -qxF "include=$SMB_OURS"; then
+        printf '\n%s\n%s\n%s\n' "# Wayland 95: the Services control panel's Samba settings and shared folders" \
+            "[global]" "   include = $SMB_OURS" >>"$SMB_CONF"
+    fi
+    smb_restore() {
+        if [ -n "$backup_ours" ]; then mv -f "$backup_ours" "$SMB_OURS"; else rm -f "$SMB_OURS"; fi
+        mv -f "$backup_conf" "$SMB_CONF"
+    }
+    if command -v testparm >/dev/null && ! check=$(testparm -s "$SMB_CONF" 2>&1 >/dev/null); then
+        smb_restore
+        die "Samba didn't accept these settings: $(echo "$check" | grep -v '^Load smb\|^$' | tail -n 3 | tr '\n' ' ')"
+    fi
+    [ -z "$backup_ours" ] || rm -f "$backup_ours"
+    rm -f "$backup_conf"
+    # (what's connected carries on; new and changed shares show at once)
+    if systemctl is-active -q smbd.service 2>/dev/null; then
+        systemctl reload smbd.service || systemctl restart smbd.service || true
+    fi
+    if [ "$wg_given$desc_given" != nono ] && systemctl is-active -q nmbd.service 2>/dev/null; then
+        systemctl restart nmbd.service || true
+    fi
+    ;;
+
+smb-password)
+    # the caller's Samba password (on stdin), for shares that need one;
+    # none: it's taken away
+    smb_caller
+    command -v smbpasswd >/dev/null || die "Samba isn't installed."
+    pw=""
+    IFS= read -r pw || true
+    [ ${#pw} -le 200 ] || die "The password is too long."
+    if [ -z "$pw" ]; then
+        smbpasswd -x "$user" >/dev/null 2>&1 || true
+        exit 0
+    fi
+    # (on stdin, twice, as smbpasswd -s wants it: never an argument)
+    printf '%s\n%s\n' "$pw" "$pw" | smbpasswd -a -s "$user" >/dev/null || die "Samba didn't take the password."
+    smbpasswd -e "$user" >/dev/null || true
+    ;;
 
 update-source)
     # installs made before the repository existed lack it (the wayland95
@@ -710,7 +898,33 @@ update-source)
         "Signed-By: /usr/share/keyrings/wayland95-archive-keyring.gpg" | put /etc/apt/sources.list.d/wayland95.sources
     ;;
 
+login-theme)
+    # SDDM reads /etc/sddm.conf.d/*.conf in name order, so this one wins over
+    # the ones before it (KDE's kde_settings.conf); /etc/sddm.conf still
+    # wins over all of them (Control Panel says so when it does)
+    [ $# -eq 1 ] || die "usage: login-theme wayland95|default"
+    conf=/etc/sddm.conf.d/wayland95.conf
+    case "$1" in
+    wayland95)
+        [ -f /usr/share/sddm/themes/wayland95/Main.qml ] \
+            || die "Wayland 95's login screen isn't installed (/usr/share/sddm/themes/wayland95)."
+        mkdir -p /etc/sddm.conf.d
+        printf '%s\n' \
+            "# The login screen: Wayland 95's own theme (/usr/share/sddm/themes/wayland95)." \
+            "# Control Panel > Passwords > Log On writes this file, and deletes it to go back." \
+            "[Theme]" \
+            "Current=wayland95" | put "$conf"
+        ;;
+    default)
+        rm -f "$conf"
+        ;;
+    *)
+        die "login-theme: wayland95 or default"
+        ;;
+    esac
+    ;;
+
 *)
-    die "usage: wayland95-services unit|ssh-config|pg-config|pg-role|my-config|my-role|my-password|nginx-config|www-own|wg-list|wg-show|wg-save|wg-import|wg-delete|update-source ..."
+    die "usage: wayland95-services unit|ssh-config|pg-config|pg-role|my-config|my-role|my-password|nginx-config|www-own|smb-config|smb-password|wg-list|wg-show|wg-save|wg-import|wg-delete|update-source|login-theme ..."
     ;;
 esac

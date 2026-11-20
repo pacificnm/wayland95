@@ -24,6 +24,11 @@ QJsonObject elementInfo(const QString &type);
 // every property an element of this type has, common ones included
 QJsonArray elementProps(const QString &type);
 
+// Wayland 95's icons (Win95Ui's icons.json): [{ name, label }], and
+// whether `name` is one of them
+QJsonArray icons();
+bool isIcon(const QString &name);
+
 // "" if `name` can name a form or an element (an identifier that starts
 // with a small letter for elements: QML's rule for ids)
 QString nameProblem(const QString &name, bool element);

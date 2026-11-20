@@ -27,6 +27,8 @@ public:
     // sets it takes, then the common ones)
     Q_INVOKABLE QVariantMap registry() const;
     Q_INVOKABLE QVariantList elementProps(const QString &type) const;
+    // Wayland 95's icons, for the Icon chooser: [{ name, label }]
+    Q_INVOKABLE QVariantList icons() const;
     Q_INVOKABLE QString elementNameProblem(const QString &name) const;
     Q_INVOKABLE QString formNameProblem(const QString &name) const;
 

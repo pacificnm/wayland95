@@ -89,6 +89,11 @@ PropertySheet {
     // Wayland95Settings.colorKeys()) and the scheme they came from
     property var colors: Wayland95Settings.colors
     property string scheme: Wayland95Settings.colorScheme
+    // GTK programs and web browsers take this look too (the shell:
+    // src/programlook.cpp)
+    property bool otherPrograms: Wayland95Settings.otherProgramsLook
+    // X11 programs at a scaled display's own pixels (the compositor's xscale.c)
+    property bool sharpX11: Wayland95Settings.sharpX11
     readonly property var schemes: Wayland95Settings.colorSchemes()
 
     // the things you can recolor; key2 = gradient end, text = caption color
@@ -136,6 +141,8 @@ PropertySheet {
 
     onApplyRequested: {
         Wayland95Settings.setColors(colors, scheme);
+        Wayland95Settings.otherProgramsLook = otherPrograms;
+        Wayland95Settings.sharpX11 = sharpX11;
         Wayland95Settings.backgroundColor = bgColor;
         Wayland95Settings.wallpaper = wallpaper;
         Wayland95Settings.wallpaperMode = mode;
@@ -554,7 +561,7 @@ PropertySheet {
         GroupBox95 {
             y: appearancePreview.height + 42
             width: parent.width
-            height: parent.height - y
+            height: parent.height - y - 26
             title: "Item"
 
             ComboBox95 {
@@ -592,6 +599,12 @@ PropertySheet {
                     onClicked: (button) => colorPicker.openAt(button, function (c) { sheet.setColor(colorRow.item.text, c); })
                 }
             }
+        }
+        CheckBox95 {
+            y: parent.height - 20
+            text: "<u>O</u>ther programs use this look (GTK programs, web browsers)"
+            checked: sheet.otherPrograms
+            onToggled: (on) => sheet.choose("otherPrograms", on)
         }
     }
 
@@ -985,6 +998,15 @@ PropertySheet {
                 text: "<u>A</u>daptive sync (variable refresh rate)"
                 enabled: displayPage.cur && displayPage.cur.enabled
                 onToggled: (on) => displayPage.change("adaptiveSync", on)
+            }
+            // older (X11) programs on a display at more than 100%: drawn at
+            // its own pixels (sharp; ones that ignore the size may come out
+            // small), or enlarged (their size right, but blurred)
+            CheckBox95 {
+                x: 0; y: 334
+                text: "Sharp <u>o</u>lder programs (X11) on scaled displays"
+                checked: sheet.sharpX11
+                onToggled: (on) => sheet.choose("sharpX11", on)
             }
         }
 

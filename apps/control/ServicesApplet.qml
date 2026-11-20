@@ -2,7 +2,7 @@ import QtQuick
 import Win95Ui
 import Win95Control
 
-// Services: servers (SSH, PostgreSQL, MySQL, nginx, WireGuard), programming
+// Services: servers (SSH, PostgreSQL, MySQL, nginx, Samba, WireGuard), programming
 // languages (Python, Node.js) and tools (SQLite) turned on and off with a check box, like Windows Setup's list
 // of components. Turning one on installs it first if it isn't there;
 // Settings... opens its own property sheet.
@@ -12,7 +12,7 @@ PropertySheet {
     title: "Services Properties"
     titles: ["Services"]
     canApply: false
-    height: 492
+    height: 512
 
     readonly property var items: Services.services.map(function (s) {
         return Object.assign({ key: s.id }, s);
@@ -72,7 +72,8 @@ PropertySheet {
         } else if (item.kind === "server") {
             messageBox.show("Services",
                             "Turn off " + item.name + "?\n\nIt stops now and won't start with the computer. "
-                            + "It stays installed, with its settings" + (item.id === "postgresql" || item.id === "mysql" ? " and databases" : "") + ".",
+                            + "It stays installed, with its settings" + (item.id === "postgresql" || item.id === "mysql" ? " and databases"
+                               : item.id === "samba" ? " (your folders stop being shared until it's on again)" : "") + ".",
                             "question", ["Yes", "No"], function (b) {
                 if (b === 0)
                     { startedHere = true; Services.turnOff(item.id); }
@@ -130,7 +131,7 @@ PropertySheet {
             id: list
             y: 62
             width: parent.width
-            height: 168
+            height: 188
             model: sheet.items
             checkable: true
             checked: sheet.checkedMap

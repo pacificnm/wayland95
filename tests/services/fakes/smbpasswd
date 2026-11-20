@@ -1,0 +1,7 @@
+#!/bin/sh
+# Stand-in smbpasswd for tests/services/run.sh: logs what it was asked and
+# what it read (the password, twice, with -s)
+root=${W95_FAKE_ROOT:?}
+echo "smbpasswd $*" >>"$root/smbpasswd.log"
+case "$*" in *-s*) cat >>"$root/smbpasswd.log" ;; esac
+exit 0

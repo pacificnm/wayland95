@@ -61,6 +61,18 @@ void exportEnvironment(const QStringList &assignments)
     QProcess::startDetached(QStringLiteral("dbus-update-activation-environment"),
                             QStringList{ QStringLiteral("--systemd") } + assignments);
 }
+
+// the session's fonts and GTK scroll bars (wayland95-session), for programs
+// systemd and D-Bus start too
+QStringList sessionLook()
+{
+    QStringList list;
+    for (const char *name : { "FONTCONFIG_FILE", "GTK_OVERLAY_SCROLLING" }) {
+        if (qEnvironmentVariableIsSet(name))
+            list << QLatin1String(name) + QLatin1Char('=') + qEnvironmentVariable(name);
+    }
+    return list;
+}
 }
 
 void Launcher::setX11Display(const QString &display)
@@ -74,10 +86,11 @@ void Launcher::startSession()
 {
     if (!isSession())
         return;
-    exportEnvironment({ QStringLiteral("WAYLAND_DISPLAY=") + s_socketName,
+    exportEnvironment(QStringList{ QStringLiteral("WAYLAND_DISPLAY=") + s_socketName,
                         QStringLiteral("XDG_CURRENT_DESKTOP=Wayland95"),
                         QStringLiteral("XDG_SESSION_DESKTOP=wayland95"),
-                        QStringLiteral("XDG_SESSION_TYPE=wayland") });
+                        QStringLiteral("XDG_SESSION_TYPE=wayland") }
+                      + sessionLook());
 
     // XDG autostart: the user's own entries override the system's by name
     const QString config = qEnvironmentVariable("XDG_CONFIG_HOME", QDir::homePath() + QStringLiteral("/.config"));
@@ -116,17 +129,18 @@ void Launcher::startSession()
     }
 }
 
+QString Launcher::resolve(const QString &program)
+{
+    if (program.contains(QLatin1Char('/')))
+        return program;
+    const QString bundled = QDir(QCoreApplication::applicationDirPath()).filePath(program);
+    const QFileInfo info(bundled);
+    return (info.isFile() && info.isExecutable()) ? bundled : QStandardPaths::findExecutable(program);
+}
+
 bool Launcher::launch(const QString &program, const QStringList &arguments)
 {
-    QString path;
-    if (program.contains(QLatin1Char('/'))) {
-        path = program;
-    } else {
-        const QString bundled = QDir(QCoreApplication::applicationDirPath()).filePath(program);
-        const QFileInfo info(bundled);
-        path = (info.isFile() && info.isExecutable()) ? bundled
-                                                      : QStandardPaths::findExecutable(program);
-    }
+    const QString path = resolve(program);
     if (path.isEmpty()) {
         qWarning() << "Launcher: program not found:" << program;
         return false;
@@ -167,6 +181,57 @@ bool Launcher::launch(const QString &program, const QStringList &arguments)
     }
     qInfo() << "Launcher: started" << path << "pid" << pid;
     return true;
+}
+
+#ifndef WAYLAND95_RUN_AS_ADMIN_HELPER
+#define WAYLAND95_RUN_AS_ADMIN_HELPER "/usr/libexec/wayland95/wayland95-run-as-admin"
+#endif
+
+bool Launcher::launchAsRoot(const QString &program, const QStringList &arguments)
+{
+    const QString path = resolve(program);
+    if (path.isEmpty()) {
+        qWarning() << "Launcher: program not found:" << program;
+        return false;
+    }
+    const QString pkexec = QStandardPaths::findExecutable(QStringLiteral("pkexec"));
+    if (pkexec.isEmpty()) {
+        qWarning() << "Launcher: can't run" << path << "as root: pkexec isn't installed";
+        return false;
+    }
+    QString helper = QStringLiteral(WAYLAND95_RUN_AS_ADMIN_HELPER);
+#ifdef WAYLAND95_RUN_AS_ADMIN_HELPER_SRC
+    if (!QFileInfo::exists(helper))
+        helper = QStringLiteral(WAYLAND95_RUN_AS_ADMIN_HELPER_SRC);
+#endif
+    if (!QFileInfo(helper).isExecutable()) {
+        qWarning() << "Launcher: can't run" << path << "as root: no" << helper;
+        return false;
+    }
+
+    // root has no runtime dir of ours to find the socket in: its full path
+    QString wayland = s_socketName.isEmpty() ? qEnvironmentVariable("WAYLAND_DISPLAY") : s_socketName;
+    if (!wayland.startsWith(QLatin1Char('/')))
+        wayland = qEnvironmentVariable("XDG_RUNTIME_DIR") + QLatin1Char('/') + wayland;
+    // (as root, still the user's own X server; none means none)
+    const QString x11 = s_x11Display;
+    const QString xauth = x11.isEmpty() ? QString() : qEnvironmentVariable("XAUTHORITY");
+
+    return launch(pkexec, QStringList{ helper, wayland, x11, xauth, path } + arguments);
+}
+
+bool Launcher::launchEntry(const DesktopEntry &entry, bool asRoot)
+{
+    QStringList command = entry.command();
+    if (command.isEmpty())
+        return false;
+    if (entry.terminal) {
+        if (asRoot)
+            command.prepend(QStringLiteral("pkexec"));
+        return launch(QStringLiteral("win95terminal"), QStringList{ QStringLiteral("-e") } + command);
+    }
+    const QString program = command.takeFirst();
+    return asRoot ? launchAsRoot(program, command) : launch(program, command);
 }
 
 QString Launcher::run(const QString &commandLine)

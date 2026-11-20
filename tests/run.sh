@@ -7,9 +7,9 @@
 #
 #   tests/run.sh [SUITE...]        all suites, or some of: input (Chromium) firefox
 #                                  windows popups x11 clipboard qt frames snap alttab
-#                                  settings shell dialogs notifications session screensaver power
+#                                  settings shell startitems dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
-#                                  games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx studio monitors screen
+#                                  games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx samba logon studio monitors screen
 #                                  classic vscode
 #   COMPOSITOR=path tests/run.sh   test another build (tests/selftest.sh)
 #   KEEP=1 tests/run.sh            keep the logs and screenshots even if all pass
@@ -33,6 +33,10 @@ export WAYLAND95_NO_SYSTEM_AGENTS=1
 # and never suspend, power off, restart or end the session (they log what
 # they would have done instead: the Shut Down tests check that)
 export WAYLAND95_NO_POWER_ACTIONS=1
+# the same programs, fonts and look wherever the tests run, a Wayland 95
+# session included (its fonts.conf makes web pages' sans-serif Liberation
+# Sans, which moves what the web tests click)
+unset FONTCONFIG_FILE GTK_OVERLAY_SCROLLING GTK_THEME
 PIDS=()
 COMP_EXTRA=()   # more arguments for the next compositor (fresh)
 pass=0
@@ -129,21 +133,28 @@ expect_true() { # STATUS NAME WHAT-HAPPENED   e.g.  [ "$x" = 1 ]; expect_true $?
 }
 
 # --- probes: GTK windows that log what they get ------------------------------
-# start_probe NAME wayland|x11|qt RRGGBB: GTK on Wayland or X11, or Qt; its
-# log is $WORK/SUITE-NAME.log, commands go to $WORK/SUITE-NAME.in
+# start_probe NAME wayland|headerbar|x11|qt RRGGBB: GTK on Wayland (headerbar:
+# with its own title bar, as GNOME programs have) or X11, or Qt; its log is $WORK/SUITE-NAME.log, commands go to $WORK/SUITE-NAME.in
 start_probe() {
     local name=$1 backend=$2 color=$3 fifo=$WORK/$SUITE-$1.in
+    # GTK's settings are its defaults (Adwaita), never the desktop's own
+    # (Wayland 95's session gives GTK its theme); a test can pass its own
+    local gsettings=${GSETTINGS_BACKEND:-memory}
     rm -f "$fifo"; mkfifo "$fifo"
     sleep 100000 >"$fifo" &
     PIDS+=($!)
     if [ "$backend" = qt ]; then
         WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland "$PROBE_QT" --title "$name" --color "$color" \
             <"$fifo" >"$WORK/$SUITE-$name.log" 2>"$WORK/$SUITE-$name.err" &
-    elif [ "$backend" = x11 ]; then
-        env -u WAYLAND_DISPLAY GDK_BACKEND=x11 DISPLAY="$XDISPLAY" "$PROBE" --title "$name" --color "$color" \
+    elif [ "$backend" = headerbar ]; then
+        WAYLAND_DISPLAY=$SOCKET GDK_BACKEND=wayland GSETTINGS_BACKEND=$gsettings "$PROBE" --title "$name" --color "$color" --headerbar \
+            <"$fifo" >"$WORK/$SUITE-$name.log" 2>"$WORK/$SUITE-$name.err" &
+    elif [ "$backend" = x11 ] || [ "$backend" = x11stripes ]; then
+        env -u WAYLAND_DISPLAY GDK_BACKEND=x11 GSETTINGS_BACKEND=$gsettings DISPLAY="$XDISPLAY" "$PROBE" --title "$name" --color "$color" \
+            $([ "$backend" = x11stripes ] && echo --stripes) \
             <"$fifo" >"$WORK/$SUITE-$name.log" 2>"$WORK/$SUITE-$name.err" &
     else
-        WAYLAND_DISPLAY=$SOCKET GDK_BACKEND=wayland "$PROBE" --title "$name" --color "$color" \
+        WAYLAND_DISPLAY=$SOCKET GDK_BACKEND=wayland GSETTINGS_BACKEND=$gsettings "$PROBE" --title "$name" --color "$color" \
             <"$fifo" >"$WORK/$SUITE-$name.log" 2>"$WORK/$SUITE-$name.err" &
     fi
     PIDS+=($!)
@@ -322,16 +333,16 @@ suite_input() { say "input: Chromium"; BROWSER=chromium; browser_suite; }
 suite_firefox() { say "input: Firefox"; BROWSER=firefox; browser_suite; }
 
 suite_windows() {
-    say "windows: two GTK windows"
+    say "windows: two GTK windows (with header bars: their own title bars)"
     fresh
-    start_probe A wayland cc0000 || return
+    start_probe A headerbar cc0000 || return
     local n m a_size
     a_size=$(last_size A)
     locate_probe A 240 228 || return
     local AX=$PX AY=$PY
     ok "a window opens where it's placed (drawing area at $AX,$AY)"
 
-    n=$(pmark A); start_probe B wayland 0000cc || return
+    n=$(pmark A); start_probe B headerbar 0000cc || return
     pexpect "a new window gets the keyboard" B 0 "focus in"
     pexpect "the window before loses it" A "$n" "focus out"
     query list | grep -q "^B|.*activated" && ! query list | grep -q "^A|.*activated"
@@ -453,7 +464,7 @@ PY
     kill -0 "$COMP_PID" 2>/dev/null; expect_true $? "an X11 window changing its class: the desktop keeps running" "the compositor ended: $(cat "$WORK/$SUITE-class.log")"
     query list | grep -q "^X|renamed95|"; expect_true $? "and the window list has the new class" "$(query list | tr '\n' ' ') $(cat "$WORK/$SUITE-class.log")"
 
-    start_probe W wayland 0000cc || return   # (it takes the keyboard as it opens)
+    start_probe W headerbar 0000cc || return   # (it takes the keyboard as it opens)
     n=$(pmark X); pointer click:$((XX + 5)),$((XY + 100))
     pexpect "clicking the X11 window takes the keyboard from Wayland" X "$n" "focus in"
     # the Wayland window is 30 pixels further down and right (and X11 GTK has
@@ -674,13 +685,23 @@ suite_frames() {
     expect_pixel "(black inside it)" pressed $(($(close_x $AX $W) - 7)) $(($(title_y $AY) - 6)) 000000
     ! kill -0 "$PID_A" 2>/dev/null; expect_true $? "the close button closes the program" "A still runs"
 
-    # who gets a frame: not programs that draw their own (GTK on Wayland)...
-    start_probe G wayland 00cc00 || return
+    # who gets a frame: not programs that draw their own (a GTK header bar)...
+    start_probe G headerbar 00cc00 || return
     locate_probe G 300 250 || return
     away; shot gtk
     local c; c=$(pixel gtk $((PX + 5)) $((PY - 11)))
     [ -n "$c" ] && [ $((16#${c:0:2})) -gt 192 ]
-    expect_true $? "a GTK window keeps its own title bar (no Win95 frame)" "pixel above it is $c"
+    expect_true $? "a GTK window with a header bar keeps it (no Win95 frame)" "pixel above it is $c"
+    pointer key:alt+F4 wait:0.6
+    # ...but a plain GTK window asks for one (KDE's server-decoration)
+    start_probe P wayland 00cc00 || return
+    locate_probe P 300 250 || return
+    away; shot gtk-plain
+    expect_color "a plain GTK window gets the Win95 frame" gtk-plain $PX $((PY - 12)) 000080
+    expect_pixel "(its border too)" gtk-plain $((PX - 3)) $((PY - 25)) ffffff
+    size=$(size_of P)
+    pointer click:$(close_x $PX ${size%x*}),$(title_y $PY) wait:1
+    ! kill -0 "$PID_P" 2>/dev/null; expect_true $? "its close button closes it" "P still runs"
     # ...but X11 programs do
     start_probe X x11 cc6600 || return
     locate_probe X 300 250 || return   # (the newest window, on top)
@@ -791,9 +812,9 @@ suite_snap() {
     [ "$(size_of X)" = "${SW}x$SH" ] && [ "$PX" -eq $RX ] && [ "$PY" -eq $SY ]
     expect_true $? "X11: and to the right half" "size $(size_of X) at $PX,$PY"
 
-    # a window that draws its own title bar (GTK) moves itself by asking:
-    # it snaps the same, with no frame around it
-    start_probe G wayland 0000cc || return
+    # a window that draws its own title bar (a GTK header bar) moves itself
+    # by asking: it snaps the same, with no frame around it
+    start_probe G headerbar 0000cc || return
     locate_probe G 300 300 || return
     local gsize; gsize=$(size_of G)
     drag $((PX + 60)) $((PY - 15)) 0 $((PY - 15)); sleep 0.6
@@ -1120,6 +1141,104 @@ suite_shell() {
 
 
 
+# --- a program's menu in the Start menu (right-click, the Menu key) -----------
+suite_startitems() {
+    say "startitems: a program's menu in the Start menu: Open, Open as Admin (Root), Add Shortcut to Desktop, Uninstall..."
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    # one installed program, Zeta Test (in Accessories, after Wayland 95's
+    # own: the last there), that logs how it was started; the fake
+    # PackageKit says package "zeta" owns it
+    local home=$WORK/home-$SUITE data=$WORK/data-$SUITE ran=$WORK/$SUITE-zeta.log
+    mkdir -p "$data/applications"
+    cat >"$WORK/zeta.sh" <<ZETA
+#!/bin/sh
+echo "ran \$* on \$WAYLAND_DISPLAY" >>'$ran'
+ZETA
+    chmod +x "$WORK/zeta.sh"
+    printf '[Desktop Entry]\nType=Application\nName=Zeta Test\nExec=%s hello\nCategories=Utility;\n' "$WORK/zeta.sh" \
+        >"$data/applications/zeta.desktop"
+    : >"$ran"
+    XDG_DATA_DIRS=$data WITH_PACKAGEKIT=1 start_shell || return
+    # Start > Programs > Accessories, Zeta Test highlighted (Up from the
+    # first wraps to the last), then its menu
+    zeta_menu() { start_menu key:p wait:0.5 key:a wait:0.5 key:Up wait:0.3 "$@"; }
+
+    zeta_menu key:Menu; away; shot item-menu
+    expect_pixel "the Menu key opens a program's menu (the Start menu stays)" item-menu 120 600 c0c0c0
+    pointer key:o wait:1
+    grep -q "ran hello on $SOCKET\$" "$ran"; expect_true $? "Open starts it" "$(cat "$ran")"
+    away; shot after-open
+    expect_pixel "and closes the Start menu" after-open 120 600 008080
+
+    : >"$ran"
+    zeta_menu key:Menu wait:0.3 key:a wait:1.5
+    grep -q "pkexec .*/wayland95-run-as-admin ${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$SOCKET $XDISPLAY .*/zeta.sh hello" "$FAKE_LOG"
+    expect_true $? "Open as Admin (Root): through pkexec and wayland95-run-as-admin, with the display's full path" \
+        "$(grep pkexec "$FAKE_LOG" | tail -2)"
+    grep -q "ran hello on /.*/$SOCKET\$" "$ran"; expect_true $? "(and the program gets that display)" "$(cat "$ran")"
+
+    zeta_menu key:Menu wait:0.3 key:s wait:1.2
+    cmp -s "$data/applications/zeta.desktop" "$home/Desktop/zeta.desktop"
+    expect_true $? "Add Shortcut to Desktop copies its .desktop file to ~/Desktop" "$(ls -l "$home/Desktop" 2>&1)"
+    away; shot shortcut
+    # (the fifth icon down: under My Computer, Network, Recycle Bin, Terminal)
+    expect_pixel "and the desktop shows it, under the others" shortcut 40 345 !008080
+    zeta_menu key:Menu wait:0.3 key:s wait:1.2
+    [ "$(ls "$home/Desktop" | wc -l)" -eq 1 ]; expect_true $? "adding it again doesn't make a second" "$(ls "$home/Desktop" | tr '\n' ' ')"
+
+    # one of Wayland 95's own (Calculator: the first in Accessories): its
+    # shortcut runs it by name, with its drawn icon; it can't be uninstalled
+    start_menu key:p wait:0.5 key:a wait:0.5 key:Menu wait:0.3 key:u wait:0.8; away; shot own-uninstall
+    expect_pixel "Uninstall is greyed for Wayland 95's own programs (the menu stays)" own-uninstall 120 600 c0c0c0
+    pointer key:s wait:1.2
+    grep -q '^Exec=win95calc$' "$home/Desktop/wayland95-calculator.desktop" \
+        && grep -q '^X-Wayland95-Icon=calc$' "$home/Desktop/wayland95-calculator.desktop"
+    expect_true $? "Wayland 95's own: a shortcut that runs it, with its drawn icon" "$(cat "$home/Desktop/"wayland95-* 2>&1)"
+    [ "$(windows_of win95control)" -eq 0 ]; expect_true $? "(and Uninstall did nothing)" "$(query list | tr '\n' ' ')"
+
+    # the shortcut on the desktop: double-click opens it; its menu has Open
+    # as Admin and Delete (into the Recycle Bin)
+    : >"$ran"
+    away; shot two-shortcuts
+    # (Calculator fifth, Zeta Test sixth)
+    local cy=345 zy=425
+    [ "$(pixel two-shortcuts 40 $cy)" != 008080 ] && [ "$(pixel two-shortcuts 40 $zy)" != 008080 ]
+    expect_true $? "two shortcuts, in name order" "pixels at 40,$cy and 40,$zy: $(pixel two-shortcuts 40 $cy) $(pixel two-shortcuts 40 $zy)"
+    pointer move:40,$zy click:40,$zy click:40,$zy wait:1
+    grep -q "ran hello on $SOCKET\$" "$ran"; expect_true $? "double-clicking a shortcut starts its program" "$(cat "$ran")"
+    pointer click:40,$zy,right wait:0.6 key:a wait:1.5
+    grep -q "ran hello on /.*/$SOCKET\$" "$ran"; expect_true $? "a shortcut's menu: Open as Admin (Root)" "$(cat "$ran")"
+    pointer click:40,$zy,right wait:0.6; away; shot shortcut-menu
+    pointer key:d wait:1.2
+    [ ! -e "$home/Desktop/zeta.desktop" ] && [ -e "$home/.local/share/Trash/files/zeta.desktop" ]
+    expect_true $? "a shortcut's menu: Delete puts it in the Recycle Bin" "Desktop: $(ls "$home/Desktop" | tr '\n' ' '); bin: $(ls "$home/.local/share/Trash/files" 2>&1 | tr '\n' ' ')"
+
+    # with the pointer: right-click the entry itself (Programs, Accessories
+    # and Zeta Test are where the medium-sized menu puts them)
+    pointer click:$START_X,$TASKBAR_Y wait:0.6 move:140,496 wait:0.6 move:330,490 wait:0.6 \
+        move:490,574 wait:0.6 click:490,574,right wait:0.6; away; shot right-click
+    expect_pixel "right-clicking a program in the Start menu opens its menu there" right-click 530 640 c0c0c0
+    pointer key:Escape wait:0.4; away; shot right-click-esc
+    expect_pixel "Escape closes just that menu" right-click-esc 530 640 008080
+    expect_pixel "(the Start menu stays open)" right-click-esc 485 574 000080
+    pointer key:Escape wait:0.3 key:Escape wait:0.3 key:Escape wait:0.3
+
+    # Uninstall...: Add/Remove Programs finds the package and asks first
+    zeta_menu key:Menu wait:0.3 key:u
+    for _ in $(seq 30); do [ "$(windows_of win95control)" -ge 1 ] && break; sleep 0.5; done
+    [ "$(windows_of win95control)" -ge 1 ]; expect_true $? "Uninstall... opens Add/Remove Programs" "$(query list | tr '\n' ' ')"
+    for _ in $(seq 30); do grep -q "packagekit: RemovePackages (4," "$FAKE_LOG" && break; sleep 0.5; done
+    sleep 1; away; shot uninstall-ask
+    grep -q "packagekit: RemovePackages (4, \['zeta;1.0;amd64;installed'\]" "$FAKE_LOG" && ! grep -q "packagekit: RemovePackages (0," "$FAKE_LOG"
+    expect_true $? "it works out what goes (package zeta) and asks before removing anything" "$(grep RemovePackages "$FAKE_LOG")"
+    pointer key:Return wait:2
+    grep -q "packagekit: RemovePackages (0, \['zeta;1.0;amd64;installed'\]" "$FAKE_LOG"
+    expect_true $? "Yes: it's removed" "$(grep RemovePackages "$FAKE_LOG")"
+    query list | sed -n 's/^\([^|]*\)|win95control|.*/\1/p' | while read -r t; do query close "$t"; done; sleep 0.5
+}
+
+
 # --- the Start menu's dialogs: Run, Help, Shut Down ----------------------------------
 start_menu() { pointer click:$START_X,$TASKBAR_Y wait:0.6 "$@" wait:0.8; }
 shell_said() { grep -q "$1" "$WORK/$SUITE-shell.log"; }
@@ -1310,6 +1429,9 @@ suite_notifications() {
     sleep 2.5; away; shot vol-gone
     ! osd_shown vol-gone; expect_true $? "the level goes by itself" "$(pixel vol-gone 530 680)"
     pexpect_not "(nor did any of them reach the program)" A "$n" "key (XF86Audio|Volume)"
+    # the media keys: the shell's too (to the program that's playing, through MPRIS: studioplayer)
+    pointer key:XF86AudioPlay wait:0.3 key:XF86AudioNext wait:0.3
+    pexpect_not "the media keys (Play, Next) don't reach the focused program either" A "$n" "key (XF86AudioPlay|XF86AudioNext|Media)"
     if [ -n "$(ls /sys/class/backlight 2>/dev/null)" ]; then
         pointer key:XF86MonBrightnessUp; shot bright
         shell_said "Power: would set the brightness to"; expect_true $? "Brightness Up asks for a brighter screen (only logged)" "$(grep Power "$WORK/$SUITE-shell.log")"
@@ -1885,8 +2007,9 @@ suite_windowkeys() {
     pointer key:alt+space wait:0.6 key:c wait:0.8
     ! kill -0 "$PID_B" 2>/dev/null; expect_true $? "Close closes it" "B still runs"
 
-    # a program drawing its own title bar (GTK) asks for the menu itself
-    start_probe G gtk 00cccc || return
+    # a program drawing its own title bar (a GTK header bar) asks for the
+    # menu itself
+    start_probe G headerbar 00cccc || return
     locate_probe G 300 300 || return
     pointer click:$((PX + 60)),$((PY - 20)),right wait:0.6; shot gtk-menu
     windowkeys_menu_shown gtk-menu $((PX + 185)) $((PY + 5)); expect_true $? "GTK's own title bar: a right-click opens the same menu" "$(pixel gtk-menu $((PX + 185)) $((PY + 5)))"
@@ -3776,7 +3899,7 @@ svsaid() { grep -qF -- "services: $1" "$WORK/$SUITE-control.log"; }
 svwait() { local i; for i in $(seq 40); do svsaid "$1" && return 0; sleep 0.25; done; return 1; }
 fslog() { grep -qF -- "$1" "$FS/log"; }
 # (the property sheets open at 73,85; their tabs, buttons and lists)
-SV_ROW_MYSQL=150,206; SV_ROW_NGINX=150,226; SV_ROW_SQLITE=150,306; SV_TAB1=108,103; SV_TAB2=170,103; SV_APPLY=433,496; SV_CANCEL=352,496
+SV_ROW_MYSQL=150,206; SV_ROW_NGINX=150,226; SV_ROW_SAMBA=150,246; SV_ROW_SQLITE=150,326; SV_TAB1=108,103; SV_TAB2=170,103; SV_APPLY=433,496; SV_CANCEL=352,496
 MY_ALL=111,234; MY_CREATE=217,237; MY_ROW2=200,174; MY_NEW=228,342; MY_DELETE=309,342; MY_PASSWORD=167,374
 SQ_ROW1=200,162; SQ_ROW2=200,182; SQ_NEW=194,357; SQ_TRASH=403,357
 suite_dbservices() {
@@ -3852,6 +3975,63 @@ suite_dbservices() {
     expect_true $? "Move to Recycle Bin: it's in the Recycle Bin (to be put back from), not deleted" "$(find "$WORK/data-$SUITE" 2>&1)"
 }
 
+# Control Panel > Passwords > Log On: the login screen. The real root helper
+# runs, as a scratch copy working on a scratch /etc and /usr/share/sddm
+# (tests/services/run.sh --setup), through tests/services' stand-in pkexec:
+# nothing of this computer's is changed. The "other" theme is a stand-in
+# Breeze chosen by KDE's kde_settings.conf, as on a computer with Plasma.
+start_logon_applet() {
+    LR=$(bash "$HERE/services/run.sh" --setup | sed -n 's/^export W95_FAKE_ROOT=//p')
+    mkdir -p "$LR/usr/share/sddm/themes/breeze" "$LR/etc/sddm.conf.d" "$LR/etc/systemd/system"
+    cp -r "$REPO/sddm/wayland95" "$LR/usr/share/sddm/themes/"
+    printf '[SddmGreeterTheme]\nName=Breeze\nScreenshot=preview.png\n' >"$LR/usr/share/sddm/themes/breeze/metadata.desktop"
+    printf '[Theme]\nCurrent=breeze\n' >"$LR/etc/sddm.conf.d/kde_settings.conf"
+    ln -s /usr/lib/systemd/system/sddm.service "$LR/etc/systemd/system/display-manager.service"
+    start_logon_applet_again
+}
+# (the sheet opens at 40,30: its radio buttons, OK and Apply)
+LO_OURS=120,177; LO_OTHER=120,199; LO_OK=241,466; LO_APPLY=403,466
+start_logon_applet_again() {
+    PATH=$HERE/services/fakes:$PATH W95_FAKE_ROOT=$LR HOME=$WORK/home-$SUITE \
+        XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        "$BUILD/win95control" --applet passwords --tab 2 >>"$WORK/$SUITE-control.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95control)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+}
+suite_logon() {
+    say "logon: Control Panel > Passwords > Log On, with the real helper on a scratch /etc"
+    local conf
+    fresh
+    start_shell || return
+    mkdir -p "$WORK/home-$SUITE"
+    start_logon_applet
+    conf=$LR/etc/sddm.conf.d/wayland95.conf
+    query list | grep -q "^Passwords Properties|win95control|"; expect_true $? "Passwords Properties opens" "$(query list | tr '\n' ' ')"
+    away; shot other
+    [ ! -e "$conf" ]; expect_true $? "(nothing written by just looking)" "$(ls "$LR/etc/sddm.conf.d")"
+
+    # Wayland 95's, Apply: the helper writes /etc/sddm.conf.d/wayland95.conf
+    pointer click:$LO_OURS wait:0.5
+    away; shot chosen
+    pointer click:$LO_APPLY wait:2
+    grep -qx 'Current=wayland95' "$conf" 2>/dev/null && [ -e "$LR/etc/sddm.conf.d/kde_settings.conf" ]
+    expect_true $? "Wayland 95's, Apply: the helper chooses it in sddm.conf.d (KDE's file left alone)" "$(cat "$conf" 2>&1)"
+    away; shot ours
+
+    # back to the computer's own with OK: the window waits for the helper
+    pointer click:$LO_OTHER wait:0.5 click:$LO_OK wait:2.5
+    [ ! -e "$conf" ]; expect_true $? "the computer's own, OK: our file is removed" "$(ls "$LR/etc/sddm.conf.d")"
+    [ "$(windows_of win95control)" -eq 0 ]; expect_true $? "(and the window closes once that's done)" "$(query list | tr '\n' ' ')"
+
+    # /etc/sddm.conf comes last and wins: the tab says so
+    printf '[Theme]\nCurrent=wayland95\n' >"$conf"
+    printf '[Theme]\nCurrent=breeze\n' >"$LR/etc/sddm.conf"
+    start_logon_applet_again
+    away; shot overridden
+    rm -rf "$LR"
+}
+
 suite_nginx() {
     say "nginx: Control Panel > Services > nginx Web Server, with stand-ins"
     fresh
@@ -3878,6 +4058,80 @@ suite_nginx() {
     away; shot applied
 }
 NG_LOCAL=111,244; NG_MAKE_YOURS=167,329; NG_MY_WEBSITE=162,183; NG_LIST=95,214
+SB_ADD=248,310; SB_ANYONE=124,387; SB_OK=323,429; SB_ROW1=200,153; SB_WORKGROUP=288,220; SB_PASSWORD=156,414
+
+# Control Panel > Services > Samba File Sharing: the real root helper runs,
+# as a scratch copy on a scratch /etc (tests/services/run.sh --setup), through
+# tests/services' stand-ins (pkexec, systemctl, smbpasswd, testparm); the
+# Services list's dpkg-query is tests/fakes-services'. The home is the one
+# the stand-in getent gives you there.
+start_samba_applet() {
+    PATH=$HERE/services/fakes:$HERE/fakes-services:$PATH W95_FAKE_ROOT=$SR W95_FAKE_SERVICES=$FS HOME=$SR/home/user \
+        XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        W95_SERVICES_DEBUG=1 "$BUILD/win95control" --applet services >>"$WORK/$SUITE-control.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95control)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+}
+suite_samba() {
+    say "samba: Control Panel > Services > Samba File Sharing, with the real helper on a scratch /etc"
+    local ours music=/tmp/w95samba-$$/music
+    fresh
+    start_shell || return
+    SR=$(bash "$HERE/services/run.sh" --setup | sed -n 's/^export W95_FAKE_ROOT=//p')
+    FS=$WORK/services-$SUITE; rm -rf "$FS"; mkdir -p "$FS"; echo samba >"$FS/installed"
+    # (a folder of yours whose path w95input can type: no capitals)
+    mkdir -p "$SR/etc/samba" "$SR/units" "$SR/active" "$SR/enabled" "$music"
+    printf '%s\n' "[global]" "   workgroup = WORKGROUP" "   server string = %h server (Samba, Debian)" \
+        "[printers]" "   path = /var/tmp" "   printable = yes" >"$SR/etc/samba/smb.conf"
+    for u in smbd nmbd; do : >"$SR/units/$u.service"; : >"$SR/active/$u.service"; : >"$SR/enabled/$u.service"; done
+    ours=$SR/etc/samba/wayland95.conf
+    start_samba_applet
+    svwait "samba Running"; expect_true $? "Services lists Samba File Sharing (running)" "$(grep services: "$WORK/$SUITE-control.log" | tail -9)"
+    away; shot list
+    pointer click:$SV_ROW_SAMBA wait:0.4 key:Return wait:2
+    query list | grep -q "^Samba Properties|win95control|"; expect_true $? "its Settings: Samba Properties" "$(query list | tr '\n' ' ')"
+    svwait 'samba WORKGROUP "%h server (Samba, Debian)" shares'
+    expect_true $? "(it shows smb.conf's workgroup and description)" "$(grep "services: samba" "$WORK/$SUITE-control.log" | tail -1)"
+    away; shot general
+    pointer click:$SV_TAB2 wait:1
+    away; shot shares-empty
+    pointer click:$SB_ADD wait:0.8
+    away; shot add
+    # a new share: the folder typed, named after it; anyone, read-only
+    pointer type:"$music" wait:0.3 click:$SB_ANYONE wait:0.3
+    away; shot add-filled
+    pointer click:$SB_OK wait:0.6 click:$SB_ROW1 wait:0.4
+    away; shot shares
+    [ ! -e "$ours" ]; expect_true $? "(nothing written before Apply)" "$(ls "$SR/etc/samba")"
+    # General: the workgroup; Apply: the real helper writes it all
+    pointer click:$SV_TAB1 wait:0.6 click:$SB_WORKGROUP wait:0.3 key:ctrl+a type:homenet wait:0.3 click:$SV_APPLY wait:2.5
+    grep -qx "   workgroup = homenet" "$ours" 2>/dev/null && grep -qx "\[music\]" "$ours" \
+        && grep -qx "   path = $music" "$ours" && grep -qx "   guest ok = yes" "$ours" && grep -qx "   read only = yes" "$ours" \
+        && grep -qx "   server string = %h server (Samba, Debian)" "$ours" && grep -qF "include = $ours" "$SR/etc/samba/smb.conf"
+    expect_true $? "Apply: the helper shares music (anyone, read-only), with the new workgroup; smb.conf includes it" "$(cat "$ours" 2>&1)"
+    grep -q "reload smbd.service" "$SR/log" && grep -q "restart nmbd.service" "$SR/log"
+    expect_true $? "(Samba reloaded with them)" "$(cat "$SR/log")"
+    away; shot applied
+    # Set Password: the helper gets it on its standard input
+    pointer click:$SB_PASSWORD wait:0.8 type:sesame key:Return type:sesame wait:0.3
+    away; shot password
+    pointer key:Return wait:1.5
+    [ "$(cat "$SR/smbpasswd.log" 2>/dev/null)" = "smbpasswd -a -s $(id -un)
+sesame
+sesame
+smbpasswd -e $(id -un)" ]
+    expect_true $? "Set Password: smbpasswd gets yours on its standard input" "$(cat "$SR/smbpasswd.log" 2>&1)"
+    away; shot password-set
+    pointer key:Return wait:0.4 click:$SV_CANCEL wait:1
+    # opened again: what the helper wrote is what it shows
+    pointer click:$SV_ROW_SAMBA wait:0.4 key:Return wait:2
+    svwait 'samba homenet "%h server (Samba, Debian)" shares music'
+    expect_true $? "opened again: the workgroup and the shared folder, as written" "$(grep "services: samba" "$WORK/$SUITE-control.log" | tail -1)"
+    pointer click:$SV_TAB2 wait:0.8 click:$SB_ROW1 wait:0.4
+    away; shot reopened
+    rm -rf "$SR" "${music%/music}"
+}
 
 # --- Wayland Studio (win95studio): design a form, its code, run it, the Data view, make a program ---
 # The Studio's window is 1000x680 with its inside at 43,55. A form on the
@@ -4226,6 +4480,128 @@ r = [json.loads(l) for l in out.splitlines()][-1]["result"]
 print(("ERROR " if r["isError"] else "") + " ".join(c.get("text", "") for c in r["content"]))
 PY
 }
+
+suite_studioplayer() {
+    say "studioplayer: what came in with the music player: App's Open box, clicked through; a Slider, a Visualizer, a Timer; the Toolbox and Properties for them"
+    [ -x "$BUILD/win95studio" ] && [ -x "$BUILD/win95apprun" ] || { bad "win95studio" "not built"; return; }
+    command -v ffmpeg >/dev/null || { echo "SKIP  [studioplayer] (no ffmpeg to make the songs)"; return; }
+    fresh
+    start_shell || return
+    STHOME=$WORK/home-$SUITE
+    rm -rf "$STHOME"; mkdir -p "$STHOME/Music/testers/tones"
+    local n t
+    for n in 1 2 3; do
+        t=$(printf '%02d' $n)
+        ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=frequency=$((400 * n)):duration=20" -metadata title="Tone $n" \
+            -metadata artist="The Testers" -c:a libmp3lame "$STHOME/Music/testers/tones/$t-tone-$n.mp3"
+    done
+    python3 "$REPO/tests/studio/player.py" "$STHOME" "$STHOME/Music/testers/tones"
+    ( cd "$STHOME" && HOME=$STHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        exec "$BUILD/win95apprun" player.w95proj >"$WORK/$SUITE-app.log" 2>&1 ) &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of playertest)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1
+    away; shot app
+    pointer click:90,74 wait:1.2
+    query list | grep -q "^Add Songs|playertest|activated"
+    expect_true $? "App.chooseFiles: the Open box, a window of its own, with the title given" "$(query list | tr '\n' ' ')"
+    away; shot openbox
+    # the first song, Shift and the second, Open
+    pointer click:145,137 wait:0.3 keydown:shift click:145,155 keyup:shift wait:0.3 click:465,320 wait:2.5
+    grep -q '^qml: CHOSE \["01-tone-1.mp3","02-tone-2.mp3"\]' "$WORK/$SUITE-app.log"
+    expect_true $? "two songs chosen with a click and a Shift+click, then Open: the callback gets both" "$(grep -v ffmpeg "$WORK/$SUITE-app.log" | tail -5)"
+    grep -q '^qml: TAGS Tone 1 | The Testers' "$WORK/$SUITE-app.log" && grep -q '^qml: TAGS Tone 2 | The Testers' "$WORK/$SUITE-app.log"
+    expect_true $? "App.readTags reads each one's title and artist" "$(grep TAGS "$WORK/$SUITE-app.log")"
+    away; shot playing
+    query list >"$WORK/$SUITE-list1.txt"
+    grep -q '^qml: LOUD' "$WORK/$SUITE-app.log"
+    expect_true $? "the first plays (muted), and the Timer sees the sound's level go up" "$(grep -v ffmpeg "$WORK/$SUITE-app.log" | tail -3)"
+    expect_pixel "the Visualizer's bar for it (green)" playing 310 150 00b400
+    expect_pixel "and black where the other bands are quiet" playing 340 150 000000
+    # the Slider: a click on its groove moves it there (its changed code sets the volume)
+    pointer click:160,70 wait:0.5
+    grep -q '^qml: VOLUME 1[0-9]$' "$WORK/$SUITE-app.log"
+    expect_true $? "a click near the Slider's left end: changed, with a value near the start (10-19)" "$(grep VOLUME "$WORK/$SUITE-app.log")"
+    pointer key:Right wait:0.3
+    [ "$(grep -c '^qml: VOLUME' "$WORK/$SUITE-app.log")" = 2 ]
+    expect_true $? "and Right moves it on one (SmallChange)" "$(grep VOLUME "$WORK/$SUITE-app.log")"
+    # a form's height set by its code: the window follows (Jukebox 95's equalizer panel)
+    away; shot short
+    pointer click:$((43 + 280)),$((55 + 20)) wait:0.8
+    away; shot tall
+    pointer click:$((43 + 280)),$((55 + 20)) wait:0.8
+    away; shot short-again
+    expect_pixel "a form's height set by its code: its window grows (the form's grey where the desktop was)" tall 200 $((55 + 290 + 20)) c0c0c0
+    expect_pixel "and shrinks back" short-again 200 $((55 + 290 + 20)) 008080
+    # the Equalizer: On, then the 31 Hz band clicked near its top
+    pointer click:61,191 wait:0.4
+    grep -q '^qml: EQ \[0,0,0,0,0,0,0,0,0,0\] on true' "$WORK/$SUITE-app.log"
+    expect_true $? "the Equalizer's On: the player's equalizer on (changed)" "$(grep '^qml: EQ' "$WORK/$SUITE-app.log")"
+    pointer click:137,216 wait:0.4
+    grep -q '^qml: EQ \[1[0-2],0,0,0,0,0,0,0,0,0\] on true' "$WORK/$SUITE-app.log"
+    expect_true $? "a click near the top of its 31 Hz slider: that band up 10 to 12 dB" "$(grep '^qml: EQ' "$WORK/$SUITE-app.log")"
+    away; shot equalizer
+    # Cancel (Escape): the callback gets nothing
+    pointer click:90,74 wait:1.2 key:Escape wait:0.6
+    grep -q '^qml: CHOSE \[\]' "$WORK/$SUITE-app.log" && ! query list | grep -q "^Add Songs|"
+    expect_true $? "Escape in the Open box: it closes, and the callback gets no paths" "$(grep CHOSE "$WORK/$SUITE-app.log"; query list | tr '\n' ' ')"
+    # MediaKeys: the media keys reach it through the shell (MPRIS), and the
+    # sound menu (the tray's speaker) shows what it's playing
+    query activate "Player Test"; sleep 0.3
+    pointer click:$((43 + 8 + 12)),$((55 + 44 + 58)) wait:0.8   # (its own ▶: playing again, whatever Escape did)
+    pointer key:XF86AudioPlay wait:0.8
+    grep -q '^qml: PAUSED' "$WORK/$SUITE-app.log"
+    expect_true $? "MediaKeys: the Play/Pause key pauses it (compositor -> shell -> MPRIS)" "$(grep -v ffmpeg "$WORK/$SUITE-app.log" | tail -4)"
+    pointer key:XF86AudioNext wait:0.5 key:XF86AudioPrev wait:0.5
+    grep -q '^qml: NEXT' "$WORK/$SUITE-app.log" && grep -q '^qml: PREVIOUS' "$WORK/$SUITE-app.log"
+    expect_true $? "the Next and Previous keys: its nextTrack and previousTrack events" "$(grep -v ffmpeg "$WORK/$SUITE-app.log" | tail -4)"
+    pointer key:XF86AudioPlay wait:0.8
+    [ "$(grep -c '^qml: STARTED' "$WORK/$SUITE-app.log")" -ge 2 ]
+    expect_true $? "Play/Pause again: it plays on" "$(grep -c STARTED "$WORK/$SUITE-app.log")"
+    query activate "Player Test"; sleep 0.3
+    pointer click:1203,783 wait:0.8
+    away; shot soundmenu
+    expect_pixel "the sound menu (the tray's speaker): Now Playing beside the volume, its picture's box" soundmenu 1112 630 000000
+    pointer click:1207,719 wait:0.6
+    [ "$(grep -c '^qml: NEXT' "$WORK/$SUITE-app.log")" -ge 2 ]
+    expect_true $? "its ⏭ asks the app for the next one" "$(grep -c NEXT "$WORK/$SUITE-app.log")"
+    pointer key:Escape wait:0.3 click:403,43 wait:0.8   # (the player minimized)
+    query list | grep -q "^Player Test|playertest|activated"
+    expect_true $((! $?)) "(the player minimized first)" "$(query list | tr '\n' ' ')"
+    pointer click:1203,783 wait:0.8 click:1165,750 wait:0.8
+    query list | grep -q "^Player Test|playertest|activated"
+    expect_true $? "Show the Player brings its window to the front" "$(query list | tr '\n' ' ')"
+    query activate "Player Test"; sleep 0.3
+    pointer click:440,43 wait:1
+
+    # the Studio: the new elements in the Toolbox, the Timer drawn, Properties for them
+    HOME=$STHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        "$BUILD/win95studio" "$STHOME/player.w95proj" >"$WORK/$SUITE-studio.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95studio)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    away; shot studio
+    pointer click:99,527 click:99,527 wait:0.6
+    away; shot vis-added
+    pointer click:$(stprop 1) wait:0.4 click:1028,381 wait:0.6
+    away; shot vis-player
+    pointer click:930,417 wait:0.4 key:ctrl+s wait:0.6
+    pjson() { python3 -c "import json; f=json.load(open('$STHOME/player.w95proj'))['forms'][0]; c={x['name']: x for x in f['controls']}; print($1)"; }
+    [ "$(pjson "(c['visualizer1']['type'], c['visualizer1']['props'].get('player'))")" = "('Visualizer', 'player1')" ]
+    expect_true $? "Visualizer in the Toolbox (double-click), and player1 chosen as its Player" "$(pjson "c.get('visualizer1')")"
+    # renaming the MediaPlayer: the Visualizers that show it follow
+    pointer click:$(stf 40 50) wait:0.4 click:$(stprop 0) wait:0.3 key:ctrl+a type:song key:Return wait:0.4 key:ctrl+s wait:0.6
+    [ "$(pjson "(c['song']['type'], c['vis1']['props'].get('player'), c['visualizer1']['props'].get('player'))")" = "('MediaPlayer', 'song', 'song')" ]
+    expect_true $? "renaming the MediaPlayer renames it in each Visualizer's Player" "$(pjson "[(n, x.get('props', {}).get('player')) for n, x in c.items()]")"
+    # a Timer: double-click in the Toolbox; the stopwatch is drawn
+    pointer click:99,599 click:99,599 wait:0.6 key:ctrl+s wait:0.6
+    [ "$(pjson "(c['timer2']['type'], c['timer2']['width'], c['timer2']['height'])")" = "('Timer', 28, 28)" ]
+    expect_true $? "Timer in the Toolbox: timer2, 28x28" "$(pjson "c.get('timer2')")"
+    "$BUILD/win95apprun" --check "$STHOME/player.w95proj" >"$WORK/$SUITE-check.out" 2>&1
+    expect_true $? "and the project still compiles" "$(cat "$WORK/$SUITE-check.out")"
+    away; shot studio-done
+}
+
 suite_studiomcp() {
     say "studiomcp: Claude's tools (win95studio-mcp) change a project the Studio has open: it follows"
     [ -x "$BUILD/win95studio" ] && [ -x "$BUILD/win95studio-mcp" ] || { bad "win95studio-mcp" "not built"; return; }
@@ -4290,6 +4666,63 @@ suite_studiomcp() {
     expect_true $? "Help > Build Apps with Claude: Add to Claude Code runs claude mcp add with the server" "$(cat "$WORK/$SUITE-claude.log" 2>&1)"
     away; shot added
     pointer key:Return wait:0.4
+    query list | sed -n 's/^\([^|]*\)|win95studio|.*/\1/p' | while read -r t; do query close "$t"; done
+    sleep 0.5
+}
+
+# --- the Icon chooser: a Button's Icon (Properties) and a ToolBar button's (the Menu Editor)
+suite_studioicons() {
+    say "studioicons: Wayland 95's icons in the Studio: the Icon chooser, a Button's Icon, a ToolBar button's"
+    [ -x "$BUILD/win95studio" ] || { bad "win95studio" "not built"; return; }
+    fresh
+    start_shell || return
+    STHOME=$WORK/home-$SUITE
+    rm -rf "$STHOME"; mkdir -p "$STHOME"
+    local proj=$STHOME/contacts.w95proj
+    python3 - "$proj" <<'PY'
+import json, sys
+form = {"name": "Main", "width": 320, "height": 160, "props": {"title": "Icons"}, "code": {},
+        "controls": [{"type": "ToolBar", "name": "toolBar1", "x": 0, "y": 0, "width": 320, "height": 28,
+                      "props": {"buttons": [{"text": "Save", "name": "saveTool", "action": "save"}]}},
+                     {"type": "Button", "name": "goButton", "x": 16, "y": 60, "width": 96, "height": 24, "props": {"text": "Go"}}]}
+json.dump({"format": 1, "app": {"name": "icons", "title": "Icons", "version": "1.0", "startForm": "Main"},
+           "database": {"driver": "sqlite", "file": "icons.db"}, "tables": [], "forms": [form]}, open(sys.argv[1], "w"), indent=1)
+PY
+    HOME=$STHOME XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland DBUS_SESSION_BUS_ADDRESS=$SHELL_BUS \
+        "$BUILD/win95studio" "$proj" >"$WORK/$SUITE-studio.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do [ "$(windows_of win95studio)" -ge 1 ] && break; sleep 0.25; done
+    sleep 1.5
+    # (its own: stjson is the studio suites' helper)
+    icjson() { python3 -c "import json,sys; f=json.load(open('$proj'))['forms'][0]; c={x['name']: x for x in f['controls']}; print($1)"; }
+
+    # the Button: its Icon row in Properties, the … button: the chooser
+    pointer click:$(stf 64 72) wait:0.4
+    away; shot button
+    pointer click:$(stprop 2) wait:0.4
+    away; shot icon-row
+    pointer click:1012,$((363 + 18 * 2)) wait:0.8
+    away; shot chooser
+    # (None) is first; Right x3: New, Open, Save
+    pointer key:Right key:Right key:Right wait:0.3 key:Return wait:0.5 key:ctrl+s wait:0.6
+    away; shot button-icon
+    [ "$(icjson "c['goButton']['props'].get('icon')")" = save ]
+    expect_true $? "Properties > Icon > …: the Icon chooser; Save chosen is the Button's icon" "$(icjson "c['goButton']['props']")"
+    expect_pixel "and the designer draws it (the floppy's navy, left of Go)" button-icon $(stf 50 71 | tr ',' ' ') 000080
+
+    # the ToolBar: its Buttons in the Menu Editor, Choose… for the icon
+    pointer click:$(stf 160 14) wait:0.4
+    pointer click:$(stprop 1) wait:0.4 click:1028,$((363 + 18 * 1)) wait:0.8
+    away; shot editor
+    pointer click:448,244 wait:0.8   # (Choose… beside Icon)
+    away; shot editor-chooser
+    expect_pixel "the chooser opens over the Menu Editor (its title bar, not the editor's grey)" editor-chooser 340 230 '!c0c0c0'
+    pointer key:Right key:Right key:Right key:Right wait:0.3 key:Return wait:0.5
+    away; shot editor-chosen
+    pointer click:659,593 wait:0.5 key:ctrl+s wait:0.6   # (the Menu Editor's OK)
+    [ "$(icjson "c['toolBar1']['props']['buttons'][0].get('icon')")" = print ]
+    expect_true $? "the Menu Editor's Choose…: the ToolBar button gets the icon chosen (Print)" "$(icjson "c['toolBar1']['props']['buttons']")"
+    away; shot toolbar-icon
     query list | sed -n 's/^\([^|]*\)|win95studio|.*/\1/p' | while read -r t; do query close "$t"; done
     sleep 0.5
 }
@@ -4434,7 +4867,7 @@ PY
     query list | grep -q "^contacts.w95proj - Wayland Studio|win95studio|"
     expect_true $? "the Studio opens the project" "$(query list | tr '\n' ' ')"
     # AIChat in the Toolbox (double-click: the middle of the form)
-    pointer click:69,143 wait:0.5 click:99,551 click:99,551 wait:0.6 key:ctrl+s wait:0.5
+    pointer click:69,143 wait:0.5 click:99,647 click:99,647 wait:0.6 key:ctrl+s wait:0.5
     away; shot designer
     [ "$(stjson Main chat1 '(c["type"], c["width"], c["height"])')" = "('AIChat', 320, 260)" ]
     expect_true $? "AIChat in the Toolbox: chat1 on the form" "$(stjson Main chat1 c)"
@@ -4522,7 +4955,7 @@ JS
     for _ in $(seq 40); do [ "$(windows_of win95studio)" -ge 1 ] && break; sleep 0.25; done
     sleep 1.5
     # Graph in the Toolbox (double-click): the Graph Editor opens at once, on Type
-    pointer click:69,143 wait:0.5 click:99,527 click:99,527 wait:1
+    pointer click:69,143 wait:0.5 click:99,623 click:99,623 wait:1
     away; shot editor-type
     # Pie; Data: Sales, its Region as labels, the sum of Amount; Display: a title, values on it
     pointer click:285,350 wait:0.3 click:350,215 wait:0.4
@@ -4592,7 +5025,7 @@ JS
     for _ in $(seq 40); do [ "$(windows_of win95studio)" -ge 1 ] && break; sleep 0.25; done
     sleep 1.5
     # Graph in the Toolbox (double-click): the Graph Editor; Candlestick
-    pointer click:69,143 wait:0.5 click:99,527 click:99,527 wait:1
+    pointer click:69,143 wait:0.5 click:99,623 click:99,623 wait:1
     pointer click:537,334 wait:0.4
     away; shot editor-type
     # Data: Bars, a bar a Day, its Close, Open, High, Low and Volume
@@ -4630,7 +5063,179 @@ JS
         "$(echo "$colors" | sort -rn | head -8 | tr '\n' ' ')"
 }
 
-ALL=(input firefox windows popups x11 clipboard qt frames snap alttab settings shell dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx studio studiomcp studioimport studioapi studioai studiograph studiostock monitors screen classic vscode)
+# --- other programs' look: GTK's theme and fonts, browsers' title bars ----------
+# (the shell, as the session's desktop: src/programlook.cpp; GNOME's settings
+# go to a keyfile in the test's own config, never your dconf)
+gkey() { # KEY: its value in the test's GSettings keyfile, as written ('...' for strings)
+    sed -n "/^\[org\/gnome\/desktop\/interface\]/,/^\[/s/^$1=//p" "$CONFIG/glib-2.0/settings/keyfile" 2>/dev/null
+}
+suite_programlook() {
+    say "program look: GTK's theme and fonts, browsers' Win95 title bars, the session's fonts"
+    [ -x "$SHELL_BIN" ] || { bad "win95shell" "not built"; return; }
+    fresh
+    local home=$WORK/home-$SUITE ff
+    ff=$home/.mozilla/firefox
+    mkdir -p "$CONFIG/chromium/Default" "$CONFIG/chromium/Profile 1" "$CONFIG/google-chrome/Default" \
+        "$ff/abc.default-esr" "$ff/run.other"
+    printf '{"browser":{"show_home_button":true},"big":13385000000000001,"profile":{"name":"Me"}}' >"$CONFIG/chromium/Default/Preferences"
+    printf '{"browser":{"custom_chrome_frame":true}}' >"$CONFIG/chromium/Profile 1/Preferences"
+    printf '{}' >"$CONFIG/google-chrome/Default/Preferences"
+    ln -s "somehost-$$" "$CONFIG/google-chrome/SingletonLock"      # (running: this script's process)
+    printf '// Mozilla User Preferences\nuser_pref("browser.tabs.inTitlebar", 1);\nuser_pref("x.y", "z");\n' >"$ff/abc.default-esr/prefs.js"
+    printf 'user_pref("a", 1);\n' >"$ff/run.other/prefs.js"
+    ln -s "127.0.0.1:+$$" "$ff/run.other/lock"
+    start_shell --desktop-session || return
+    for _ in $(seq 40); do shell_said "Program look: GTK uses" && break; sleep 0.25; done
+
+    # GTK: GNOME's settings name the theme and the desktop's font
+    [ "$(gkey gtk-theme)" = "'Wayland95'" ] && [ "$(gkey font-name)" = "'Liberation Sans 8.25'" ] \
+        && [ "$(gkey monospace-font-name)" = "'Liberation Mono 10'" ] && [ "$(gkey icon-theme)" = "'Adwaita'" ]
+    expect_true $? "GTK's settings: the Wayland95 theme, Liberation Sans 8.25 (the desktop's 11 pixels), Adwaita icons" \
+        "$(cat "$CONFIG/glib-2.0/settings/keyfile" 2>/dev/null | tr '\n' ' ')"
+    local css=$home/.local/share/themes/Wayland95
+    grep -q "@define-color w95_face #c0c0c0;" "$css/gtk-3.0/gtk.css" && grep -q "@define-color w95_title #000080;" "$css/gtk-3.0/gtk.css" \
+        && grep -q "Adwaita/gtk-contained.css" "$css/gtk-3.0/gtk.css" && grep -q "Default-light.css" "$css/gtk-4.0/gtk.css"
+    expect_true $? "the theme is written for GTK 3 and 4, in the colour scheme's colours" "$(ls -R "$css" 2>&1 | tr '\n' ' ')"
+
+    # browsers: the system title bar, once per profile, not while one runs
+    python3 -I - "$CONFIG/chromium" <<'PY'
+import json, sys
+d = sys.argv[1]
+a = json.load(open(d + "/Default/Preferences")); b = json.load(open(d + "/Profile 1/Preferences"))
+ok = (a["browser"] == {"show_home_button": True, "custom_chrome_frame": False} and a["big"] == 13385000000000001
+      and a["profile"]["name"] == "Me" and b["browser"]["custom_chrome_frame"] is False)
+sys.exit(0 if ok else 1)
+PY
+    expect_true $? "Chromium: its profiles get the system title bar (and keep the rest)" \
+        "$(cat "$CONFIG/chromium/Default/Preferences") / $(cat "$CONFIG/chromium/Profile 1/Preferences")"
+    [ "$(cat "$CONFIG/google-chrome/Default/Preferences")" = "{}" ]
+    expect_true $? "(not Chrome's: it's running)" "$(cat "$CONFIG/google-chrome/Default/Preferences")"
+    [ "$(grep -c inTitlebar "$ff/abc.default-esr/prefs.js")" = 1 ] && grep -q '^user_pref("browser.tabs.inTitlebar", 0);$' "$ff/abc.default-esr/prefs.js" \
+        && grep -q '^user_pref("x.y", "z");$' "$ff/abc.default-esr/prefs.js"
+    expect_true $? "Firefox: its Title Bar box" "$(cat "$ff/abc.default-esr/prefs.js")"
+    [ "$(cat "$ff/run.other/prefs.js")" = 'user_pref("a", 1);' ]
+    expect_true $? "(not a profile that's open)" "$(cat "$ff/run.other/prefs.js")"
+    [ "$(wc -l <"$home/.local/state/wayland95/browser-title-bars")" = 3 ]
+    expect_true $? "(each remembered: changing it back in the browser sticks)" "$(cat "$home/.local/state/wayland95/browser-title-bars" 2>&1)"
+
+    # a GTK window with a header bar: a Win95 title bar
+    GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME=$CONFIG XDG_DATA_HOME=$home/.local/share start_probe G headerbar 00cc00 || return
+    locate_probe G 300 250 || return
+    away; shot gtk
+    expect_color "a GTK header bar takes the Win95 title bar (navy)" gtk $((PX + 3)) $((PY - 12)) 000080
+    # a new colour scheme reaches it
+    printf '[Appearance]\nactiveTitle=#800000\nactiveTitle2=#c06050\n' >>"$CONFIG/wayland95/settings.ini"
+    for _ in $(seq 20); do grep -q "w95_title #800000" "$css/gtk-3.0/gtk.css" && break; sleep 0.25; done
+    sleep 1; away; shot gtk-brick
+    expect_color "the colour scheme changes: GTK's title bar follows (maroon)" gtk-brick $((PX + 3)) $((PY - 12)) 800000
+    pointer key:alt+F4 wait:0.5
+
+    # the browsers themselves: the Win95 frame
+    local title
+    in_compositor chromium --ozone-platform=wayland --user-data-dir="$CONFIG/chromium" --no-first-run \
+        --no-default-browser-check --disable-gpu "data:text/html,<title>Look</title><body style='background:%23ff00ff'>" \
+        >"$WORK/$SUITE-chromium.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 80); do query list | grep -q "|chromium|" && break; sleep 0.25; done
+    title=$(query list | grep "|chromium|" | head -1 | cut -d'|' -f1)
+    query maximize "$title"; sleep 1.5; away; shot chromium
+    expect_color "Chromium: the Win95 title bar (Use system title bar), in the scheme's colours" chromium 2 11 800000
+    query close "$title"; sleep 1.5
+    mkdir -p "$ff/abc.default-esr"
+    printf 'user_pref("browser.shell.checkDefaultBrowser", false);\nuser_pref("browser.aboutwelcome.enabled", false);\nuser_pref("datareporting.policy.dataSubmissionEnabled", false);\nuser_pref("browser.startup.homepage_override.mstone", "ignore");\n' \
+        >"$ff/abc.default-esr/user.js"
+    WAYLAND_DISPLAY=$SOCKET MOZ_ENABLE_WAYLAND=1 firefox --no-remote --profile "$ff/abc.default-esr" \
+        "data:text/html,<title>Fox</title><body style='background:%23ff00ff'>" >"$WORK/$SUITE-firefox.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 160); do query list | grep -q "|firefox" && break; sleep 0.25; done
+    sleep 2.5
+    # (a new profile asks to start maximized, between its first commit and
+    # its first drawing: it opens so, title bar at the top)
+    query list | grep "|firefox" | grep -q maximized
+    expect_true $? "Firefox opens maximized, as it asked" "$(query list | tr '\n' ' ')"
+    title=$(query list | grep "|firefox" | head -1 | cut -d'|' -f1)
+    away; shot firefox
+    expect_color "Firefox: the Win95 title bar (its Title Bar box)" firefox 2 11 800000
+    query close "$title"; sleep 1
+
+    # turned off (Control Panel > Display > Appearance): GTK's settings go
+    # back to their defaults
+    sleep 1; [ "$(query list | wc -l)" -eq 0 ] || query list | cut -d'|' -f1 | while read -r t; do query close "$t"; done
+    sleep 1
+    XDG_CONFIG_HOME=$CONFIG WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland "$BUILD/win95control" --applet display --tab 2 \
+        >"$WORK/$SUITE-control.log" 2>&1 &
+    PIDS+=($!)
+    for _ in $(seq 40); do query list | grep -q "^Display Properties" && break; sleep 0.25; done
+    sleep 1; away; shot control
+    expect_pixel "Control Panel > Display > Appearance: Other programs use this look (on)" control 62 427 000000
+    pointer click:63,425 wait:0.3 click:241,466 wait:1
+    grep -q "^OtherPrograms=false" "$CONFIG/wayland95/settings.ini"
+    expect_true $? "(unticked and OK: saved)" "$(grep -A3 Appearance "$CONFIG/wayland95/settings.ini")"
+    for _ in $(seq 20); do shell_said "Program look: turned off" && break; sleep 0.25; done
+    [ -z "$(gkey gtk-theme)" ] && [ -z "$(gkey font-name)" ]
+    expect_true $? "Other programs use this look, off: GTK's settings go back to their defaults" "$(cat "$CONFIG/glib-2.0/settings/keyfile" | tr '\n' ' ')"
+
+    # the session's fonts (wayland95-session's FONTCONFIG_FILE)
+    local fc=$REPO/session/wayland95-fonts.conf
+    FONTCONFIG_FILE=$fc fc-match -f '%{family[0]}' ':family=sans-serif' | grep -qx "Liberation Sans" \
+        && FONTCONFIG_FILE=$fc fc-match -f '%{family[0]}' ':family=system-ui' | grep -qx "Liberation Sans" \
+        && FONTCONFIG_FILE=$fc fc-match -f '%{family[0]}' ':family=DejaVu Sans' | grep -qx "DejaVu Sans"
+    expect_true $? "the session's fonts: sans-serif and system-ui are Liberation Sans (a named font stays itself)" \
+        "$(FONTCONFIG_FILE=$fc fc-match ':family=sans-serif')"
+}
+
+# --- X11 programs on a scaled display: drawn at its own pixels -------------------
+# (xscale.c) The test display at 125%: the desktop is 1024x640, X11's screen
+# 1280x800 at 120 DPI, and an X11 window shown pixel for pixel
+stripes_sharp() { # SHOT X Y: ten pixels from X,Y across are only black and white, both
+    local c i seen=""
+    for i in 0 1 2 3 4 5 6 7 8 9; do
+        c=$(pixel "$1" $(($2 + i)) "$3")
+        case "$c" in 000000|ffffff) seen="$seen$c " ;; *) return 1 ;; esac
+    done
+    case "$seen" in *000000*ffffff*|*ffffff*000000*) return 0 ;; esac
+    return 1
+}
+suite_x11sharp() {
+    say "x11sharp: X11 programs drawn at a scaled display's own pixels"
+    fresh
+    displays_write $'[HEADLESS-1]\nScale=1.25'
+    export W95INPUT_EXTENT=1024x640 # (the pointer's positions are the desktop's)
+    local dims dpi
+    dims=$(DISPLAY=$XDISPLAY timeout 10 xdpyinfo 2>/dev/null | sed -n 's/^ *dimensions: *\([0-9x]*\) pixels.*/\1/p')
+    [ "$dims" = 1280x800 ]; expect_true $? "X11's screen is the display's own pixels (1280x800, the desktop 1024x640)" "xdpyinfo: $dims"
+    dpi=$(DISPLAY=$XDISPLAY xrdb -query 2>/dev/null | sed -n 's/^Xft.dpi:[[:space:]]*//p')
+    [ "$dpi" = 120 ]; expect_true $? "and 120 DPI (Xft.dpi), so programs draw at that size" "Xft.dpi: $dpi ($(grep -i "x11 programs" "$CLOG"))"
+
+    start_probe X x11stripes 000000 || return
+    local n line x1 x2 py
+    n=$(pmark X); pointer click:300,250 wait:0.8 click:340,250 wait:0.5
+    x1=$(pevents X "$n" | tr '|' '\n' | grep "^press 1" | sed -n 1p | cut -d' ' -f3)
+    x2=$(pevents X "$n" | tr '|' '\n' | grep "^press 1" | sed -n 2p | cut -d' ' -f3)
+    py=$(pevents X "$n" | tr '|' '\n' | grep "^press 1" | sed -n 1p | cut -d' ' -f4)
+    [ -n "$x1" ] && [ $((x2 - x1)) -eq 50 ]
+    expect_true $? "the pointer: 40 desktop pixels are 50 of the X11 window's" "presses at $x1 and $x2"
+    away; shot sharp
+    stripes_sharp sharp 370 312; expect_true $? "its one-pixel stripes stay sharp (only black and white)" \
+        "$(for i in 0 1 2 3 4 5 6 7 8 9; do printf '%s ' "$(pixel sharp $((370 + i)) 312)"; done)"
+    local size; size=$(size_of X)
+    [ $((${size%x*} % 5)) -eq 0 ] && [ $((${size#*x} % 5)) -eq 0 ]
+    expect_true $? "(its size: whole desktop pixels, multiples of 5 X11 pixels)" "size $size"
+    # its frame where it is
+    expect_color "it has the Win95 frame, in place" sharp $(((300 - x1 * 4 / 5) * 5 / 4 + 2)) $(((250 - py * 4 / 5 - 12) * 5 / 4)) 000080
+
+    # turned off: X11 programs are enlarged instead (the old way)
+    printf '[Display]\nSharpX11=false\n' >>"$CONFIG/wayland95/settings.ini"
+    sleep 1.5
+    dims=$(DISPLAY=$XDISPLAY timeout 10 xdpyinfo 2>/dev/null | sed -n 's/^ *dimensions: *\([0-9x]*\) pixels.*/\1/p')
+    [ "$dims" = 1024x640 ]; expect_true $? "Sharp older programs off: X11's screen is the desktop's size" "xdpyinfo: $dims"
+    away; shot blurry
+    ! stripes_sharp blurry 370 312; expect_true $? "(and the stripes are enlarged: blurred)" \
+        "$(for i in 0 1 2 3 4 5 6 7 8 9; do printf '%s ' "$(pixel blurry $((370 + i)) 312)"; done)"
+    unset W95INPUT_EXTENT
+}
+
+ALL=(input firefox windows popups x11 x11sharp clipboard qt frames snap programlook alttab settings shell startitems dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx samba logon studio studioplayer studiomcp studioicons studioimport studioapi studioai studiograph studiostock monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

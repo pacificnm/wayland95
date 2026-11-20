@@ -32,6 +32,11 @@
       <entry name="capture" value="10" summary="Ctrl+Shift+5: the screen capture tool"/>
       <entry name="start_menu" value="11" summary="Ctrl+Esc: the Start menu"/>
       <entry name="task_manager" value="12" summary="Ctrl+Shift+Esc: the System Monitor"/>
+      <entry name="media_play_pause" value="13" summary="the Play (or Play/Pause) key: the playing program, through MPRIS"/>
+      <entry name="media_pause" value="14" summary="the Pause key"/>
+      <entry name="media_stop" value="15" summary="the Stop key"/>
+      <entry name="media_next" value="16" summary="the Next key"/>
+      <entry name="media_previous" value="17" summary="the Previous key"/>
     </enum>
 
     <enum name="key_state">

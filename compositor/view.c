@@ -23,7 +23,9 @@ void view_geometry(struct view *view, struct wlr_box *box)
 	if (view->type == VIEW_XDG) {
 		wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, box);
 	} else {
-		*box = (struct wlr_box){0, 0, view->xsurface->width, view->xsurface->height};
+		// (X11's size is the desktop's times xscale)
+		*box = (struct wlr_box){0, 0, xscale_from_x(view->server, view->xsurface->width),
+				xscale_from_x(view->server, view->xsurface->height)};
 	}
 }
 
@@ -42,7 +44,8 @@ void view_move(struct view *view, int x, int y)
 	place_node(view);
 	if (view->type == VIEW_XWAYLAND) {
 		// X11 programs place their menus from where X thinks they are
-		wlr_xwayland_surface_configure(view->xsurface, x, y, view->xsurface->width, view->xsurface->height);
+		wlr_xwayland_surface_configure(view->xsurface, xscale_to_x(view->server, x), xscale_to_x(view->server, y),
+				view->xsurface->width, view->xsurface->height);
 	}
 }
 
@@ -52,8 +55,10 @@ void view_resize(struct view *view, int width, int height)
 		return;
 	if (view->type == VIEW_XDG)
 		wlr_xdg_toplevel_set_size(view->xdg_toplevel, width, height);
-	else
-		wlr_xwayland_surface_configure(view->xsurface, view->x, view->y, width, height);
+	else // (sizes X11 can show pixel for pixel: xscale.c)
+		wlr_xwayland_surface_configure(view->xsurface, xscale_to_x(view->server, view->x),
+				xscale_to_x(view->server, view->y), xscale_to_x(view->server, xscale_snap(view->server, width)),
+				xscale_to_x(view->server, xscale_snap(view->server, height)));
 }
 
 static bool resize_outstanding(struct view *view)
@@ -372,6 +377,9 @@ void view_set_maximized(struct view *view, bool maximized)
 		} else if (view->saved.width > 0) {
 			view_move(view, view->saved.x, view->saved.y);
 			view_resize(view, view->saved.width, view->saved.height);
+		} else if (view->type == VIEW_XDG) {
+			// maximized before it ever had a size of its own: it chooses
+			wlr_xdg_toplevel_set_size(view->xdg_toplevel, 0, 0);
 		}
 	}
 	apply_state(view);
@@ -547,7 +555,14 @@ void view_mapped(struct view *view)
 	struct output *output = view->placed ? output_for_view(view)
 			: output_at(server, server->cursor->x, server->cursor->y);
 	struct wlr_box area = output ? output->usable : (struct wlr_box){0, 0, 640, 480};
-	if (!view->placed) {
+	struct wlr_box state;
+	if (!view->placed && (view->maximized || view->fullscreen) && state_box(view, &state)) {
+		// it asked to be maximized (or fullscreen) before it showed (Firefox
+		// does, between its first commit and its first drawing): there
+		view_move(view, state.x, state.y);
+		view_resize(view, state.width, state.height);
+		view->placed = true;
+	} else if (!view->placed) {
 		// cascade new windows (their frames) from the top left of the
 		// usable area
 		int n = wl_list_length(&server->views) % 8;
@@ -573,11 +588,13 @@ void view_mapped(struct view *view)
 	wl_signal_add(&view->ftl->events.request_maximize, &view->ftl_maximize);
 	view->ftl_fullscreen.notify = ftl_fullscreen;
 	wl_signal_add(&view->ftl->events.request_fullscreen, &view->ftl_fullscreen);
-	struct wlr_ext_foreign_toplevel_handle_v1_state state = {
+	struct wlr_ext_foreign_toplevel_handle_v1_state ext_state = {
 		.title = view_title(view), .app_id = view_app_id(view),
 	};
-	view->ext_ftl = wlr_ext_foreign_toplevel_handle_v1_create(server->ext_toplevels, &state);
+	view->ext_ftl = wlr_ext_foreign_toplevel_handle_v1_create(server->ext_toplevels, &ext_state);
 	view_update_title(view);
+	if (view->maximized || view->fullscreen)
+		apply_state(view); // (the taskbar's window list hears of it too)
 
 	view_focus(view);
 	input_refresh_pointer(server);

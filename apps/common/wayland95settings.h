@@ -43,6 +43,10 @@ class Wayland95Settings : public QObject
     // derived 3D edge colors light/highlight/shadow/dark
     Q_PROPERTY(QVariantMap colors READ colors NOTIFY changed)
     Q_PROPERTY(QString colorScheme READ colorScheme NOTIFY changed)
+    // GTK programs and web browsers take this look too (src/programlook.cpp)
+    Q_PROPERTY(bool otherProgramsLook READ otherProgramsLook WRITE setOtherProgramsLook NOTIFY changed)
+    // X11 programs drawn at a scaled display's own pixels (compositor/xscale.c)
+    Q_PROPERTY(bool sharpX11 READ sharpX11 WRITE setSharpX11 NOTIFY changed)
     // Taskbar
     Q_PROPERTY(bool showClock READ showClock WRITE setShowClock NOTIFY changed)
     Q_PROPERTY(bool clock24Hour READ clock24Hour WRITE setClock24Hour NOTIFY changed)
@@ -119,6 +123,10 @@ public:
     // the 3D edge colors Wayland 95 derives from a face color
     Q_INVOKABLE QVariantMap edgeColors(const QColor &face) const;
 
+    bool otherProgramsLook() const { return m_otherProgramsLook; }
+    void setOtherProgramsLook(bool on);
+    bool sharpX11() const { return m_sharpX11; }
+    void setSharpX11(bool on);
     bool showClock() const { return m_showClock; }
     void setShowClock(bool on);
     bool clock24Hour() const { return m_clock24Hour; }
@@ -215,6 +223,8 @@ private:
     QHash<QString, QColor> m_colors;
     QString m_colorScheme;
     bool m_showClock = true;
+    bool m_otherProgramsLook = true;
+    bool m_sharpX11 = true;
     bool m_clock24Hour = false;
     bool m_showVolume = true;
     bool m_showNotifications = true;

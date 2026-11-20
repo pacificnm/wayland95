@@ -106,8 +106,10 @@ bar), **Locked** (it can be read and copied but not changed),
 
 ### Button
 
-A push button. **Caption**, **Default** (the button Enter presses: drawn
-with a black frame). Event: **clicked**.
+A push button. **Caption**, **Icon** (one of Wayland 95's icons, left of
+the Caption, or alone with no Caption: **…** opens the Icon chooser,
+below), **Default** (the button Enter presses: drawn with a black frame).
+Event: **clicked**.
 
 ### CheckBox
 
@@ -164,6 +166,11 @@ the grid lists the form's own DataTable). Events: **rowSelected**
 The grid reads its table when the form opens, and again whenever the
 table changes, whoever changed it.
 
+A column is as wide as you say: put its width in pixels after its name
+and a colon in **Columns** (`Title:180`, `Length:48`). The columns with
+no width share what's left between them (72 pixels each at least); with
+more than fits, a scroll bar goes across under them.
+
 ### Menu and ToolBar
 
 A **Menu** is the form's menu bar; a **ToolBar** a row of buttons. Both go
@@ -186,9 +193,12 @@ Editor** (F4, or their **...**):
 - **Name**: what code calls it (blank: made from the Caption).
 - **Shortcut** (a menu item): keys that choose it from anywhere in the
   form: `Ctrl+O`, `F5`, `Ctrl+Shift+S`.
-- **Symbol**, **Picture** and **ToolTip** (a tool button): a character
-  like `✔` or `»`, or a picture, and what it says when the pointer rests
-  on it. The ToolBar's **ShowCaptions** shows the Caption beside them.
+- **Icon**, **Symbol**, **Picture** and **ToolTip** (a tool button):
+  **Choose…** picks one of Wayland 95's icons (below); or a character
+  like `✔` (**Symbol**), or a picture file of your own; and what it says
+  when the pointer rests on it. A Picture is shown if there is one, else
+  the Icon, else the Symbol. The ToolBar's **ShowCaptions** shows the
+  Caption beside it; a button with no Caption shows the icon alone.
 - **Enabled**, and **Checked** (a menu item: a tick by it; a tool button:
   pushed in).
 - **Action**: what it does, with no code:
@@ -218,6 +228,19 @@ Recent")`; the same for a ToolBar's buttons. An item that opens a form
 that isn't in the project is a problem Start and Make Program name.
 
 ![The Club menu, in the program](images/app-menu.png)
+
+#### The Icon chooser
+
+![The Icon chooser](images/icon-chooser.png)
+
+Wayland 95 has its own small icons, drawn the Windows 95 way: New, Open,
+Save, Print, Cut, Copy, Paste, Undo, Find, Add, Delete, the record moves
+(First, Previous, Next, Last), Help, People, Mail, Calendar, Chart,
+Money and more. **Choose…** in the Menu Editor, or **…** on a Button's
+**Icon**, shows them all: click one and **OK** (or double-click it).
+**(None)** takes the icon away. A disabled button draws its icon grey,
+as Windows 95 did. They come with the app when it's made into a program;
+there's nothing to copy.
 
 ### DateTimePicker
 
@@ -269,13 +292,125 @@ Click the picture, or press **Space**, to play and pause; **Left** and
 | Mute | No sound. |
 | ShowControls | The buttons, the bar and the time under it. False: only the picture. |
 | FillMode | How a video fits: Fit (all of it), Stretch (to the shape), Crop (filled, the edges cut). |
+| Equalizer | Its sound through the equalizer (below). |
+| EqPreset | The equalizer's bands to start with: Flat, Rock, Pop, Jazz, Classical, Dance, Metal, Bass Boost, Treble Boost, Vocal, Loudness, Headphones. |
+| EqPreamp | The equalizer's preamp, -12 to +12 dB. |
+| MediaKeys | The keyboard's **Play/Pause**, **Next**, **Previous** and **Stop** keys, and the sound menu (click the speaker by the clock), control it, and show what it's playing. |
 
 Make it small (just its controls) for a sound; set **Visible** to False
 for one that plays with no player to see, like a sound when a record is
 saved. With a **DataField** it plays the file that field holds (a path or
 a web address). Events: **started**, **paused**, **stopped**,
 **finished** (it played to the end), **failed** (`player1.errorString`
-says why).
+says why), **loaded** (the file is open: its length and tags are known)
+and **positionChanged** (it moved on: several times a second while it
+plays). With **MediaKeys**, **nextTrack** and **previousTrack**: the Next
+or Previous key, or the sound menu's ⏭ or ⏮, was pressed; what's next is
+the app's to say (`player1.source = ...; player1.play();`).
+
+With MediaKeys on, the desktop sees the player as it sees Firefox or
+VLC playing: the media keys go to whichever program is playing (the one
+that started last, if several are), and the sound menu shows its title,
+artist and cover beside the volume, with **⏮ ⏯ ⏭** and **Show the
+Player**. A program with several MediaPlayers can have MediaKeys on more
+than one; leave it off for a sound that only marks something happening.
+
+Once a file's loaded, its own tags are in code: `player1.title`,
+`artist`, `album`, `albumArtist`, `genre`, `trackNumber` and `year`
+(empty, or 0, for a tag it hasn't), and `player1.coverArt`: the picture
+inside the file (an album's cover), as a file an **Image** can show. In
+the player's loaded code: `coverImage.picture = player1.coverArt;`. To read a file's tags without
+playing it, `App.readTags` ([Writing Code](code.md#files-and-folders)).
+Wayland 95 reads tags through Qt, which takes a year only from a whole
+date (`1986-06-29`, not `1986`), and a track number only when it's on
+its own (`3`, not `3/8`).
+
+### Visualizer
+
+What a **MediaPlayer** on the form is playing, as it plays, the way a
+music player's display shows it:
+
+![A Visualizer beside its MediaPlayer](images/visualizer.png)
+
+| Property | What it is |
+|---|---|
+| Player | The MediaPlayer whose sound it shows (a list of the form's). Renaming the MediaPlayer renames it here too. |
+| Style | **Spectrum**: a bar for each band of notes, the low ones on the left. **Oscilloscope**: the wave itself. **Meter**: how loud, across. |
+| Bars | How many bars Spectrum has (1 to 64). |
+| ShowPeaks | A line over each bar where it last reached, falling slowly. |
+| ForeColor | The bars' and the wave's color. Blank: green, then yellow and red at the top, as a meter's. |
+| BackColor | Behind them. Blank: black. |
+| PeakColor | The peaks' color. Blank: grey. |
+| BorderStyle | None, Single, or Sunken (the default). |
+
+It moves while the sound plays, even with the player muted, and falls
+away when it stops. Its event is **clicked** (to change its Style, say).
+The numbers it draws are the MediaPlayer's, for code of your own:
+`player1.levels` (a list of the bands, low to high, each 0 to 1),
+`player1.peaks`, `player1.level` (how loud, 0 to 1) and
+`player1.waveform` (64 points, -1 to 1).
+
+### Equalizer
+
+A MediaPlayer's equalizer, the way a music player has one: **On**, a list
+of **presets** and **Flat**, the **preamp**, and a slider for each of ten
+bands, from 31 Hz (the deepest bass) to 16 kHz (the top of the treble),
+each from -12 to +12 dB.
+
+![The Equalizer, on Rock](images/equalizer.png)
+
+| Property | What it is |
+|---|---|
+| Player | The MediaPlayer it's the equalizer of. |
+| ShowPresets | The preset list and the Flat button across its top. |
+| ShowPreamp | The preamp's slider, left of the bands. |
+
+What it changes is the MediaPlayer's: its **Equalizer**, its bands and
+its preamp, so a player can have them set in the Properties window
+(**Equalizer**, **EqPreset**, **EqPreamp**) or by code with no Equalizer
+on the form at all:
+
+```
+player1.equalizer = true;
+player1.applyEqPreset("Bass Boost");
+player1.setEqGain(9, 4);               // 16 kHz up 4 dB
+player1.eqGains = [6, 5, 3, 0, 0, 0, 0, 2, 4, 5];
+```
+
+`player1.eqPresetNow` is the preset the bands are now (`Custom` when
+they're none). Its event is **changed**: something on it was changed.
+To keep someone's equalizer for the next time, save
+`JSON.stringify(player1.eqGains)` in a table in the changed code, and set
+it back in the form's load code.
+
+With the equalizer on, the sound comes out about a tenth of a second
+after the picture (it goes through the filters first): no one hears it
+in music, but a video's lips may look a little early. The Visualizer
+shows the sound as it comes out of the equalizer.
+
+### Slider
+
+Win95's trackbar: a value from **Min** to **Max**, dragged, clicked on
+its groove, or moved with the arrow keys (**SmallChange** at a time;
+**Page Up** and **Page Down** by **LargeChange**; **Home** and **End** to
+the ends). **Value** is where it starts; **TickCount** the tick marks
+under it (0: none); **Orientation** across or up and down (the top is
+Max). With a **DataField** it shows and changes a number field. Its event
+is **changed**: it was moved (`slider1.value`).
+
+A volume control: Min 0, Max 100, and in its changed code
+`player1.volume = volumeSlider.value;`.
+
+### Timer
+
+Runs its **timer** event every **Interval** milliseconds (1000 is once a
+second) while it's **Enabled**. Like Visual Basic's, it's a stopwatch on
+the form in the Studio, and the program doesn't show it. Code starts and
+stops it: `timer1.enabled = false`, `timer1.start()`, `timer1.stop()`;
+`timer1.count` is how many times it's gone off since it started.
+
+A clock that shows where a song is: a Timer with Interval 500, and in its
+timer code `timeLabel.text = player1.clock(player1.position);`.
 
 ### Graph
 
@@ -325,6 +460,14 @@ columns, bars or areas on top of each other instead of side by side;
 | Grid lines | Lines across at each step of the value axis. |
 | Values on the graph | Each value written by its column or point; a pie's percents. |
 
+Its colors are in the **Properties** window, not the Graph Editor:
+**BackColor** is the color around the graph (its titles, axes and legend
+sit on it) and **PlotColor** the color behind its columns, lines and
+candles. Left blank, they're the desktop's: the graph is the color of
+the form, and its plot the color of a list box, and they change with the
+desktop's color scheme (Control Panel > Display). **ForeColor** is its
+text's.
+
 ![The app: a pie of the books by genre](images/graph-app.png)
 
 When the app runs, the graph reads its table when the form opens, and
@@ -348,6 +491,7 @@ In code, a graph can also be given its data, or changed:
 graph1.setData(["Mon", "Tue", "Wed"], [{ name: "Takings", values: [120, 95, 140] }]);
 graph1.graphType = "Line";      // Column, Bar, Line, Area, Pie, Doughnut, Scatter (or a stock graph's)
 graph1.title = "This week";
+graph1.plotColor = "#ffffcc";   // behind the columns (backColor: around them; "": the desktop's)
 graph1.refresh();               // read its table again
 ```
 

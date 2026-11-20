@@ -81,6 +81,7 @@ static void defaults(struct settings *s)
 	set_color(s->inactive_title2, 0xb5b5b5);
 	set_color(s->inactive_title_text, 0xc0c0c0);
 	snprintf(s->font, sizeof s->font, "Liberation Sans");
+	s->sharp_x11 = true;
 	s->layout[0] = 0;
 	s->repeat_delay = 600;
 	s->repeat_rate = 25;
@@ -168,6 +169,8 @@ static void load(struct server *server)
 				if (strcmp(key, "Layout") == 0) snprintf(s->layout, sizeof s->layout, "%.63s", value);
 				else if (strcmp(key, "RepeatDelay") == 0) s->repeat_delay = clampi(atoi(value), 100, 2000);
 				else if (strcmp(key, "RepeatRate") == 0) s->repeat_rate = clampi(atoi(value), 1, 60);
+			} else if (strcmp(group, "Display") == 0) {
+				if (strcmp(key, "SharpX11") == 0) s->sharp_x11 = is_true(value);
 			} else if (strcmp(group, "Mouse") == 0) {
 				if (strcmp(key, "DoubleClickInterval") == 0) s->double_click_ms = clampi(atoi(value), 100, 2000);
 			} else if (strcmp(group, "Touchpad") == 0) {
@@ -271,6 +274,7 @@ static void apply_all(struct server *server)
 	struct pointer_device *pd;
 	wl_list_for_each(pd, &server->pointers, link)
 		settings_apply_pointer(server, pd->device);
+	xscale_update(server); // (Display/SharpX11)
 	// frames in the new colours
 	struct view *view;
 	wl_list_for_each(view, &server->views, link) {

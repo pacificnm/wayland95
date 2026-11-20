@@ -60,6 +60,7 @@ QString ProblemReports::displayName(const QString &program)
         { QStringLiteral("win95repos"), QStringLiteral("Repositories") },
         { QStringLiteral("win95markdown"), QStringLiteral("Markdown Editor") },
         { QStringLiteral("win95photos"), QStringLiteral("Photo Gallery") },
+        { QStringLiteral("win95archive"), QStringLiteral("Archive Manager") },
         { QStringLiteral("win95calc"), QStringLiteral("Calculator") },
         { QStringLiteral("win95email"), QStringLiteral("Email") },
         { QStringLiteral("win95web"), QStringLiteral("Web Browser") },

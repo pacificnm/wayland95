@@ -21,7 +21,7 @@ libdrm-dev libpixman-1-dev libinput-dev libxkbcommon-dev libvterm-dev libxcb1-de
 libwayland-dev wayland-protocols zlib1g-dev libfontconfig-dev libsqlite3-dev pkg-config cmake
 build-essential xwayland pkexec libqt6sql6-sqlite libqt6sql6-mysql libqt6sql6-psql
 qml6-module-qtmultimedia libqt6multimedia6 qt6-multimedia-dev libglib2.0-dev fonts-liberation
-libssl-dev libpam0g-dev"
+libssl-dev libpam0g-dev libarchive-dev"
 if command -v dpkg >/dev/null 2>&1; then
     missing=""
     for p in $NEEDED; do

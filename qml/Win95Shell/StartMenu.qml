@@ -72,7 +72,8 @@ FocusScope {
 
     // Wayland 95's own programs, and where they go
     readonly property var ownPrograms: ({
-        "Accessories":  [{ label: "Calculator",     icon: "calc",    program: "win95calc" },
+        "Accessories":  [{ label: "Archive Manager", icon: "archive", program: "win95archive" },
+                         { label: "Calculator",     icon: "calc",    program: "win95calc" },
                          { label: "Markdown Editor", icon: "markdown", program: "win95markdown" },
                          { label: "Notepad",        icon: "notepad", program: "win95notepad" },
                          { label: "Photo Gallery",  icon: "photos",  program: "win95photos" }],

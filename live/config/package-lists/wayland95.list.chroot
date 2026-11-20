@@ -88,6 +88,9 @@ mesa-vulkan-drivers
 libgl1-mesa-dri
 
 # --- programs -------------------------------------------------------------
+# Archive Manager's helper for 7z archives with a password (the rest it
+# does itself, with libarchive)
+7zip
 chromium
 chromium-sandbox
 sudo

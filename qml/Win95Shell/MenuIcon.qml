@@ -281,6 +281,24 @@ Canvas {
             ctx.fillStyle = "#e0a000";
             ctx.beginPath(); ctx.moveTo(30, 18); ctx.lineTo(32, 20); ctx.lineTo(22, 30); ctx.lineTo(19, 31); ctx.lineTo(20, 28); ctx.closePath(); ctx.fill(); ctx.stroke();
             break;
+        case "archive":
+            // a card box with a zipper down its front, and an arrow going in
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = "#000000";
+            ctx.fillStyle = "#f0d070";
+            ctx.beginPath(); ctx.moveTo(4.5, 12.5); ctx.lineTo(9.5, 7.5); ctx.lineTo(29.5, 7.5); ctx.lineTo(24.5, 12.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "#a08020";
+            ctx.beginPath(); ctx.moveTo(24.5, 12.5); ctx.lineTo(29.5, 7.5); ctx.lineTo(29.5, 25.5); ctx.lineTo(24.5, 30.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+            frame(4, 12, 21, 19, "#e0b040");
+            rect(13, 13, 3, 17, "#606060");
+            for (var z = 14; z < 29; z += 2)
+                rect(z % 4 === 0 ? 13 : 15, z, 1, 1, "#e0e0e0");
+            rect(12, 24, 5, 5, "#c0c0c0");
+            rect(13, 25, 3, 1, "#000000");
+            // the arrow
+            ctx.fillStyle = "#00a000";
+            ctx.beginPath(); ctx.moveTo(17.5, 0.5); ctx.lineTo(21.5, 0.5); ctx.lineTo(21.5, 4.5); ctx.lineTo(24.5, 4.5); ctx.lineTo(19.5, 9.5); ctx.lineTo(14.5, 4.5); ctx.lineTo(17.5, 4.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+            break;
         case "photos":
             // two prints, the front one a landscape: sky, sun, green hills
             ctx.save();

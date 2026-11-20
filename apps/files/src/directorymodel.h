@@ -128,6 +128,19 @@ public:
     Q_INVOKABLE bool renameRow(int row, const QString &newName);
     Q_INVOKABLE int newFolder(); // returns the new row, or -1
     Q_INVOKABLE void openTerminalHere();
+
+    // archives (Archive Manager, win95archive): "" if it isn't installed
+    Q_INVOKABLE bool hasArchiver() const;
+    // every selected item is an archive Archive Manager can open
+    Q_INVOKABLE bool selectionIsArchives() const;
+    // "photos" for photos.tar.gz (Extract to photos\), "" with several selected
+    Q_INVOKABLE QString archiveFolderName() const;
+    // what Add to ... names its zip: the item's name (several: this folder's)
+    Q_INVOKABLE QString newArchiveName() const;
+    Q_INVOKABLE void extractSelected(bool toSubfolders);
+    Q_INVOKABLE void openSelectedInArchiver();
+    // ask: the Add box (archive, format, password); else straight to newArchiveName()
+    Q_INVOKABLE void addSelectedToArchive(bool ask);
     Q_INVOKABLE QString propertiesText() const;
 
     // drives you plug in (My Computer): open one (it's mounted first), and
@@ -189,6 +202,8 @@ public:
     // open a file as a double-click does (a program runs, text goes to
     // Notepad, the rest to its program); "" or what went wrong
     static QString openFile(const QString &path);
+    // a file Archive Manager opens (by its name)
+    static bool isArchiveName(const QString &name);
 private:
     static QString trashFilesDir();
     static QString trashInfoDir();

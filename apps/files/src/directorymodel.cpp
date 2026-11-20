@@ -33,6 +33,32 @@ fs::path toFsPath(const QString &p)
     return fs::path(QFile::encodeName(p).toStdString());
 }
 
+// our own programs: next to this one (a build tree) or on the PATH
+QString ours(const QString &program)
+{
+    const QString beside = QDir(QCoreApplication::applicationDirPath()).filePath(program);
+    return QFileInfo(beside).isExecutable() ? beside : QStandardPaths::findExecutable(program);
+}
+
+// what Archive Manager reads, longest first (".tar.gz" before ".gz")
+const char *const archiveSuffixes[] = {
+    ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tbz", ".tar.xz", ".txz", ".tar.zst", ".tzst", ".tar.lzma", ".tlz",
+    ".tar", ".zip", ".jar", ".7z", ".rar", ".iso", ".cab", ".cpio", ".lzh", ".lha", ".xar",
+    ".gz", ".bz2", ".xz", ".zst", ".lzma",
+};
+
+// the name less its archive suffix: "photos.tar.gz" -> "photos"
+QString archiveBase(const QString &name)
+{
+    const QString lower = name.toLower();
+    for (const char *s : archiveSuffixes) {
+        const QLatin1String suffix(s);
+        if (lower.endsWith(suffix) && lower.size() > suffix.size())
+            return name.left(name.size() - suffix.size());
+    }
+    return QFileInfo(name).completeBaseName();
+}
+
 QString iconKindForMime(const QMimeType &mime, const QFileInfo &info)
 {
     const QString name = mime.name();
@@ -721,11 +747,12 @@ QString DirectoryModel::openFile(const QString &path)
     }
     QString kind, type;
     describeFile(path, false, &kind, &type);
-    // our own programs: next to this one (a build tree) or on the PATH
-    auto ours = [](const QString &program) {
-        const QString beside = QDir(QCoreApplication::applicationDirPath()).filePath(program);
-        return QFileInfo(beside).isExecutable() ? beside : QStandardPaths::findExecutable(program);
-    };
+    if (isArchiveName(name)) {
+        // archives open in Archive Manager
+        const QString archiver = ours(QStringLiteral("win95archive"));
+        if (!archiver.isEmpty() && QProcess::startDetached(archiver, {path}, info.absolutePath()))
+            return QString();
+    }
     static const QStringList markdown{QStringLiteral("md"), QStringLiteral("markdown"), QStringLiteral("mdown"), QStringLiteral("mkd")};
     if (markdown.contains(info.suffix().toLower())) {
         // Markdown opens formatted, in the Markdown Editor
@@ -751,6 +778,102 @@ QString DirectoryModel::openFile(const QString &path)
     if (!QDesktopServices::openUrl(QUrl::fromLocalFile(path)))
         return QStringLiteral("There is no program associated with '%1'.").arg(name);
     return QString();
+}
+
+bool DirectoryModel::isArchiveName(const QString &name)
+{
+    const QString lower = name.toLower();
+    for (const char *s : archiveSuffixes) {
+        const QLatin1String suffix(s);
+        if (lower.endsWith(suffix) && lower.size() > suffix.size())
+            return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// archives (Archive Manager does the work, with just its progress box)
+
+bool DirectoryModel::hasArchiver() const
+{
+    return !ours(QStringLiteral("win95archive")).isEmpty();
+}
+
+bool DirectoryModel::selectionIsArchives() const
+{
+    if (isComputer() || isTrash())
+        return false;
+    int n = 0;
+    for (const Entry &e : m_entries) {
+        if (!e.selected)
+            continue;
+        if (e.isDir || !isArchiveName(e.name))
+            return false;
+        ++n;
+    }
+    return n > 0;
+}
+
+QString DirectoryModel::archiveFolderName() const
+{
+    const int row = firstSelectedRow();
+    if (row < 0 || selectionCount() != 1)
+        return QString();
+    return archiveBase(m_entries.at(row).name);
+}
+
+QString DirectoryModel::newArchiveName() const
+{
+    const int row = firstSelectedRow();
+    if (row < 0)
+        return QString();
+    QString base;
+    if (selectionCount() == 1) {
+        const Entry &e = m_entries.at(row);
+        base = e.isDir ? e.name : QFileInfo(e.name).completeBaseName();
+        if (base.isEmpty())
+            base = e.name; // ".bashrc"
+    } else {
+        base = QFileInfo(m_path).fileName();
+    }
+    if (base.isEmpty())
+        base = QStringLiteral("Archive");
+    return base + QStringLiteral(".zip");
+}
+
+void DirectoryModel::extractSelected(bool toSubfolders)
+{
+    const QString archiver = ours(QStringLiteral("win95archive"));
+    if (archiver.isEmpty() || !selectionIsArchives())
+        return;
+    const QStringList args = QStringList{toSubfolders ? QStringLiteral("--extract-subfolders") : QStringLiteral("--extract-here")}
+                             + selectedPaths();
+    if (!QProcess::startDetached(archiver, args, m_path))
+        emit error(QStringLiteral("Extract"), QStringLiteral("Cannot run Archive Manager (win95archive)."));
+}
+
+void DirectoryModel::openSelectedInArchiver()
+{
+    const QString archiver = ours(QStringLiteral("win95archive"));
+    if (archiver.isEmpty())
+        return;
+    for (const QString &p : selectedPaths())
+        if (!QProcess::startDetached(archiver, {p}, m_path)) {
+            emit error(QStringLiteral("Archive Manager"), QStringLiteral("Cannot run Archive Manager (win95archive)."));
+            return;
+        }
+}
+
+void DirectoryModel::addSelectedToArchive(bool ask)
+{
+    const QString archiver = ours(QStringLiteral("win95archive"));
+    const QStringList paths = selectedPaths();
+    if (archiver.isEmpty() || paths.isEmpty() || isComputer() || isTrash())
+        return;
+    const QStringList args = ask ? QStringList{QStringLiteral("--add-dialog")} + paths
+                                 : QStringList{QStringLiteral("--add"), QDir(m_path).filePath(newArchiveName())} + paths;
+    if (!QProcess::startDetached(archiver, args, m_path))
+        emit error(QStringLiteral("Add to Archive"), QStringLiteral("Cannot run Archive Manager (win95archive)."));
 }
 
 void DirectoryModel::openSelected()

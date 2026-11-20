@@ -230,6 +230,14 @@ else()
                     "Install it with: sudo apt-get install libvterm-dev")
 endif()
 
+find_package(LibArchive 3.3 QUIET)
+if(LibArchive_FOUND)
+    add_subdirectory(apps/archive) # win95archive (Archive Manager)
+else()
+    message(WARNING "libarchive not found - skipping win95archive. "
+                    "Install it with: sudo apt-get install libarchive-dev")
+endif()
+
 # --- the login session -------------------------------------------------------
 # "Wayland 95" in the login screen's session list (SDDM and GDM read
 # share/wayland-sessions), the script it runs, and the portal choices for it.

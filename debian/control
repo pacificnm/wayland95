@@ -22,6 +22,7 @@ Build-Depends: debhelper-compat (= 13),
                libxkbcommon-dev,
                libinput-dev,
                libvterm-dev,
+               libarchive-dev,
                libxcb1-dev,
                libfontconfig-dev,
                libglib2.0-dev,
@@ -81,7 +82,9 @@ Recommends: network-manager,
             rsync,
             cron | cron-daemon,
             gsettings-desktop-schemas,
-            dconf-gsettings-backend
+            dconf-gsettings-backend,
+            7zip
+Suggests: unar
 Description: Windows 95-style Wayland desktop
  A complete desktop session in the style of Windows 95: a Wayland
  compositor (wlroots) with Win95 window frames, a taskbar, Start menu and

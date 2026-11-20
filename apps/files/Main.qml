@@ -268,6 +268,7 @@ Window {
         }
         return [
             { text: "Open", action: dir.openSelected },
+        ].concat(window.archiveItems(), [
             { separator: true },
             { text: "Cut", enabled: dir.writable, action: dir.cutSelected },
             { text: "Copy", enabled: !dir.isComputer, action: dir.copySelected },
@@ -276,6 +277,28 @@ Window {
             { text: "Rename", enabled: sel === 1 && dir.writable, action: window.startRename },
             { separator: true },
             { text: "Properties", action: window.showProperties },
+        ]);
+    }
+
+    // Archive Manager's: Extract Here / Extract to name\ / Open with on
+    // archives, Add to on the rest (none if it isn't installed)
+    function archiveItems() {
+        if (dir.isComputer || dir.isTrash || dir.selectionCount === 0 || !dir.hasArchiver())
+            return [];
+        if (dir.selectionIsArchives()) {
+            var name = dir.archiveFolderName().replace(/&/g, "&&");
+            return [
+                { separator: true },
+                { text: "E&xtract Here", enabled: dir.writable, action: function () { dir.extractSelected(false); } },
+                { text: name ? "Extract &to " + name + "\\" : "Extract &to Separate Folders", enabled: dir.writable,
+                  action: function () { dir.extractSelected(true); } },
+                { text: "Open with &Archive Manager", action: dir.openSelectedInArchiver },
+            ];
+        }
+        return [
+            { separator: true },
+            { text: "&Add to Archive...", action: function () { dir.addSelectedToArchive(true); } },
+            { text: "Add &to " + dir.newArchiveName().replace(/&/g, "&&"), enabled: dir.writable, action: function () { dir.addSelectedToArchive(false); } },
         ];
     }
 

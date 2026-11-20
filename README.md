@@ -28,7 +28,7 @@ compositor in [docs/migration.md](docs/migration.md).
   server, the tray watcher, the update check. (The rest of `src/` is the
   old Qt compositor, kept only for the tests that compare the two until
   it's removed.)
-- `apps/` - the programs (File Manager, Notepad, Markdown Editor, Photo Gallery, Terminal, Control Panel,
+- `apps/` - the programs (File Manager, Notepad, Markdown Editor, Photo Gallery, Archive Manager, Terminal, Control Panel,
   System Monitor, Volume, the file dialogs portal, Disk Image Writer) and
   `apps/common`, the shared Win95 controls. `apps/studio` is Wayland
   Studio, for making more: its `runtime/` is what a made app is built
@@ -57,7 +57,7 @@ sudo apt-get install qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-w
     libwlroots-0.18-dev libcairo2-dev libpango1.0-dev libdrm-dev libpixman-1-dev \
     libinput-dev libxkbcommon-dev libvterm-dev libxcb1-dev libwayland-dev wayland-protocols \
     zlib1g-dev libfontconfig-dev libsqlite3-dev pkg-config cmake build-essential xwayland \
-    libqt6sql6-sqlite libqt6sql6-mysql libqt6sql6-psql
+    libqt6sql6-sqlite libqt6sql6-mysql libqt6sql6-psql libarchive-dev
 
 cmake -B build
 cmake --build build -j$(nproc)
@@ -142,7 +142,7 @@ submenus:
   `.desktop` files in `~/.local/share/applications`, Flatpak's exports and
   `XDG_DATA_DIRS`, and the menu updates by itself when programs are
   installed or removed. Wayland 95's own apps go in the same folders
-  (Calculator, Notepad, the Markdown Editor and Photo Gallery in Accessories, System Monitor in System Tools, Volume Control
+  (Archive Manager, Calculator, Notepad, the Markdown Editor and Photo Gallery in Accessories, System Monitor in System Tools, Volume Control
   in Multimedia), and File Manager and Terminal sit at the bottom.
   Programs that run in a terminal (htop, vim...) open in Wayland 95's
   Terminal (`win95terminal -e ...`). A folder too long for the screen
@@ -254,8 +254,11 @@ up next to the shell first, then on `$PATH`.
   can Restore or Empty them; Shift+Delete deletes permanently. It also has
   rename in place (F2), New Folder (Ctrl+Shift+N), type-to-jump, Show
   Hidden Files (Ctrl+H), Properties and Open Terminal Here. Double-clicking
-  a file opens it with `xdg-open`. The Menu key (or Shift+F10) opens the
-  right-click menu. Usage:
+  a file opens it with `xdg-open` (archives open in Archive Manager). On an
+  archive the right-click menu has Extract Here, Extract to *name*\ and Open
+  with Archive Manager; on other files and folders, Add to Archive... and
+  Add to *name*.zip (Archive Manager does them, showing just its progress
+  box). The Menu key (or Shift+F10) opens the right-click menu. Usage:
   `win95files [--details] [--select NAME] [folder | computer: | trash:]`.
   - **Drives you plug in** (USB sticks and disks, memory cards): listed in
     My Computer and the Go menu whether they're opened yet or not, through
@@ -789,6 +792,49 @@ up next to the shell first, then on `$PATH`.
     ([exif.cpp](apps/photos/src/exif.cpp)), no library needed. Usage:
     `win95photos [folder | photo]`; `W95_PHOTOS_DEBUG=1` logs what it does
     and `W95_PHOTOS_SCRIPT` runs a list of actions (for tests).
+- **Archive Manager** (`win95archive`, [apps/archive/](apps/archive/)):
+  Start > Programs > Accessories > Archive Manager, or double-click an
+  archive in the file manager. In the spirit of WinZip: an archive's files
+  in a list (Name, Modified, Size, Ratio, Packed, Path; click a header to
+  sort, Ctrl and Shift+click to select several), with **New**, **Open**,
+  **Add**, **Extract**, **View**, **Delete** and **Test** on its toolbar.
+  Extract puts all the files or the selected ones in a folder (with their
+  folders or not), asks before replacing a file (Yes, Yes to All, No, No to
+  All, Cancel) and can open the folder afterwards. View (Enter, or a
+  double-click) opens a file with its program from a temporary copy. Add
+  takes files or a folder, or whatever's dragged onto the window, with
+  None, Fastest, Normal or Maximum compression and, for ZIP and 7-Zip, a
+  password. Test reads every file back and says if any are damaged. Long
+  jobs show their progress and can be cancelled; a change to an archive is
+  written to a new copy that replaces it only once it's complete, so a
+  cancelled or failed one leaves it as it was.
+  - **Formats:** ZIP (with or without a password: AES-256 when it makes
+    one; old ZipCrypto ones open too), 7-Zip, Tar (`.tar`, `.tar.gz`/`.tgz`,
+    `.tar.bz2`, `.tar.xz`, `.tar.zst`) are read and written; a single file
+    can be made into a `.gz`, `.bz2`, `.xz` or `.zst`; RAR, CD/DVD images
+    (`.iso`), Cabinet (`.cab`), `.deb`, cpio and LHA are read only. 7-Zip
+    archives with a password need the 7-Zip program (`sudo apt install
+    7zip`), and RAR archives with a password or the newest compression need
+    unar (`sudo apt install unar`); when one isn't installed, the message
+    says which, and Help > Formats and Programs shows what's there.
+  - **From the file manager:** `win95archive --extract-here ARCHIVE...`,
+    `--extract-subfolders ARCHIVE...` (each into a folder named after it),
+    `--extract-to DIR ARCHIVE...`, `--add ARCHIVE FILE...` and
+    `--add-dialog FILE...` show just the progress box (and the Add box) and
+    close when they're done.
+  - How it works: libarchive (`ArchiveEngine`,
+    [archiveengine.cpp](apps/archive/src/archiveengine.cpp)) reads every
+    format and writes ZIP, 7-Zip and Tar, on a worker thread; the files
+    are written by the program itself, never outside the folder chosen
+    (`..` in a name, links leading out and set-user-ID bits are refused).
+    Zip's packed sizes come from its central directory, which libarchive
+    doesn't report. What libarchive can't do (7z with a password, some
+    RAR) goes to `7z` or `unar`, which extract into a hidden folder there
+    first so the Replace questions still come. `ArchiveDocument` is the
+    window's list and runs the jobs. Usage: `win95archive [ARCHIVE]`;
+    `W95_ARCHIVE_DEBUG=1` logs what it does, and `W95_ARCHIVE_PASSWORD`,
+    `W95_ARCHIVE_OVERWRITE` and `W95_ARCHIVE_GRAB` answer its questions
+    and save a picture of the window (for tests).
 - **Image Writer** (`win95imagewriter`, [apps/imagewriter/](apps/imagewriter/)):
   Start > Programs > System Tools > Image Writer, or `win95imagewriter
   IMAGE`. Like KDE's ISO Image Writer: choose a disk image (a Linux `.iso`,

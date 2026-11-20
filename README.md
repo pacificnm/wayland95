@@ -35,6 +35,7 @@ compositor in [docs/migration.md](docs/migration.md).
   from (the ORM, the elements, the compiler) and `runner/` what runs one.
 - `session/` - the login session (`wayland95-session`) and its files.
 - `sddm/wayland95/` - the login screen: an SDDM theme in the Win95 look.
+- `grub/wayland95/` - the boot menu: a GRUB theme in the same look.
 - `tests/` - the automated tests: `tests/run.sh` (headless),
   `tests/selftest.sh`, `tests/vm/run.sh` (the live image in a VM).
 
@@ -1676,7 +1677,9 @@ What's installed:
   goes there (one of two files outside `/usr/local`);
 - the login screen's theme, in `/usr/share/sddm/themes/wayland95` (SDDM
   only looks there). Installing it doesn't change your login screen; see
-  *The login screen* below.
+  *The login screen* below;
+- the boot menu's theme, in `/usr/share/grub/themes/wayland95`. Installing
+  it doesn't change your boot menu; see *The boot menu* below.
 
 **Screen, keyboard and mouse** come through the login session (libseat and
 logind): no `input` group needed. Without a real GPU (a VM without 3D,
@@ -1725,6 +1728,32 @@ To see it without logging out:
 `sddm-greeter-qt6 --test-mode --theme /usr/share/sddm/themes/wayland95`
 (Shut Down... is grayed out there: test mode can't shut down). If the theme
 ever fails to load, SDDM falls back to the plain theme built into it.
+
+**The boot menu:** [grub/wayland95](grub/wayland95) is a GRUB theme in the
+same look: the teal desktop and a *Wayland 95 Startup Menu* dialog with the
+banner, the list of what can start (with icons: the logo for Wayland 95 and
+Debian, a computer for other systems, a chip for the firmware's settings),
+the countdown with a progress bar, and a scroll bar when the list is long.
+E (edit) and C (command line) go to a full black screen, as in MS-DOS mode.
+Its pictures are drawn by [grub/make-theme.py](grub/make-theme.py) (rerun
+it after changing it); its fonts are made from Liberation Sans and Mono by
+`grub-mkfont` when it's built. It installs to
+`/usr/share/grub/themes/wayland95`. [grub/preview.png](grub/preview.png)
+shows it (GRUB itself, booted in QEMU).
+
+The live ISO's boot menu uses it, and so do installs from it. Elsewhere it's
+installed but not chosen; to choose it, as root, write
+`/etc/default/grub.d/wayland95.cfg`:
+
+```sh
+GRUB_THEME=/usr/share/grub/themes/wayland95/theme.txt
+GRUB_GFXMODE=1024x768,auto
+GRUB_BACKGROUND=
+```
+
+then run `sudo update-grub`. (Delete the file and run it again to go back.)
+`./install.sh` and the package run `update-grub` after an update while it's
+chosen.
 
 **The keyring (your password list):** Wayland 95 has its own keyring,
 `win95keyring` ([apps/keyring](apps/keyring)), the freedesktop Secret

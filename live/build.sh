@@ -42,12 +42,18 @@ if [ -d chroot ] || [ -d .build ]; then
     if [ "$1" = "--purge" ]; then sudo lb clean --purge; else sudo lb clean; fi
 fi
 # the image's configuration, fresh from the repository each time
-rm -rf auto config/package-lists config/hooks config/includes.chroot config/packages.chroot
+rm -rf auto config/package-lists config/hooks config/includes.chroot config/packages.chroot config/bootloaders
 mkdir -p config
 cp -a "$REPO/live/auto" .
 cp -a "$REPO/live/config/." config/
 rm -f config/packages.chroot/.keep
 cp "$DEB" config/packages.chroot/
+# the boot menu's theme, from the package (its fonts are made when it's
+# built): live-build puts config/bootloaders/grub-pc in the ISO's /boot/grub
+rm -rf deb-theme
+dpkg-deb -x "$DEB" deb-theme
+cp -a deb-theme/usr/share/grub/themes/wayland95 config/bootloaders/grub-pc/
+rm -rf deb-theme
 
 say "Configuring"
 lb config

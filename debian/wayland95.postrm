@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+# the boot menu's theme is gone: regenerate GRUB's menu so it doesn't name
+# it (GRUB_THEME in /etc/default/grub.d/wayland95.cfg is then skipped)
+if [ "$1" = remove ] && [ -f /etc/default/grub.d/wayland95.cfg ] \
+        && command -v update-grub >/dev/null 2>&1 && [ -d /boot/grub ]; then
+    update-grub || true
+fi
+#DEBHELPER#
+exit 0

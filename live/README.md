@@ -40,7 +40,8 @@ The first build downloads about 2 GB of packages; later builds reuse them
 ## What's here
 
 - [auto/config](auto/config): live-build's settings: trixie with
-  non-free firmware, hybrid ISO, the boot options. The live user is
+  non-free firmware, hybrid ISO, GRUB as the boot menu for both UEFI and
+  BIOS, the boot options. The live user is
   `live` (password `live`).
 - [config/package-lists/wayland95.list.chroot](config/package-lists/wayland95.list.chroot):
   what's on it besides Debian's base system.
@@ -49,6 +50,12 @@ The first build downloads about 2 GB of packages; later builds reuse them
 - [config/includes.chroot/etc/sddm.conf.d/wayland95.conf](config/includes.chroot/etc/sddm.conf.d/wayland95.conf):
   the login screen is Wayland 95's own theme (`sddm/wayland95` in the
   repository), on the live system and on what the installer puts on disk.
+- [config/bootloaders/grub-pc/theme.cfg](config/bootloaders/grub-pc/theme.cfg):
+  the ISO's boot menu (GRUB, for UEFI and BIOS) uses Wayland 95's theme
+  (`grub/wayland95` in the repository; `build.sh` copies it from the
+  package, with its fonts, to the ISO's `/boot/grub/wayland95`).
+- [config/includes.chroot/etc/default/grub.d/wayland95.cfg](config/includes.chroot/etc/default/grub.d/wayland95.cfg):
+  and what the installer puts on disk boots with it too.
 - [config/hooks/live/0100-wayland95.hook.chroot](config/hooks/live/0100-wayland95.hook.chroot):
   the installer's settings: automatic login goes to Wayland 95, and it uses
   the Wayland 95 branding below. (New accounts need no extra groups: the

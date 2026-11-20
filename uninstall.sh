@@ -22,5 +22,13 @@ if [ -f /etc/sddm.conf.d/wayland95.conf ]; then
     echo "Removing /etc/sddm.conf.d/wayland95.conf (the login screen goes back to SDDM's default)"
     sudo rm -f /etc/sddm.conf.d/wayland95.conf
 fi
+# the boot menu's theme folder, and the setting that chose it, then GRUB's
+# menu without it
+sudo rmdir /usr/share/grub/themes/wayland95/icons /usr/share/grub/themes/wayland95 2>/dev/null || true
+if [ -f /etc/default/grub.d/wayland95.cfg ]; then
+    echo "Removing /etc/default/grub.d/wayland95.cfg (the boot menu goes back to GRUB's own look)"
+    sudo rm -f /etc/default/grub.d/wayland95.cfg
+    if command -v update-grub >/dev/null 2>&1; then sudo update-grub; fi
+fi
 printf '%s\n' "Done. (Your settings in ~/.config/wayland95 are kept, and your saved passwords" \
     "in ~/.local/share/wayland95/passwords.pwl; delete them too if you like.)"

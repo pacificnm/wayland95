@@ -5,5 +5,13 @@ set -e
 if [ "$1" = configure ] && command -v pam-auth-update >/dev/null 2>&1; then
     pam-auth-update --package
 fi
+# the boot menu's theme (/usr/share/grub/themes/wayland95): when it's
+# switched on (the live ISO and what it installs have
+# /etc/default/grub.d/wayland95.cfg), regenerate GRUB's menu so it loads
+# this version's fonts. A failure here mustn't fail the package.
+if [ "$1" = configure ] && [ -f /etc/default/grub.d/wayland95.cfg ] \
+        && command -v update-grub >/dev/null 2>&1 && [ -d /boot/grub ]; then
+    update-grub || true
+fi
 #DEBHELPER#
 exit 0

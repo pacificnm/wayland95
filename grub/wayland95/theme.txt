@@ -1,0 +1,129 @@
+# Wayland 95's boot menu (GRUB): a "Startup Menu" dialog on the teal
+# desktop, like the login screen. The dialog, its selection, progress bar,
+# scroll bar and icons are drawn by grub/make-theme.py; this places the
+# text and the menu on it. The dialog is 560x400 and centered, so its top
+# left corner is at (50%-280, 50%-200): every position below is that plus
+# the spot in the drawing.
+#
+# The fonts are Liberation Sans/Mono made into GRUB's format at build time
+# (CMakeLists.txt); grub-mkconfig loads every .pf2 in this folder.
+
+title-text: ""
+desktop-color: "#008080"
+message-font: "W95 Sans Regular 12"
+message-color: "#000000"
+# the command line and the editor (C and E): the whole screen, black, as
+# in MS-DOS mode
+terminal-font: "W95 Mono Regular 14"
+terminal-left: "0"
+terminal-top: "0"
+terminal-width: "100%"
+terminal-height: "100%"
+terminal-border: "0"
+
+# its title
++ label {
+    left = 50%-274
+    top = 50%-196
+    width = 500
+    height = 16
+    font = "W95 Sans Bold 12"
+    color = "#ffffff"
+    text = "Wayland 95 Startup Menu"
+}
+
+# the banner's name, "Wayland" bold and "95" plain as on the login screen
++ label {
+    left = 50%-216
+    top = 50%-164
+    width = 106
+    height = 32
+    align = "right"
+    font = "W95 Sans Bold 26"
+    color = "#c0c0c0"
+    text = "Wayland"
+}
++ label {
+    left = 50%-104
+    top = 50%-164
+    width = 60
+    height = 32
+    font = "W95 Sans Regular 26"
+    color = "#ffffff"
+    text = "95"
+}
+
++ label {
+    left = 50%-266
+    top = 50%-110
+    width = 532
+    height = 16
+    font = "W95 Sans Regular 12"
+    color = "#000000"
+    text = "Use the arrow keys to choose what to start, then press Enter."
+}
+
+# the list
++ boot_menu {
+    left = 50%-264
+    top = 50%-86
+    width = 528
+    height = 202
+    item_font = "W95 Sans Regular 12"
+    selected_item_font = "W95 Sans Regular 12"
+    item_color = "#000000"
+    selected_item_color = "#ffffff"
+    selected_item_pixmap_style = "select_*.png"
+    icon_width = 16
+    icon_height = 16
+    item_icon_space = 6
+    item_height = 20
+    item_padding = 2
+    item_spacing = 0
+    scrollbar = true
+    scrollbar_width = 16
+    scrollbar_slice = "center"
+    scrollbar_frame = "scroll_frame_*.png"
+    scrollbar_thumb = "scroll_thumb_*.png"
+}
+
+# the countdown (gone once a key is pressed)
++ label {
+    id = "__timeout__"
+    left = 50%-266
+    top = 50%+126
+    width = 532
+    height = 16
+    font = "W95 Sans Regular 12"
+    color = "#000000"
+    text = "The highlighted item starts in %d seconds."
+}
++ progress_bar {
+    id = "__timeout__"
+    left = 50%-266
+    top = 50%+146
+    width = 532
+    height = 20
+    bar_style = "progress_frame_*.png"
+    highlight_style = "progress_bar_*.png"
+    text = ""
+}
+
++ label {
+    left = 50%-266
+    top = 50%+176
+    width = 532
+    height = 16
+    font = "W95 Sans Regular 12"
+    color = "#000000"
+    text = "E: edit the commands      C: command line"
+}
+
+# the dialog, under all of the above (GRUB draws the last one first)
++ image {
+    left = 50%-280
+    top = 50%-200
+    width = 560
+    height = 400
+    file = "dialog.png"
+}

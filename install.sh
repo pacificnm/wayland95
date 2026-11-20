@@ -21,7 +21,7 @@ libdrm-dev libpixman-1-dev libinput-dev libxkbcommon-dev libvterm-dev libxcb1-de
 libwayland-dev wayland-protocols zlib1g-dev libfontconfig-dev libsqlite3-dev pkg-config cmake
 build-essential xwayland pkexec libqt6sql6-sqlite libqt6sql6-mysql libqt6sql6-psql
 qml6-module-qtmultimedia libqt6multimedia6 qt6-multimedia-dev libglib2.0-dev fonts-liberation
-libssl-dev libpam0g-dev libarchive-dev"
+libssl-dev libpam0g-dev libarchive-dev grub-common"
 if command -v dpkg >/dev/null 2>&1; then
     missing=""
     for p in $NEEDED; do
@@ -55,6 +55,13 @@ if [ -e "$PREFIX/bin/win95compositor" ]; then
     sudo rm -f "$PREFIX/bin/win95compositor"
 fi
 
+# the boot menu's theme: when it's switched on, regenerate GRUB's menu so it
+# loads this version's fonts
+if [ -f /etc/default/grub.d/wayland95.cfg ] && command -v update-grub >/dev/null 2>&1; then
+    say "Updating the boot menu (update-grub)"
+    sudo update-grub
+fi
+
 say "Installed"
 cat <<TXT
 To use it: log out, and on the login screen choose "Wayland 95" from the
@@ -64,6 +71,9 @@ To try it once without the login screen first: press Ctrl+Alt+F3, log in
 there and run:  wayland95-session
 (Start > Shut Down > "Exit Wayland 95" ends it; Ctrl+Alt+F1 or F2 gets
 you back to your usual desktop.)
+
+For the boot menu (GRUB) in the Wayland 95 look too, see "The boot menu"
+in README.md (the live ISO's installs have it already).
 
 If it doesn't start, its log is ~/.wayland95-session.log (the session
 before is in .log.1).

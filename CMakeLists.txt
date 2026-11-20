@@ -264,6 +264,54 @@ install(FILES session/wayland95.portal DESTINATION ${WAYLAND95_PORTAL_DIR})
 set(WAYLAND95_SDDM_THEMES_DIR "/usr/share/sddm/themes" CACHE PATH "Where SDDM looks for login themes")
 install(DIRECTORY sddm/wayland95 DESTINATION ${WAYLAND95_SDDM_THEMES_DIR})
 
+# The boot menu: a GRUB theme (grub/wayland95; its pictures are drawn by
+# grub/make-theme.py), with fonts made here from Liberation Sans and Mono.
+# Installing it doesn't switch to it: GRUB_THEME in /etc/default/grub.d/
+# does that, then update-grub (the live ISO's does, see live/config).
+set(WAYLAND95_GRUB_THEMES_DIR "/usr/share/grub/themes" CACHE PATH "Where GRUB themes go")
+find_program(GRUB_MKFONT NAMES grub-mkfont grub2-mkfont)
+set(_liberation_dirs /usr/share/fonts/truetype/liberation /usr/share/fonts/liberation-sans
+    /usr/share/fonts/liberation-mono /usr/share/fonts/liberation)
+find_file(LIBERATION_SANS LiberationSans-Regular.ttf PATHS ${_liberation_dirs} NO_DEFAULT_PATH)
+find_file(LIBERATION_SANS_BOLD LiberationSans-Bold.ttf PATHS ${_liberation_dirs} NO_DEFAULT_PATH)
+find_file(LIBERATION_MONO LiberationMono-Regular.ttf PATHS ${_liberation_dirs} NO_DEFAULT_PATH)
+if(GRUB_MKFONT AND LIBERATION_SANS AND LIBERATION_SANS_BOLD AND LIBERATION_MONO)
+    # theme.txt names them "W95 Sans Regular 12" and so on. The small sizes
+    # cover Latin text; the banner's only ASCII; the command line's
+    # everything (GRUB's own unicode.pf2 fills in what Liberation lacks).
+    set(_latin 0x20-0x7e,0xa0-0x17f,0x2010-0x2027,0x20ac-0x20ac)
+    set(_grub_fonts)
+    foreach(_font
+            "sans-12|12|W95 Sans|${LIBERATION_SANS}|${_latin}"
+            "sans-bold-12|12|W95 Sans|${LIBERATION_SANS_BOLD}|${_latin}"
+            "sans-26|26|W95 Sans|${LIBERATION_SANS}|0x20-0x7e"
+            "sans-bold-26|26|W95 Sans|${LIBERATION_SANS_BOLD}|0x20-0x7e"
+            "mono-14|14|W95 Mono|${LIBERATION_MONO}|")
+        string(REPLACE "|" ";" _font "${_font}")
+        list(GET _font 0 _name)
+        list(GET _font 1 _size)
+        list(GET _font 2 _family)
+        list(GET _font 3 _ttf)
+        list(GET _font 4 _range)
+        set(_out ${CMAKE_BINARY_DIR}/grub/${_name}.pf2)
+        set(_range_args)
+        if(_range)
+            set(_range_args -r ${_range})
+        endif()
+        add_custom_command(OUTPUT ${_out}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/grub
+            COMMAND ${GRUB_MKFONT} -s ${_size} -n "${_family}" ${_range_args} -o ${_out} ${_ttf}
+            DEPENDS ${_ttf} VERBATIM)
+        list(APPEND _grub_fonts ${_out})
+    endforeach()
+    add_custom_target(grub-theme-fonts ALL DEPENDS ${_grub_fonts})
+    install(DIRECTORY grub/wayland95 DESTINATION ${WAYLAND95_GRUB_THEMES_DIR})
+    install(FILES ${_grub_fonts} DESTINATION ${WAYLAND95_GRUB_THEMES_DIR}/wayland95)
+else()
+    message(STATUS "No grub-mkfont or Liberation fonts: the boot menu theme isn't installed "
+                   "(sudo apt install grub-common fonts-liberation)")
+endif()
+
 # Control Panel > Services: its root helper, and the polkit action that lets
 # pkexec run it (polkit reads actions only from /usr/share, whatever our prefix)
 install(PROGRAMS session/wayland95-services DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/wayland95)

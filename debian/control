@@ -4,6 +4,8 @@ Priority: optional
 Maintainer: Wayland 95 <wayland95@localhost>
 Build-Depends: debhelper-compat (= 13),
                cmake,
+               grub-common,
+               fonts-liberation,
                pkgconf,
                qt6-base-dev,
                qt6-base-private-dev,

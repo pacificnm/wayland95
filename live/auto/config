@@ -12,6 +12,7 @@ lb config noauto \
     --debian-installer none \
     --firmware-chroot true \
     --memtest none \
+    --bootloaders grub-pc,grub-efi \
     --image-name wayland95-live \
     --iso-application "Wayland 95" \
     --iso-volume "Wayland 95" \

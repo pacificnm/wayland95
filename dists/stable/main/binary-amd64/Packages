@@ -1,27 +1,5 @@
 Package: wayland95
 Architecture: amd64
-Version: 0.5.1
-Priority: optional
-Section: x11
-Maintainer: Wayland 95 <wayland95@localhost>
-Installed-Size: 49602
-Depends: libc6 (>= 2.38), libcairo2 (>= 1.2.4), libegl1, libfontconfig1 (>= 2.12.6), libgcc-s1 (>= 3.0), libgles2, libglib2.0-0t64 (>= 2.12.0), libinput10 (>= 0.21.0), libpango-1.0-0 (>= 1.14.0), libpangocairo-1.0-0 (>= 1.14.0), libpixman-1-0 (>= 0.11.2), libqt6core6t64 (>= 6.8.2), libqt6dbus6 (>= 6.8.2), libqt6gui6 (>= 6.4.0), libqt6network6 (>= 6.7.2), libqt6qml6 (>= 6.7.2), libqt6quick6 (>= 6.6.0), libqt6sql6 (>= 6.8.2), libqt6waylandclient6 (>= 6.6.0), libsqlite3-0 (>= 3.5.9), libstdc++6 (>= 14), libvterm0 (>= 0.3), libwayland-client0 (>= 1.20.0), libwayland-server0 (>= 1.14.91), libwlroots-0.18 (>= 0.18.0), libxkbcommon0 (>= 0.5.0), qt6-base-private-abi (= 6.8.2), qt6-declarative-private-abi (= 6.8.2), qt6-waylandclient-private-abi (= 6.8.2), zlib1g (>= 1:1.1.4), libqt6opengl6, qt6-qpa-plugins, qt6-wayland, qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-controls, qml6-module-qtquick-templates, qml6-module-qtquick-layouts, qml6-module-qtqml, qml6-module-qtqml-workerscript, qml6-module-qt-labs-folderlistmodel, qml6-module-qtwebengine, libqt6sql6-sqlite, libqt6sql6-mysql, libqt6sql6-psql, qml6-module-qtmultimedia, libqt6multimedia6, xwayland, dbus-user-session, polkitd, pkexec, libpam-modules-bin, passwd, fontconfig, fonts-liberation, xdg-utils, xdg-desktop-portal
-Recommends: network-manager, pipewire-bin, pipewire-pulse, wireplumber, sound-theme-freedesktop, bluez, upower, cups, cups-client, flatpak, packagekit, xdg-desktop-portal-gtk | xdg-desktop-portal-kde, xdg-user-dirs, udisks2, rsync, cron | cron-daemon
-Filename: pool/main/w/wayland95/wayland95_0.5.1_amd64.deb
-Size: 9451920
-MD5sum: df44f7275852d893b1d5b6c73c617da3
-SHA1: 4afac5c193ad28ca65016868c016c35cf74ece3e
-SHA256: 436389051413721c8455e1216ed96d4069eb60559efe220a9c557ff7692ededa
-SHA512: 306ba6afc2fec89a6e84bb35c0938e1b0be989d5eeca6deb74977a5ed2c0e834bc9270b6fdd6cd9cf7622486c77d663d8f15108f57a7eaaec2b852aed42d5b8b
-Description: Windows 95-style Wayland desktop
- A complete desktop session in the style of Windows 95: a Wayland
- compositor (wlroots) with Win95 window frames, a taskbar, Start menu and
- desktop, plus its own File Manager, Notepad, Terminal, Control Panel,
- System Monitor and file dialogs for other programs. Log in to it as
- "Wayland 95".
-
-Package: wayland95
-Architecture: amd64
 Version: 0.6.0
 Priority: optional
 Section: x11
@@ -57,6 +35,28 @@ MD5sum: e51c1a42dcc83ee7e4158bf89737db55
 SHA1: 4ffd4e6490308d923072e18947e3272c4ad3a742
 SHA256: 2bca0a4e7302e0ab5cf0a9f65fd7c3f5c5c4bad158ea83b38c96a14296d315e4
 SHA512: 8b8d58081a15cdc26517cf5175e37fc2b4c3768df68f9ccb452b70696f48d1149c99af3f9a9d32d519a5022a63d4f05b7e8229171e7098f3ea2a8aa52c214a96
+Description: Windows 95-style Wayland desktop
+ A complete desktop session in the style of Windows 95: a Wayland
+ compositor (wlroots) with Win95 window frames, a taskbar, Start menu and
+ desktop, plus its own File Manager, Notepad, Terminal, Control Panel,
+ System Monitor and file dialogs for other programs. Log in to it as
+ "Wayland 95".
+
+Package: wayland95
+Architecture: amd64
+Version: 0.8.0
+Priority: optional
+Section: x11
+Maintainer: Wayland 95 <wayland95@localhost>
+Installed-Size: 58037
+Depends: libc6 (>= 2.38), libcairo2 (>= 1.2.4), libegl1, libfontconfig1 (>= 2.12.6), libgcc-s1 (>= 4.0), libgles2, libglib2.0-0t64 (>= 2.40.0), libinput10 (>= 0.21.0), libpam0g (>= 0.99.7.1), libpango-1.0-0 (>= 1.14.0), libpangocairo-1.0-0 (>= 1.14.0), libpixman-1-0 (>= 0.11.2), libqt6core6t64 (>= 6.8.2), libqt6dbus6 (>= 6.8.2), libqt6gui6 (>= 6.4.0), libqt6multimedia6 (>= 6.8.2), libqt6network6 (>= 6.7.2), libqt6qml6 (>= 6.7.2), libqt6quick6 (>= 6.6.0), libqt6sql6 (>= 6.8.2), libqt6waylandclient6 (>= 6.6.0), libsqlite3-0 (>= 3.5.9), libssl3t64 (>= 3.0.0), libstdc++6 (>= 14), libvterm0 (>= 0.3), libwayland-client0 (>= 1.20.0), libwayland-server0 (>= 1.14.91), libwlroots-0.18 (>= 0.18.0), libxcb1, libxkbcommon0 (>= 0.5.0), qt6-base-private-abi (= 6.8.2), qt6-declarative-private-abi (= 6.8.2), qt6-waylandclient-private-abi (= 6.8.2), zlib1g (>= 1:1.1.4), libqt6opengl6, qt6-qpa-plugins, qt6-wayland, qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-controls, qml6-module-qtquick-templates, qml6-module-qtquick-layouts, qml6-module-qtqml, qml6-module-qtqml-workerscript, qml6-module-qt-labs-folderlistmodel, qml6-module-qtwebengine, libqt6sql6-sqlite, libqt6sql6-mysql, libqt6sql6-psql, qml6-module-qtmultimedia, xwayland, dbus-user-session, polkitd, pkexec, libpam-modules-bin, libpam-runtime, passwd, fontconfig, fonts-liberation, xdg-utils, xdg-desktop-portal
+Recommends: network-manager, pipewire-bin, pipewire-pulse, wireplumber, sound-theme-freedesktop, bluez, upower, cups, cups-client, flatpak, packagekit, xdg-desktop-portal-gtk | xdg-desktop-portal-kde, xdg-user-dirs, udisks2, rsync, cron | cron-daemon, gsettings-desktop-schemas, dconf-gsettings-backend
+Filename: pool/main/w/wayland95/wayland95_0.8.0_amd64.deb
+Size: 10908352
+MD5sum: 3392161a9381b6dff6e665d9759da673
+SHA1: 2f24cd5d79283971206ea4fd1b1a80d0e02c2e1f
+SHA256: 010327818551974671730327dd842e93d3c571e93ee428a284822b1cb4a5edeb
+SHA512: 54577314636646ee2bf94174bd7ce507e14687490d7d322181eaf920e201bdb3014b72d8bc63c67c46f2df0284b86b3280f5870103915fc9392d6642fcea42f8
 Description: Windows 95-style Wayland desktop
  A complete desktop session in the style of Windows 95: a Wayland
  compositor (wlroots) with Win95 window frames, a taskbar, Start menu and

@@ -1,3 +1,9 @@
+wayland95 (0.7.0) trixie; urgency=medium
+
+  * Start menu: right-click a program for Open, Open as Admin, Add Shortcut to Desktop, Uninstall; desktop shortcuts; Samba File Sharing; a Win95 login screen; other programs take Wayland 95's look; sharp X11 on scaled displays; media keys and the tray's player; Wayland Studio's Visualizer, Equalizer, Slider, Timer and icons.
+
+ -- Wayland 95 <wayland95@localhost>  Thu, 19 Nov 2026 18:19:37 -0800
+
 wayland95 (0.6.0) trixie; urgency=medium
 
   * New: Claude can build Wayland Studio apps for you. Help > Build Apps with Claude adds Wayland Studio's tools to Claude Code (or run: claude mcp add --scope user wayland-studio -- win95studio-mcp); then ask Claude for an app, and it makes the tables, forms and code, checks them and looks at each form. A project open in the Studio follows each change (Undo takes one back). The manual's new chapter, Building Apps with Claude, says more.

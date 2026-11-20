@@ -31,6 +31,8 @@ Window {
           description: "Shows the date, time and time zone." },
         { id: "display", name: "Display", file: "DisplayApplet.qml",
           description: "Changes the wallpaper, background and window colors." },
+        { id: "firewall", name: "Firewall", file: "FirewallApplet.qml",
+          description: "Stops other computers connecting to this one, except to the programs and ports you allow." },
         { id: "fonts", name: "Fonts", file: "FontsApplet.qml",
           description: "Shows the installed fonts, previews them, and installs new ones." },
         { id: "hardware", name: "Hardware", file: "HardwareApplet.qml",
@@ -59,6 +61,8 @@ Window {
           description: "Chooses the programs that start when you log in and the services that start with the computer." },
         { id: "system", name: "System", file: "SystemApplet.qml",
           description: "Shows information about your computer and how it's running." },
+        { id: "systemlog", name: "System Log", file: "SystemLogApplet.qml",
+          description: "Shows the messages the computer and your programs write in the system log: errors, warnings and what happened when." },
         { id: "taskbar", name: "Taskbar", file: "TaskbarApplet.qml",
           description: "Changes the taskbar clock and which icons show next to it." },
     ]

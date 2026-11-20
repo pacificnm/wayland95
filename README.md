@@ -28,7 +28,7 @@ compositor in [docs/migration.md](docs/migration.md).
   server, the tray watcher, the update check. (The rest of `src/` is the
   old Qt compositor, kept only for the tests that compare the two until
   it's removed.)
-- `apps/` - the programs (File Manager, Notepad, Markdown Editor, Terminal, Control Panel,
+- `apps/` - the programs (File Manager, Notepad, Markdown Editor, Photo Gallery, Terminal, Control Panel,
   System Monitor, Volume, the file dialogs portal, Disk Image Writer) and
   `apps/common`, the shared Win95 controls. `apps/studio` is Wayland
   Studio, for making more: its `runtime/` is what a made app is built
@@ -142,7 +142,7 @@ submenus:
   `.desktop` files in `~/.local/share/applications`, Flatpak's exports and
   `XDG_DATA_DIRS`, and the menu updates by itself when programs are
   installed or removed. Wayland 95's own apps go in the same folders
-  (Calculator, Notepad and the Markdown Editor in Accessories, System Monitor in System Tools, Volume Control
+  (Calculator, Notepad, the Markdown Editor and Photo Gallery in Accessories, System Monitor in System Tools, Volume Control
   in Multimedia), and File Manager and Terminal sit at the bottom.
   Programs that run in a terminal (htop, vim...) open in Wayland 95's
   Terminal (`win95terminal -e ...`). A folder too long for the screen
@@ -745,6 +745,50 @@ up next to the shell first, then on `$PATH`.
     kept by the page, so saving such a file from the page asks first (the
     Markdown view keeps it). File > Export as Web Page saves an `.html` copy.
     Usage: `win95markdown [file]`.
+- **Photo Gallery** (`win95photos`, [apps/photos/](apps/photos/)): Start >
+  Programs > Accessories > Photo Gallery, or double-click a picture in the
+  file manager. A folder's photos as thumbnails (`~/Pictures` to start;
+  its subfolders first, a double-click goes in, Backspace or Up comes
+  out), arranged by date taken (the camera's, else the file's) or by name,
+  in small, medium or large thumbnails. Enter or a double-click shows a
+  photo full-window: Left/Right (or the wheel) for the previous and next,
+  +/- and Ctrl+wheel to zoom about the mouse, 1 for actual size, 0 to fit,
+  drag to look around a zoomed photo. F11 is a full-screen slide show
+  (Space pauses, the arrows step, Escape ends it). File > Set as Wallpaper
+  (centered, tiled or stretched) is the Display applet's setting; Delete
+  sends the photo to the Recycle Bin; Properties shows its size,
+  dimensions, dates and, from a JPEG's EXIF, the camera, exposure,
+  aperture, ISO and focal length.
+  - **Editing** (E, or the toolbar's half-dark circle, opens the tools
+    beside the photo): rotate left and right, flip, crop (a frame dragged
+    out, moved and sized, free or Original, Square, 4:3, 3:2 or 16:9),
+    resize (keeping proportions, or 25/50/75%), brightness, contrast and
+    color saturation (previewed as the sliders move, then applied),
+    Auto-Enhance (levels stretched per channel, which also takes out a
+    color cast), Black and White, Sepia. Undo and Redo (Ctrl+Z, Ctrl+Y)
+    go back through every change; Revert to Saved goes back to the file.
+  - **Saving:** edits stay in the program until saved. Save (Ctrl+S) asks
+    before it replaces the original (or Save As keeps it, suggesting
+    "name (edited).jpg"); leaving a changed photo, or closing, asks to
+    save. JPEGs are saved at quality 92 and keep their EXIF (date, camera),
+    marked upright, since a turned photo is saved turned.
+  - **Photo services** (online sharing, cloud libraries, sync): File >
+    Import From, Export To and Share list the ones installed. None come
+    with it yet; one is a `PhotoService` registered in `main.cpp` (see
+    [apps/photos/src/photoservices.h](apps/photos/src/photoservices.h)),
+    which reports progress and results back through the job it's given.
+  - How it works: a `PhotoFolder` model reads the folder (and each
+    photo's EXIF date) in the background and again when it changes;
+    thumbnails come from `image://thumb`, several at once in a thread pool,
+    kept in the freedesktop.org thumbnail cache
+    (`~/.cache/thumbnails/large`, shared with other programs); a photo
+    loads in the background through `image://view`, upright from its EXIF
+    orientation. Editing loads it into `PhotoEditor`, whose undo keeps
+    whole pictures (up to 40 steps or 768 MB) and whose sliders preview on
+    a copy at screen size. EXIF is read by a small reader of its own
+    ([exif.cpp](apps/photos/src/exif.cpp)), no library needed. Usage:
+    `win95photos [folder | photo]`; `W95_PHOTOS_DEBUG=1` logs what it does
+    and `W95_PHOTOS_SCRIPT` runs a list of actions (for tests).
 - **Image Writer** (`win95imagewriter`, [apps/imagewriter/](apps/imagewriter/)):
   Start > Programs > System Tools > Image Writer, or `win95imagewriter
   IMAGE`. Like KDE's ISO Image Writer: choose a disk image (a Linux `.iso`,
@@ -1095,11 +1139,48 @@ up next to the shell first, then on `$PATH`.
       `lpadmin` group, which Debian gives the first user and the live user
       has. Your default printer goes in `~/.cups/lpoptions`, which programs'
       Print dialogs follow.
+  - **Firewall:** stops other computers connecting to this one, like
+    XP's Windows Firewall. **General**: On or Off, **Don't allow
+    exceptions** (for Wi-Fi you don't trust), and whether it's running,
+    whether another firewall (ufw, firewalld) is on too, and a warning when
+    SSH Server is running but would be blocked. **Exceptions**: what's let
+    in, each from any computer or only the local network: printer and
+    device discovery (mDNS, on), SSH, Samba, a web server, PostgreSQL,
+    MySQL and WireGuard, plus **Add Port...** for your own (TCP, UDP or
+    both; numbers, ranges, commas). **Advanced**: answer pings, log blocked
+    connections (**Show Blocked Connections...** opens System Log on them),
+    **Restore Defaults**.
+    - **How it works:** an nftables table of its own, `inet wayland95`, with
+      an input chain that drops what isn't an answer to this computer, an
+      essential ICMP/ICMPv6 message, DHCPv6 or an exception; other tables
+      are left alone. Apply runs `wayland95-services fw-save` through
+      pkexec, which checks every value, writes
+      `/etc/wayland95/firewall.conf` (the settings, readable by anyone) and
+      `/etc/wayland95/firewall.nft` (the rules, checked with `nft -c`
+      first), and turns `wayland95-firewall.service` (written to
+      `/etc/systemd/system`) on or off; it loads the rules at start-up
+      before the network comes up. Reloading replaces the table in one go.
+      SSH's exception follows SSH Server's port.
   - **Problem Reports:** the reports written when a Wayland 95 program
     (or the desktop) crashed, newest first, each with its text. **Report
     on GitHub...** opens a new issue on github.com/pacificnm/wayland95
     filled in with the report, to look over and submit (nothing is sent
     by itself); **Copy**, **Delete** and **Delete All**. See Crashes below.
+  - **System Log:** the system journal, like NT's Event Viewer. **Log**
+    picks System, Kernel or Your Programs; **Start-up** picks this boot or
+    an earlier one; **Show** picks how bad (errors only ... everything with
+    debug); **Find** narrows to messages, sources or units containing the
+    text. Columns are Type, Date, Time, Source and Message; the pane
+    underneath shows the whole message and every field journald kept.
+    **Copy**, **Copy Details**, **Find More From** (right-click or the
+    Event menu) and **Log > Save Log As...** (the shown messages, oldest
+    first). F5 refreshes.
+    - **How it works:** `journalctl -o json`, the newest 2000 messages of
+      the start-up ([apps/control/src/systemlog.cpp](apps/control/src/systemlog.cpp)).
+      Members of `systemd-journal` or `adm` see everything; anyone else sees
+      their own messages, with **Show All Messages...**, which reads the
+      computer's log through `wayland95-services journal` (pkexec: an
+      administrator's password, remembered a few minutes).
   - **Regional Settings:** Win95's five tabs. **Regional Settings** lists
     every region (type to find one); **Number**, **Currency**, **Time** and
     **Date** show samples and can each format like a different region (US

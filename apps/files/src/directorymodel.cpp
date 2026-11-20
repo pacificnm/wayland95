@@ -733,6 +733,15 @@ QString DirectoryModel::openFile(const QString &path)
         if (!editor.isEmpty() && QProcess::startDetached(editor, {path}, info.absolutePath()))
             return QString();
     }
+    static const QStringList pictures{QStringLiteral("jpg"), QStringLiteral("jpeg"), QStringLiteral("png"),
+                                      QStringLiteral("gif"), QStringLiteral("bmp"), QStringLiteral("webp"),
+                                      QStringLiteral("tif"), QStringLiteral("tiff")};
+    if (pictures.contains(info.suffix().toLower())) {
+        // photos open in Photo Gallery, with the rest of their folder
+        const QString gallery = ours(QStringLiteral("win95photos"));
+        if (!gallery.isEmpty() && QProcess::startDetached(gallery, {path}, info.absolutePath()))
+            return QString();
+    }
     if (kind == QLatin1String("text")) {
         // plain text opens in our Notepad, as in Win95
         const QString notepad = ours(QStringLiteral("win95notepad"));

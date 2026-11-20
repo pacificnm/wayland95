@@ -281,6 +281,24 @@ Canvas {
             ctx.fillStyle = "#e0a000";
             ctx.beginPath(); ctx.moveTo(30, 18); ctx.lineTo(32, 20); ctx.lineTo(22, 30); ctx.lineTo(19, 31); ctx.lineTo(20, 28); ctx.closePath(); ctx.fill(); ctx.stroke();
             break;
+        case "photos":
+            // two prints, the front one a landscape: sky, sun, green hills
+            ctx.save();
+            ctx.translate(16, 16);
+            ctx.rotate(-0.18);
+            ctx.translate(-16, -16);
+            frame(5, 4, 24, 19, "#ffffff");
+            rect(7, 6, 20, 15, "#c0c0c0");
+            ctx.restore();
+            frame(2, 9, 26, 21, "#ffffff");
+            rect(4, 11, 22, 17, "#80c0ff");
+            ctx.fillStyle = "#ffe000";
+            ctx.beginPath(); ctx.arc(20, 15, 2.5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#008000";
+            ctx.beginPath(); ctx.moveTo(4, 28); ctx.lineTo(4, 22); ctx.lineTo(11, 17); ctx.lineTo(17, 23); ctx.lineTo(20, 21); ctx.lineTo(26, 25); ctx.lineTo(26, 28); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = "#00a000";
+            ctx.beginPath(); ctx.moveTo(4, 28); ctx.lineTo(4, 25); ctx.lineTo(14, 22); ctx.lineTo(26, 27); ctx.lineTo(26, 28); ctx.closePath(); ctx.fill();
+            break;
         case "studio":
             // a form being designed: a window with a label, a text box and
             // a button on its grid, and a pencil across the corner

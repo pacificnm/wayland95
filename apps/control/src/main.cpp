@@ -10,7 +10,7 @@
 
 Q_IMPORT_QML_PLUGIN(Win95UiPlugin)
 
-// usage: win95control [--applet accessibility|backup|bluetooth|datetime|display|fonts|hardware|keyboard|mouse|network|passwords|power|printers|problems|programs|regional|services|sounds|startup|system|taskbar [--tab N] [--check] [--uninstall DESKTOP-ID]]
+// usage: win95control [--applet accessibility|backup|bluetooth|datetime|display|firewall|fonts|hardware|keyboard|mouse|network|passwords|power|printers|problems|programs|regional|services|sounds|startup|system|systemlog|taskbar [--tab N] [--check] [--uninstall DESKTOP-ID] [--log system|kernel|user] [--find TEXT]]
 // With --applet, only that applet's window opens (Start > Settings >
 // Taskbar... uses this), optionally on tab N (0-based), like Win95's
 // "control desk.cpl,,2"; otherwise the Control Panel folder opens.
@@ -45,6 +45,14 @@ int main(int argc, char *argv[])
     const int uninstallIdx = args.indexOf(QStringLiteral("--uninstall"));
     engine.rootContext()->setContextProperty(QStringLiteral("initialUninstall"),
                                              uninstallIdx != -1 && uninstallIdx + 1 < args.size() ? args.at(uninstallIdx + 1) : QString());
+    // --log system|kernel|user --find TEXT: what System Log opens on
+    // (Firewall's Show Blocked Connections)
+    const int logIdx = args.indexOf(QStringLiteral("--log"));
+    engine.rootContext()->setContextProperty(QStringLiteral("initialLog"),
+                                             logIdx != -1 && logIdx + 1 < args.size() ? args.at(logIdx + 1) : QString());
+    const int findIdx = args.indexOf(QStringLiteral("--find"));
+    engine.rootContext()->setContextProperty(QStringLiteral("initialFind"),
+                                             findIdx != -1 && findIdx + 1 < args.size() ? args.at(findIdx + 1) : QString());
     engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Win95Control/Main.qml")));
     if (engine.rootObjects().isEmpty())
         return -1;

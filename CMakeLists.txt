@@ -216,6 +216,7 @@ add_subdirectory(apps/imagewriter) # win95imagewriter (disk images to USB drives
 add_subdirectory(apps/games)    # win95solitaire, win95mines
 add_subdirectory(apps/repos)    # win95repos
 add_subdirectory(apps/markdown) # win95markdown
+add_subdirectory(apps/photos)   # win95photos (Photo Gallery)
 add_subdirectory(apps/calc)     # win95calc
 add_subdirectory(apps/email)    # win95email
 add_subdirectory(apps/web)      # win95web

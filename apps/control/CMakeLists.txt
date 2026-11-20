@@ -35,6 +35,10 @@ qt_add_executable(win95control
     src/startup.cpp
     src/backup.h
     src/backup.cpp
+    src/systemlog.h
+    src/systemlog.cpp
+    src/firewall.h
+    src/firewall.cpp
 )
 
 # Services runs session/wayland95-services as root through pkexec: the
@@ -104,6 +108,8 @@ qt_add_qml_module(win95control
         SqliteSettings.qml
         NginxSettings.qml
         SambaSettings.qml
+        SystemLogApplet.qml
+        FirewallApplet.qml
     RESOURCE_PREFIX /qt/qml
 )
 

@@ -445,6 +445,35 @@ Canvas {
             rect(16, 17, 2, 7, "#000000");
             rect(16, 26, 2, 2, "#000000");
             break;
+        case "firewall":
+            // a brick wall with a flame in front of it
+            rect(1, 6, 30, 22, "#800000");
+            for (var fr = 0; fr < 5; ++fr) {
+                rect(1, 10 + fr * 4, 30, 1, "#c0c0c0");
+                for (var fc = 0; fc < 4; ++fc)
+                    rect((fr % 2 ? 4 : 0) + fc * 8 + 1, 6 + fr * 4, 1, 4, "#c0c0c0");
+            }
+            ctx.strokeStyle = "#000000"; ctx.lineWidth = 1; ctx.strokeRect(0.5, 5.5, 31, 23);
+            rect(1, 6, 30, 1, "#c04040");
+            ctx.fillStyle = "#ff8000";
+            ctx.beginPath(); ctx.moveTo(16, 4); ctx.bezierCurveTo(24, 14, 25, 22, 16, 30);
+            ctx.bezierCurveTo(7, 22, 9, 15, 13, 12); ctx.bezierCurveTo(13, 16, 15, 17, 16, 4); ctx.fill();
+            ctx.strokeStyle = "#000000"; ctx.lineWidth = 1; ctx.stroke();
+            ctx.fillStyle = "#ffff00";
+            ctx.beginPath(); ctx.moveTo(16, 15); ctx.bezierCurveTo(21, 20, 20, 26, 16, 29);
+            ctx.bezierCurveTo(12, 26, 12, 21, 16, 15); ctx.fill();
+            break;
+        case "systemlog":
+            // a log book: an open ledger of lines, with a red error mark and a yellow warning mark
+            frame(3, 3, 26, 26, "#ffffff");
+            rect(4, 4, 24, 4, "#000080");
+            rect(6, 5, 14, 2, "#ffffff");
+            for (var ll = 0; ll < 6; ++ll) {
+                rect(10, 11 + ll * 3, 16, 1, "#808080");
+                rect(6, 10 + ll * 3, 3, 3, ll === 1 ? "#ff0000" : ll === 3 ? "#ffd800" : "#0000ff");
+            }
+            rect(7, 11 + 1 * 3, 1, 1, "#ffffff");
+            break;
         case "folder":
             frame(2, 9, 28, 19, "#ffff80");
             frame(2, 6, 12, 5, "#ffff80");

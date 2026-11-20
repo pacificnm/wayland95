@@ -2,9 +2,12 @@
 
 #include "desktopentry.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
@@ -48,7 +51,37 @@ DesktopShortcuts::DesktopShortcuts(QObject *parent)
     m_reload.setInterval(300);
     connect(&m_reload, &QTimer::timeout, this, &DesktopShortcuts::reload);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this] { m_reload.start(); });
+    loadLayout();
     reload();
+}
+
+QString DesktopShortcuts::layoutPath()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+        + QStringLiteral("/wayland95/desktop-icons.json");
+}
+
+void DesktopShortcuts::loadLayout()
+{
+    QFile f(layoutPath());
+    if (!f.open(QIODevice::ReadOnly))
+        return;
+    m_layout = QJsonDocument::fromJson(f.readAll()).object().toVariantMap();
+}
+
+void DesktopShortcuts::saveLayout(const QVariantMap &layout)
+{
+    if (layout == m_layout)
+        return;
+    m_layout = layout;
+    emit layoutChanged();
+    const QString path = layoutPath();
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QSaveFile f(path);
+    if (!f.open(QIODevice::WriteOnly)
+        || f.write(QJsonDocument(QJsonObject::fromVariantMap(layout)).toJson(QJsonDocument::Indented)) < 0
+        || !f.commit())
+        qWarning().noquote() << "DesktopShortcuts: can't save the icons' places in" << path;
 }
 
 QString DesktopShortcuts::folder()
@@ -88,6 +121,8 @@ void DesktopShortcuts::reload()
             { QStringLiteral("iconSource"), e.wayland95Icon.isEmpty() ? appIconUrl(e.icon) : QString() },
             { QStringLiteral("icon"), e.wayland95Icon },
             { QStringLiteral("path"), f.absoluteFilePath() },
+            { QStringLiteral("key"), QStringLiteral("shortcut:") + f.fileName() },
+            { QStringLiteral("modified"), double(f.lastModified().toMSecsSinceEpoch()) },
         };
     }
     std::sort(list.begin(), list.end(), [](const QVariant &a, const QVariant &b) {

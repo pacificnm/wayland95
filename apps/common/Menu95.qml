@@ -3,7 +3,9 @@ import QtQuick
 // A Win95 popup menu. Place one at the window's root (it fills its parent
 // so it can catch clicks outside itself), then call popup(x, y, items).
 //
-// items: [{ text, shortcut?, enabled?, checked?, action? } | { separator: true }]
+// items: [{ text, shortcut?, enabled?, checked?, action?, submenu? } | { separator: true }]
+// submenu: items of the same kind, cascading to the right (hover, click or
+// Right opens it; Left or Escape goes back)
 Item {
     id: menu
 
@@ -15,6 +17,12 @@ Item {
 
     property var items: []
     property int current: -1
+    // the open submenu: its items, which row of ours it hangs from, and
+    // its own highlighted row
+    property var subItems: []
+    property int subFor: -1
+    property int subCurrent: -1
+    readonly property bool subOpen: subFor >= 0
 
     // emitted for a press outside the menu panel, in this item's coordinates,
     // so a menu bar can switch straight to another menu
@@ -24,6 +32,7 @@ Item {
     function popup(px, py, menuItems) {
         items = menuItems;
         current = -1;
+        closeSub();
         measure();
         // keep inside the window, flipping up/left if needed
         panel.x = Math.max(0, Math.min(px, menu.width - panel.width));
@@ -36,6 +45,8 @@ Item {
     function close() {
         if (!visible)
             return;
+        subTimer.stop();
+        closeSub();
         visible = false;
         closed();
     }
@@ -44,23 +55,98 @@ Item {
         var item = items[i];
         if (!item || item.separator || item.enabled === false)
             return;
+        if (item.submenu) {
+            openSub(i, true);
+            return;
+        }
+        close();
+        if (item.action)
+            item.action();
+    }
+    function subTrigger(i) {
+        var item = subItems[i];
+        if (!item || item.separator || item.enabled === false)
+            return;
         close();
         if (item.action)
             item.action();
     }
 
-    function step(dir) {
-        if (items.length === 0)
+    // a row's top, in the panel
+    function rowY(list, i) {
+        var y = 3;
+        for (var n = 0; n < i; ++n)
+            y += list[n].separator ? 8 : 18;
+        return y;
+    }
+    function openSub(i, selectFirst) {
+        subTimer.stop();
+        var item = items[i];
+        if (!item || !item.submenu || item.enabled === false) {
+            closeSub();
             return;
-        // (nothing chosen yet: Down starts at the first, Up at the last)
-        var i = current >= 0 ? current : dir > 0 ? -1 : items.length;
-        for (var n = 0; n < items.length; ++n) {
-            i = (i + dir + items.length) % items.length;
-            if (!items[i].separator && items[i].enabled !== false) {
-                current = i;
-                return;
-            }
         }
+        if (subFor !== i) {
+            subItems = item.submenu;
+            subFor = i;
+            subMetrics = measureList(subItems);
+            // to the right of the menu, or to its left when there's no room
+            var right = panel.x + panel.width - 3;
+            subPanel.x = right + subPanel.width <= menu.width ? right : Math.max(0, panel.x - subPanel.width + 3);
+            var top = panel.y + rowY(items, i) - 3;
+            subPanel.y = Math.max(0, Math.min(top, menu.height - subPanel.height));
+            subCurrent = -1;
+        }
+        if (selectFirst && subCurrent < 0)
+            subCurrent = nextIndex(subItems, -1, 1);
+    }
+    function closeSub() {
+        subFor = -1;
+        subItems = [];
+        subCurrent = -1;
+    }
+
+    function nextIndex(list, from, dir) {
+        if (list.length === 0)
+            return -1;
+        // (nothing chosen yet: Down starts at the first, Up at the last)
+        var i = from >= 0 ? from : dir > 0 ? -1 : list.length;
+        for (var n = 0; n < list.length; ++n) {
+            i = (i + dir + list.length) % list.length;
+            if (!list[i].separator && list[i].enabled !== false)
+                return i;
+        }
+        return from;
+    }
+    function step(dir) {
+        if (subOpen && subCurrent >= 0) {
+            subCurrent = nextIndex(subItems, subCurrent, dir);
+            return;
+        }
+        current = nextIndex(items, current, dir);
+    }
+
+    // hovering a row with a submenu opens it after a moment (as Win95's
+    // did), hovering another closes it
+    Timer {
+        id: subTimer
+        interval: 350
+        property int target: -1
+        onTriggered: {
+            if (target >= 0 && menu.items[target] && menu.items[target].submenu)
+                menu.openSub(target, false);
+            else
+                menu.closeSub();
+        }
+    }
+    function hover(i) {
+        current = i;
+        if (subFor === i) {
+            subTimer.stop();
+            return;
+        }
+        subTimer.target = i;
+        subTimer.restart();
     }
 
     // "&Restore": R is the access key, shown underlined ("&&" is a plain &)
@@ -77,22 +163,34 @@ Item {
     property real textColumn: 0
     property real shortcutColumn: 0
     property real rowsHeight: 0
-    function measure() {
-        var t = 0, s = 0, h = 0;
-        for (var i = 0; i < items.length; ++i) {
-            h += items[i].separator ? 8 : 18;
-            if (items[i].separator)
+    property bool hasSubmenus: false
+    property var subMetrics: ({ text: 0, shortcut: 0, height: 0, sub: false })
+    function measureList(list) {
+        var t = 0, s = 0, h = 0, sub = false;
+        for (var i = 0; i < list.length; ++i) {
+            h += list[i].separator ? 8 : 18;
+            if (list[i].separator)
                 continue;
-            metrics.text = plain(items[i].text);
+            metrics.text = plain(list[i].text);
             t = Math.max(t, metrics.advanceWidth);
-            if (items[i].shortcut) {
-                metrics.text = items[i].shortcut;
+            if (list[i].shortcut) {
+                metrics.text = list[i].shortcut;
                 s = Math.max(s, metrics.advanceWidth);
             }
+            if (list[i].submenu)
+                sub = true;
         }
-        textColumn = t;
-        shortcutColumn = s;
-        rowsHeight = h;
+        return { text: t, shortcut: s, height: h, sub: sub };
+    }
+    function measure() {
+        var m = measureList(items);
+        textColumn = m.text;
+        shortcutColumn = m.shortcut;
+        rowsHeight = m.height;
+        hasSubmenus = m.sub;
+    }
+    function panelWidth(m) {
+        return 22 + m.text + (m.shortcut > 0 ? 24 + m.shortcut : 0) + (m.sub ? 14 : 0) + 20;
     }
 
     TextMetrics {
@@ -122,20 +220,43 @@ Item {
         // (closed, it can keep the keyboard: what's typed isn't for it)
         if (!menu.visible)
             return;
+        // in the submenu while one of its rows is chosen
+        var inSub = menu.subOpen && menu.subCurrent >= 0;
         switch (event.key) {
-        case Qt.Key_Escape: menu.close(); break;
+        case Qt.Key_Escape:
+        case Qt.Key_Left:
+            if (menu.subOpen)
+                menu.closeSub();
+            else if (event.key === Qt.Key_Escape)
+                menu.close();
+            break;
+        case Qt.Key_Right:
+            if (!inSub && menu.current >= 0)
+                menu.openSub(menu.current, true);
+            break;
         case Qt.Key_Up: menu.step(-1); break;
         case Qt.Key_Down: menu.step(1); break;
         case Qt.Key_Return:
-        case Qt.Key_Enter: menu.trigger(menu.current); break;
+        case Qt.Key_Enter:
+            if (inSub)
+                menu.subTrigger(menu.subCurrent);
+            else
+                menu.trigger(menu.current);
+            break;
         default: {
             // an item's access key picks it
             var ch = event.text.toLowerCase();
             if (ch.length !== 1)
                 return;
-            for (var i = 0; i < menu.items.length; ++i)
-                if (!menu.items[i].separator && menu.accessKey(menu.items[i].text) === ch) {
-                    menu.trigger(i);
+            var list = inSub ? menu.subItems : menu.items;
+            for (var i = 0; i < list.length; ++i)
+                if (!list[i].separator && menu.accessKey(list[i].text) === ch) {
+                    if (inSub) {
+                        menu.subTrigger(i);
+                    } else {
+                        menu.current = i;
+                        menu.trigger(i);
+                    }
                     break;
                 }
             break;
@@ -144,9 +265,112 @@ Item {
         event.accepted = true;
     }
 
+    // one row of either panel (a Component, not an inline component type,
+    // so it sees this file's ids)
+    Component {
+        id: menuRow
+    Item {
+        id: row
+        required property var modelData
+        required property int index
+        readonly property bool inSub: parent === subColumn
+        readonly property real textColumn: inSub ? menu.subMetrics.text : menu.textColumn
+        width: parent ? parent.width : 0
+        readonly property bool isSeparator: !!modelData.separator
+        readonly property bool isEnabled: modelData.enabled !== false
+        readonly property bool hot: (inSub ? menu.subCurrent === index
+                                           : menu.current === index || (menu.subFor === index && !!modelData.submenu))
+                                    && isEnabled && !isSeparator
+
+        height: isSeparator ? 8 : 18
+
+        Bevel {
+            visible: row.isSeparator
+            anchors.verticalCenter: parent.verticalCenter
+            x: 1
+            width: parent.width - 2
+            height: 2
+            style: "thinSunken"
+            filled: false
+        }
+
+        Rectangle {
+            visible: row.hot
+            anchors.fill: parent
+            color: Theme.selection
+        }
+
+        Text {
+            visible: !row.isSeparator && !!row.modelData.checked
+            x: 6
+            anchors.verticalCenter: parent.verticalCenter
+            text: "✓"
+            color: row.hot ? Theme.selectionText : Theme.menuText
+            font.pixelSize: Theme.fontSize
+            font.bold: true
+        }
+
+        EtchedText {
+            visible: !row.isSeparator
+            x: 20
+            anchors.verticalCenter: parent.verticalCenter
+            text: menu.label(row.modelData.text)
+            enabled: row.isEnabled
+            color: row.hot ? Theme.selectionText : Theme.menuText
+        }
+        EtchedText {
+            visible: !row.isSeparator && !!row.modelData.shortcut
+            x: 20 + row.textColumn + 24
+            anchors.verticalCenter: parent.verticalCenter
+            text: row.modelData.shortcut || ""
+            enabled: row.isEnabled
+            color: row.hot ? Theme.selectionText : Theme.menuText
+        }
+        // a submenu's arrow: a small solid triangle pointing right
+        Canvas {
+            visible: !row.isSeparator && !!row.modelData.submenu
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            width: 4
+            height: 7
+            readonly property color ink: !row.isEnabled ? Theme.shadow : row.hot ? Theme.selectionText : Theme.menuText
+            onInkChanged: requestPaint()
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.reset();
+                ctx.fillStyle = ink;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(4, 3.5);
+                ctx.lineTo(0, 7);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            onContainsMouseChanged: {
+                if (!containsMouse || row.isSeparator)
+                    return;
+                if (row.inSub) {
+                    // (on the way here the pointer may have crossed other rows)
+                    subTimer.stop();
+                    menu.current = menu.subFor;
+                    menu.subCurrent = row.index;
+                } else
+                    menu.hover(row.index);
+            }
+            onClicked: row.inSub ? menu.subTrigger(row.index) : menu.trigger(row.index)
+        }
+    }
+    }
+
     Item {
         id: panel
-        width: 22 + menu.textColumn + (menu.shortcutColumn > 0 ? 24 + menu.shortcutColumn : 0) + 20
+        width: menu.panelWidth({ text: menu.textColumn, shortcut: menu.shortcutColumn, sub: menu.hasSubmenus })
         height: menu.rowsHeight + 6
 
         Bevel { anchors.fill: parent; style: "raised"; face: Theme.menu }
@@ -161,67 +385,30 @@ Item {
 
             Repeater {
                 model: menu.items
-                delegate: Item {
-                    id: row
-                    required property var modelData
-                    required property int index
-                    readonly property bool isSeparator: !!modelData.separator
-                    readonly property bool isEnabled: modelData.enabled !== false
-                    readonly property bool hot: menu.current === index && isEnabled && !isSeparator
+                delegate: menuRow
+            }
+        }
+    }
 
-                    width: column.width
-                    height: isSeparator ? 8 : 18
+    Item {
+        id: subPanel
+        visible: menu.subOpen
+        width: menu.panelWidth(menu.subMetrics)
+        height: menu.subMetrics.height + 6
 
-                    Bevel {
-                        visible: row.isSeparator
-                        anchors.verticalCenter: parent.verticalCenter
-                        x: 1
-                        width: parent.width - 2
-                        height: 2
-                        style: "thinSunken"
-                        filled: false
-                    }
+        Bevel { anchors.fill: parent; style: "raised"; face: Theme.menu }
 
-                    Rectangle {
-                        visible: row.hot
-                        anchors.fill: parent
-                        color: Theme.selection
-                    }
+        MouseArea { anchors.fill: parent } // swallow clicks on the frame
 
-                    Text {
-                        visible: !row.isSeparator && !!row.modelData.checked
-                        x: 6
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "✓"
-                        color: row.hot ? Theme.selectionText : Theme.menuText
-                        font.pixelSize: Theme.fontSize
-                        font.bold: true
-                    }
+        Column {
+            id: subColumn
+            x: 3
+            y: 3
+            width: subPanel.width - 6
 
-                    EtchedText {
-                        visible: !row.isSeparator
-                        x: 20
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: menu.label(row.modelData.text)
-                        enabled: row.isEnabled
-                        color: row.hot ? Theme.selectionText : Theme.menuText
-                    }
-                    EtchedText {
-                        visible: !row.isSeparator && !!row.modelData.shortcut
-                        x: 20 + menu.textColumn + 24
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: row.modelData.shortcut || ""
-                        enabled: row.isEnabled
-                        color: row.hot ? Theme.selectionText : Theme.menuText
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onContainsMouseChanged: if (containsMouse && !row.isSeparator) menu.current = row.index
-                        onClicked: menu.trigger(row.index)
-                    }
-                }
+            Repeater {
+                model: menu.subItems
+                delegate: menuRow
             }
         }
     }

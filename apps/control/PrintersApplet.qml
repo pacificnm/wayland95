@@ -180,6 +180,11 @@ Window {
             clip: true
             interactive: false
             focus: true
+            // Keeps icons alive off screen. Without this, resizing the window
+            // destroys the ones that leave the view and makes them again on the
+            // way back, and a new Canvas is blank until its first queued paint:
+            // the icons flicker.
+            cacheBuffer: 2000
             model: win.entries
             cellWidth: win.view === "icons" ? 86 : width
             cellHeight: win.view === "icons" ? 76 : 20

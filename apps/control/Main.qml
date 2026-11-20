@@ -173,6 +173,11 @@ Window {
             y: 6
             width: parent.width - 8
             height: parent.height - 10
+            // Keeps icons alive off screen. Without this, resizing the window
+            // destroys the ones that leave the view and makes them again on the
+            // way back, and a new Canvas is blank until its first queued paint:
+            // the icons flicker.
+            cacheBuffer: 4000
             cellWidth: 82
             cellHeight: 76
             interactive: false

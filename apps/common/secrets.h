@@ -7,7 +7,7 @@
 #include <functional>
 
 // Passwords in the desktop's keyring (the freedesktop Secret Service:
-// gnome-keyring, KeePassXC...), over D-Bus, never in a file. Each is found
+// Wayland 95's win95keyring, gnome-keyring, KeePassXC...), over D-Bus, never in a file. Each is found
 // by its attributes (e.g. {application: wayland95-email, account: ID}). A
 // locked keyring asks for its own password (its prompt) first.
 namespace Secrets {

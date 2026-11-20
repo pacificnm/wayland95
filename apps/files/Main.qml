@@ -550,6 +550,11 @@ Window {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: iconBar.visible ? iconBar.left : parent.right
+                // Keeps icons alive off screen. Without this, resizing the window
+                // destroys the ones that leave the view and makes them again on the
+                // way back, and a new Canvas is blank until its first queued paint:
+                // the icons flicker.
+                cacheBuffer: 2000
                 cellWidth: 78
                 cellHeight: 74
                 interactive: false

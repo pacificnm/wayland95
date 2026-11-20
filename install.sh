@@ -20,7 +20,8 @@ qt6-qpa-plugins qt6-wayland libwlroots-0.18-dev libcairo2-dev libpango1.0-dev
 libdrm-dev libpixman-1-dev libinput-dev libxkbcommon-dev libvterm-dev libxcb1-dev
 libwayland-dev wayland-protocols zlib1g-dev libfontconfig-dev libsqlite3-dev pkg-config cmake
 build-essential xwayland pkexec libqt6sql6-sqlite libqt6sql6-mysql libqt6sql6-psql
-qml6-module-qtmultimedia libqt6multimedia6 qt6-multimedia-dev libglib2.0-dev fonts-liberation"
+qml6-module-qtmultimedia libqt6multimedia6 qt6-multimedia-dev libglib2.0-dev fonts-liberation
+libssl-dev libpam0g-dev"
 if command -v dpkg >/dev/null 2>&1; then
     missing=""
     for p in $NEEDED; do
@@ -39,6 +40,13 @@ cmake --build build-release -j"$(nproc)"
 
 say "Installing to $PREFIX (asks for your password)"
 sudo cmake --install build-release
+
+# the keyring's PAM module: unlocks the password list with your login
+# password (the profile went to /usr/share/pam-configs; this turns it on)
+if command -v pam-auth-update >/dev/null 2>&1 && [ -f /usr/share/pam-configs/wayland95-keyring ]; then
+    say "Unlocking the password list at login (pam-auth-update)"
+    sudo pam-auth-update --package
+fi
 
 # The old Qt compositor (wayland95-compositor replaced it; an older install.sh
 # put it here)

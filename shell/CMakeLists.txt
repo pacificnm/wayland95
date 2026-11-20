@@ -28,6 +28,7 @@ qt_add_executable(win95shell
     ${CMAKE_SOURCE_DIR}/src/trashwatcher.h ${CMAKE_SOURCE_DIR}/src/trashwatcher.cpp
     ${CMAKE_SOURCE_DIR}/src/polkitagent.h ${CMAKE_SOURCE_DIR}/src/polkitagent.cpp
     ${CMAKE_SOURCE_DIR}/src/nmsecretagent.h ${CMAKE_SOURCE_DIR}/src/nmsecretagent.cpp
+    ${CMAKE_SOURCE_DIR}/src/keyringprompter.h ${CMAKE_SOURCE_DIR}/src/keyringprompter.cpp
     ${CMAKE_SOURCE_DIR}/src/updatecheck.h ${CMAKE_SOURCE_DIR}/src/updatecheck.cpp
     # other programs' look: GTK's theme and fonts, browsers' title bars
     ${CMAKE_SOURCE_DIR}/src/programlook.h ${CMAKE_SOURCE_DIR}/src/programlook.cpp
@@ -75,6 +76,7 @@ set(shared_qml
     NetworkTray.qml BluetoothTray.qml BatteryTray.qml DrivesTray.qml
     RunDialog.qml ShutDownDialog.qml
     SystemNotices.qml NotificationPopup.qml LevelOsd.qml PasswordDialog.qml NetworkPasswordDialog.qml
+    KeyringPasswordDialog.qml
     UnlockDialog.qml ScreenCapture.qml TaskSwitcher.qml
 )
 set(qml_paths)

@@ -308,6 +308,11 @@ struct view {
 	uint32_t resize_serial;
 	bool resize_waiting;
 	int resize_w, resize_h;
+	// where it was last, for when it opens again (places.c)
+	bool place_restored; // it was put back where it was
+	bool place_noted;
+	struct wlr_box place_box;
+	int place_state;
 
 	struct wlr_foreign_toplevel_handle_v1 *ftl;
 	struct wlr_ext_foreign_toplevel_handle_v1 *ext_ftl;
@@ -447,6 +452,15 @@ void view_begin_interactive(struct view *view, enum cursor_mode mode, uint32_t e
 struct view *view_top(struct server *server); // topmost mapped, not minimized
 struct view *view_active(struct server *server); // the active window (its dialogs may be in front)
 void view_arrange_all(struct server *server); // usable area changed
+
+// places.c: windows open where they were last (windows.tsv)
+void places_init(struct server *server);
+void places_finish(struct server *server); // (writes what's waiting)
+// before a window is first shown: its remembered size and state now, its
+// place for when it shows (false: nothing remembered, or not for it)
+bool places_restore(struct view *view);
+void places_clamp(struct view *view); // as it shows: all of it on a display
+void places_note(struct view *view);  // it moved, or its size or state changed
 
 // xdg.c
 void xdg_init(struct server *server);

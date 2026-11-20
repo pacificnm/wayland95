@@ -30,12 +30,25 @@ FocusScope {
 
     signal closed()
 
+    // dragged by its title bar: it stays where it was put
+    property bool userMoved: false
+
+    function recenter() {
+        box.x = embedded ? 0 : Math.max(0, Math.round((dialog.width - box.width) / 2));
+        box.y = embedded ? 0 : Math.max(0, Math.round((dialog.height - box.height) / 2));
+    }
+
     function show() {
-        box.x = embedded ? 0 : Math.round((dialog.width - box.width) / 2);
-        box.y = embedded ? 0 : Math.round((dialog.height - box.height) / 2);
+        userMoved = false;
+        recenter();
         visible = true;
         forceActiveFocus();
     }
+
+    // shown before the window had its size (a dialog opened as the program
+    // starts), or the window resized: centered again, unless it was moved
+    onWidthChanged: if (visible && !userMoved) recenter()
+    onHeightChanged: if (visible && !userMoved) recenter()
 
     function close() {
         if (!visible)
@@ -107,6 +120,7 @@ FocusScope {
                     box.x += p.x - last.x;
                     box.y += p.y - last.y;
                     last = p;
+                    dialog.userMoved = true;
                 }
             }
 

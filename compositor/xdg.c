@@ -77,6 +77,8 @@ static void toplevel_commit(struct wl_listener *listener, void *data)
 			view_set_fullscreen(view, true);
 		else if (toplevel->requested.maximized)
 			view_set_maximized(view, true);
+		else if (places_restore(view)) // (its size and state from last time)
+			wlr_xdg_surface_schedule_configure(toplevel->base);
 		else
 			wlr_xdg_toplevel_set_size(toplevel, 0, 0);
 		return;
@@ -100,6 +102,7 @@ static void toplevel_commit(struct wl_listener *listener, void *data)
 	}
 	frame_update(view); // a new size, if it changed
 	view_resize_drawn(view);
+	places_note(view);
 }
 
 static void toplevel_destroy(struct wl_listener *listener, void *data)

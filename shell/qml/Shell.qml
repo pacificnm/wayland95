@@ -44,6 +44,7 @@ QtObject {
             anchors.bottom: parent.bottom
             anchors.right: parent.right // (more icons: more columns)
             onMenuRequested: (entry, x, y) => shell.showIconMenu(entry, x, y)
+            onDesktopMenuRequested: (x, y) => shell.showDesktopMenu(x, y)
         }
     }
 
@@ -187,6 +188,10 @@ QtObject {
     property Window networkPasswordLayer: DialogLayer {
         showing: networkPasswordDialog.visible
         NetworkPasswordDialog { id: networkPasswordDialog }
+    }
+    property Window keyringPasswordLayer: DialogLayer {
+        showing: keyringPasswordDialog.visible
+        KeyringPasswordDialog { id: keyringPasswordDialog }
     }
     // (created after the others: a message over the Run dialog is on top)
     property Window messageLayer: DialogLayer {
@@ -348,6 +353,25 @@ QtObject {
             items.push({ text: "Empty Recycle &Bin", enabled: TrashWatcher.full, action: shell.confirmEmptyTrash });
         }
         windowMenu.popup(x, y, items);
+    }
+    // the desktop's own menu (right-click between the icons), as Win95's
+    function showDesktopMenu(x, y) {
+        taskbar.closePopups();
+        windowMenu.popup(x, y, [
+            { text: "Arrange &Icons", submenu: [
+                { text: "by &Name", action: function () { desktopIcons.arrangeBy("name"); } },
+                { text: "by &Type", action: function () { desktopIcons.arrangeBy("type"); } },
+                { text: "by &Date", action: function () { desktopIcons.arrangeBy("date"); } },
+                { separator: true },
+                { text: "&Auto Arrange", checked: desktopIcons.autoArrange,
+                  action: function () { desktopIcons.setAutoArrange(!desktopIcons.autoArrange); } },
+            ] },
+            { text: "Line &up Icons", enabled: !desktopIcons.autoArrange, action: desktopIcons.lineUp },
+            { separator: true },
+            { text: "R&efresh", action: function () { DesktopShortcuts.refresh(); } },
+            { separator: true },
+            { text: "P&roperties", action: function () { Launcher.launch("win95control", ["--applet", "display"]); } },
+        ]);
     }
     // About Wayland 95 (My Computer's menu, and Start > Help)
     function showAbout() {

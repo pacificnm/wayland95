@@ -69,7 +69,7 @@ add_custom_command(
 
 set(SOURCES main.c output.c input.c view.c xdg.c xwayland.c layers.c protocols.c
     decoration.c settings.c shell.c accessibility.c dialog.c xscale.c
-    displays.c server.h ${PROTOCOL_HEADERS}
+    displays.c places.c server.h ${PROTOCOL_HEADERS}
     ${GEN}/wayland95-shell-v1-protocol.c ${GEN}/wlr-foreign-toplevel-management-unstable-v1-protocol.c
     ${GEN}/xdg-dialog-v1-protocol.c ${GEN}/xdg-shell-protocol.c ${GEN}/xdg-output-unstable-v1-protocol.c)
 set(LIBS PkgConfig::WLROOTS PkgConfig::WL_SERVER PkgConfig::XKB PkgConfig::PIXMAN PkgConfig::XCB

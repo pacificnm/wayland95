@@ -103,6 +103,33 @@ compositor's; that one is built only with `cmake -B build
   Maximize, Close (asks the program) and End Task (ends it at once, even if
   it's frozen, after asking you).
 
+## Windows remember where they were
+
+A program's window opens where it was the last time it was open, as big,
+and maximized or snapped to half the screen if it was then. That holds
+after the program is closed and started again, and after logging out and
+in ([compositor/places.c](compositor/places.c)).
+
+- **Which window is which:** by the program (its Wayland app id, or its X11
+  class and instance) and the window's title. A title not seen before (a
+  different document's name) gets that program's last place.
+- **More than one window** of a program: the next opens 30 pixels down and
+  to the right of the one already there, as new windows are cascaded.
+- **A smaller screen**, or a display that's gone: the window is moved onto a
+  display that's there, and made smaller if it wouldn't fit.
+- **Left as the program wants:** dialogs and other windows that belong to a
+  window, windows that ask to start maximized or full screen, and X11
+  programs that put themselves somewhere or were told where (`-geometry
+  +X+Y`).
+  Full screen and minimized aren't remembered: a window opens in the state
+  it was in before. A window of one fixed size gets its place back, not a
+  size.
+
+Where windows were goes in `~/.config/wayland95/windows.tsv`, one line a
+window, the most recent first (the last 256, and 8 titles a program),
+written a moment after a window stops moving rather than as it moves.
+Delete the file to forget them all.
+
 ## The Start menu
 
 Click **Start** or press **Ctrl+Esc**. Like Win95's, it has a sidebar with
@@ -140,6 +167,28 @@ several entries with that letter take turns). The menu lives in
 [StartMenu.qml](qml/Win95Shell/StartMenu.qml), its icons in
 [MenuIcon.qml](qml/Win95Shell/MenuIcon.qml), and Run is handled by
 `Launcher::run()` in [src/launcher.cpp](src/launcher.cpp).
+
+## The desktop's icons
+
+My Computer, Network, Recycle Bin and Terminal, then your shortcuts (the
+`.desktop` files in `~/Desktop`; Start menu > right-click a program > Add
+Shortcut to Desktop). At first they go in columns down the left. **Drag an
+icon** and it stays where you drop it. Right-click the desktop between the
+icons for Win95's menu:
+
+- **Arrange Icons** ▸ **by Name**, **by Type** (Wayland 95's programs, then
+  the rest) or **by Date** (newest first) puts them back in columns, with My
+  Computer and the others first. **Auto Arrange** keeps them in columns
+  always: dragging one then moves it to another place in the order.
+- **Line up Icons** moves each to the nearest place on the grid.
+- **Refresh** reads `~/Desktop` again, and **Properties** opens Control
+  Panel > Display.
+
+New shortcuts go in the first free place. Where each icon is goes in
+`~/.config/wayland95/desktop-icons.json`, so it's kept across logins. An
+icon left off a smaller screen comes back to its edge. Code:
+[DesktopIcons.qml](qml/Win95Shell/DesktopIcons.qml); the menus' submenus
+are [Menu95.qml](apps/common/Menu95.qml)'s, which any program's menus can use.
 
 ## Password prompts
 
@@ -598,7 +647,7 @@ up next to the shell first, then on `$PATH`.
   iCloud, Fastmail and others get their servers filled in (Gmail and
   friends want an app password); SSL/TLS or STARTTLS, and the server's
   certificate must be trusted. Passwords are kept in the desktop's keyring
-  (the Secret Service: gnome-keyring), never in Email's own files;
+  (the Secret Service: win95keyring), never in Email's own files;
   settings are `~/.config/wayland95/email.json`, and messages read are
   cached in `~/.cache/wayland95/email` (only you can read it). Not yet:
   POP3, OAuth sign-in (accounts that only allow it), HTML writing, an
@@ -1550,9 +1599,41 @@ To see it without logging out:
 (Shut Down... is grayed out there: test mode can't shut down). If the theme
 ever fails to load, SDDM falls back to the plain theme built into it.
 
-**Not provided by Wayland 95:** a password keyring service. Plasma and GNOME
-start theirs at login, so programs that keep passwords in one (browsers,
-VS Code) may ask you to unlock it, or keep them their own way.
+**The keyring (your password list):** Wayland 95 has its own keyring,
+`win95keyring` ([apps/keyring](apps/keyring)), the freedesktop Secret
+Service (`org.freedesktop.secrets`) that programs keep passwords in:
+Claude, VS Code, Chrome and other Chromium/Electron programs, anything
+using libsecret (`secret-tool`), and Wayland 95's own Email and Web
+Browser. GNOME Keyring isn't needed. Like Windows 95's `.PWL` password
+list, it's encrypted and opened with your logon password:
+
+- Everything is in one file, `~/.local/share/wayland95/passwords.pwl` (only
+  you can read it), encrypted with AES-256-GCM using a key derived from the
+  password with scrypt. Programs' secrets cross D-Bus encrypted too (the
+  spec's `dh-ietf1024-sha256-aes128-cbc-pkcs7`, which libsecret uses).
+- **At login** the PAM module `pam_wayland95_keyring` (added to the
+  `common-*` PAM files by `pam-auth-update`) hands your password to the
+  keyring, which unlocks the list, or makes it with that password the
+  first time a program saves something. You aren't asked for anything.
+- If your login didn't unlock it (automatic login, or a list made with a
+  different password), a program that needs a saved password gets
+  **Enter Password** from the desktop. Once the list is opened that way it's
+  re-encrypted with your login password, so the next login opens it by
+  itself.
+- **Changing your password** (Control Panel > Passwords, or `passwd`)
+  changes the list's too, through the same PAM module.
+- `win95keyring --lock` locks it until it's next needed. D-Bus starts it
+  when something first asks.
+- **Chromium and Electron programs** only use a keyring on desktops they
+  recognize (GNOME, KDE...). Elsewhere they fall back to "basic_text", and
+  Claude warns that "No system keyring is available". So programs started
+  from the Start menu, the desktop, Run... and autostart are given
+  `--password-store=gnome-libsecret` (found by Chromium's files next to the
+  program). One started some other way, such as from a terminal, needs that
+  switch on its command line.
+
+If GNOME Keyring or KeePassXC is also installed and running, whichever
+takes `org.freedesktop.secrets` first answers.
 
 ## What's not here yet
 
@@ -1562,4 +1643,3 @@ VS Code) may ask you to unlock it, or keep them their own way.
 - Screen sharing (the portal's ScreenCast): the compositor has what
   xdg-desktop-portal-wlr needs, but the session doesn't set that portal up
   yet
-- Remembering window positions across sessions

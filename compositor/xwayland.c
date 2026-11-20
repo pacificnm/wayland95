@@ -43,6 +43,8 @@ static void xview_map(struct wl_listener *listener, void *data)
 		view->y = xscale_from_x(view->server, xs->y);
 		view->placed = true;
 	}
+	// else where it was last time, if it was
+	places_restore(view);
 	view_mapped(view);
 	// one that asked to start maximized did so before it was known to get a
 	// frame: make room for the title bar now
@@ -59,8 +61,10 @@ static void xview_unmap(struct wl_listener *listener, void *data)
 static void xview_commit(struct wl_listener *listener, void *data)
 {
 	struct view *view = wl_container_of(listener, view, commit);
-	if (view->mapped)
+	if (view->mapped) {
 		frame_update(view); // a new size, if it changed
+		places_note(view);
+	}
 }
 
 static void xview_set_decorations(struct wl_listener *listener, void *data)

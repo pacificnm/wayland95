@@ -47,6 +47,7 @@ void view_move(struct view *view, int x, int y)
 		wlr_xwayland_surface_configure(view->xsurface, xscale_to_x(view->server, x), xscale_to_x(view->server, y),
 				view->xsurface->width, view->xsurface->height);
 	}
+	places_note(view);
 }
 
 void view_resize(struct view *view, int width, int height)
@@ -384,6 +385,7 @@ void view_set_maximized(struct view *view, bool maximized)
 	}
 	apply_state(view);
 	frame_update(view);
+	places_note(view);
 }
 
 void view_set_snapped(struct view *view, uint32_t edge, struct output *output)
@@ -409,6 +411,7 @@ void view_set_snapped(struct view *view, uint32_t edge, struct output *output)
 	}
 	apply_state(view);
 	frame_update(view);
+	places_note(view);
 }
 
 void view_set_fullscreen(struct view *view, bool fullscreen)
@@ -438,6 +441,7 @@ void view_set_fullscreen(struct view *view, bool fullscreen)
 	frame_update(view);
 	fullscreen_restack(view->server);
 	input_refresh_pointer(view->server);
+	places_note(view);
 }
 
 // panels or displays came, went or changed: maximized, snapped and full
@@ -556,12 +560,17 @@ void view_mapped(struct view *view)
 			: output_at(server, server->cursor->x, server->cursor->y);
 	struct wlr_box area = output ? output->usable : (struct wlr_box){0, 0, 640, 480};
 	struct wlr_box state;
-	if (!view->placed && (view->maximized || view->fullscreen) && state_box(view, &state)) {
+	if (!view->placed && (view->maximized || view->fullscreen || view->snap_edge) && state_box(view, &state)) {
 		// it asked to be maximized (or fullscreen) before it showed (Firefox
-		// does, between its first commit and its first drawing): there
+		// does, between its first commit and its first drawing), or was
+		// maximized or snapped when it was last open (places.c): there
 		view_move(view, state.x, state.y);
 		view_resize(view, state.width, state.height);
 		view->placed = true;
+	} else if (view->place_restored && !view->maximized && !view->fullscreen && !view->snap_edge) {
+		// back where it was last time: all of it on a display, now that
+		// its size is known
+		places_clamp(view);
 	} else if (!view->placed) {
 		// cascade new windows (their frames) from the top left of the
 		// usable area
@@ -598,6 +607,7 @@ void view_mapped(struct view *view)
 
 	view_focus(view);
 	input_refresh_pointer(server);
+	places_note(view);
 }
 
 void view_unmapped(struct view *view)

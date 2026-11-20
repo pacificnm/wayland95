@@ -92,6 +92,7 @@ static void stop_listening(struct server *s)
 	shell_finish(s);
 	a11y_finish(s);
 	displays_finish(s);
+	places_finish(s);
 	if (s->settings_source)
 		wl_event_source_remove(s->settings_source);
 }
@@ -232,6 +233,7 @@ int main(int argc, char *argv[])
 	server.ext_toplevels = wlr_ext_foreign_toplevel_list_v1_create(server.display, 1);
 
 	settings_init(&server); // before the keyboards and window frames need it
+	places_init(&server);
 	output_init(&server);
 	xdg_init(&server);
 	layers_init(&server);

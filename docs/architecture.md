@@ -54,7 +54,8 @@ maintained by the people who write the protocols.
  │ Alt+Tab box, Run, Shut Down, password prompts, network passwords          │
  │ screen saver and unlock (ext-session-lock)                                │
  │ services: launcher, program menu, polkit agent, NetworkManager secrets,   │
- │ notifications server, tray (StatusNotifier), update check, problem reports│
+ │ keyring prompts, notifications server, tray (StatusNotifier), update      │
+ │ check, problem reports                                                    │
  └────────────────────────────────────────────────────────────────────────────┘
    apps/*: Control Panel, File Manager, Notepad, Terminal... (ordinary clients,
    unchanged)
@@ -81,6 +82,7 @@ one file per concern):
 | `accessibility.c` | Accessibility Options where keys arrive: StickyKeys, FilterKeys (bounce and slow keys), ToggleKeys, MouseKeys and their shortcut keys; while StickyKeys or FilterKeys is on, programs see the modifiers of the keys that got through, not the keyboard's own |
 | `settings.c` | reads `~/.config/wayland95/settings.ini` (the colour scheme for frames, keyboard layout and repeat, double-click time, touchpad, Accessibility Options) and watches it with inotify: changes apply at once, as the Qt compositor does today |
 | `displays.c` | the displays as Control Panel > Display sets them (`~/.config/wayland95/displays.ini`: on or off, resolution and refresh rate, scale, rotation, place, adaptive sync, which is the main one), applied when the file changes and when a display is plugged in; one the display can't do falls back to its own best mode, and they're never all off. What there is (and each display's modes) is written to `$XDG_RUNTIME_DIR/wayland95-displays-SOCKET.ini` for the Control Panel |
+| `places.c` | windows open where they were: each main window's place, size and state (normal, maximized, snapped left or right) is kept by its program (xdg app_id, X11 class/instance) and title in `~/.config/wayland95/windows.tsv`, most recent first, written 1.5 s after the last change (and as the compositor stops). A window is put back before its first configure (xdg: the size in it; X11: as it maps), cascaded past another of the program's windows already there, moved onto a display that's there and shrunk to fit. Dialogs, transients, windows asking for maximized or full screen, and X11 windows with a position of their own or a user-given one (USPosition: `-geometry +X+Y`) are left alone |
 
 Window frames are server-side (`xdg-decoration`): programs that leave
 decorations to the desktop (no preference, or server side: Qt, Electron)
@@ -174,8 +176,10 @@ desktop), so `layershell.cpp` does (`LayerShellAttached::remake`).
 
 The QML that's in the Qt compositor today (`qml/Win95Shell/`) moves here
 almost unchanged, with the C++ services next to it (launcher, program menu,
-polkit agent, NetworkManager secret agent, notifications, StatusNotifier
-watcher, update check, trash watcher, problem reports). What changes:
+polkit agent, NetworkManager secret agent, the keyring's password prompt
+(`src/keyringprompter.cpp`, for `win95keyring`), notifications,
+StatusNotifier watcher, update check, trash watcher, problem reports).
+What changes:
 
 - **Windows on the taskbar** come from `wlr-foreign-toplevel-management`
   (title, app id, active/minimized/maximized; activate, minimize, maximize,

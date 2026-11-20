@@ -61,6 +61,8 @@ qt_add_executable(win95compositor
     src/accessibility.cpp
     src/nmsecretagent.h
     src/nmsecretagent.cpp
+    src/keyringprompter.h
+    src/keyringprompter.cpp
     src/xdgactivation.h
     src/xdgactivation.cpp
     src/taskswitcher.h
@@ -139,6 +141,7 @@ set(win95shell_qml_files
     RunDialog.qml
     PasswordDialog.qml
     NetworkPasswordDialog.qml
+    KeyringPasswordDialog.qml
     UnlockDialog.qml
     TaskSwitcher.qml
     ScreenCapture.qml
@@ -208,6 +211,7 @@ add_subdirectory(apps/volume)   # win95volume
 add_subdirectory(apps/sysmon)   # win95sysmon
 add_subdirectory(apps/notify)   # win95notify (command line)
 add_subdirectory(apps/portal)   # win95portal (file dialogs for other programs)
+add_subdirectory(apps/keyring)  # win95keyring (the Secret Service), pam_wayland95_keyring
 add_subdirectory(apps/imagewriter) # win95imagewriter (disk images to USB drives)
 add_subdirectory(apps/games)    # win95solitaire, win95mines
 add_subdirectory(apps/repos)    # win95repos

@@ -2,7 +2,11 @@
 #include "wayland95settings.h"
 #include "desktopentry.h"
 
+#include <algorithm>
+
 #include <QCoreApplication>
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -129,6 +133,35 @@ void Launcher::startSession()
     }
 }
 
+// Chromium, and the Electron programs built on it (Claude, VS Code, Slack...),
+// pick where they keep passwords by the desktop's name: GNOME's and KDE's
+// keyrings they know, anything else (Wayland95) gets "basic_text", their
+// passwords barely hidden, and Claude warns that there's no keyring. So
+// when there's a Secret Service (win95keyring, or another), they're told
+// to use it. Found by Chromium's own files next to the program (or the
+// folder above, for VS Code's bin/code script).
+static bool isChromium(const QString &path)
+{
+    const QFileInfo program(QFileInfo(path).canonicalFilePath());
+    for (const QString &dir : { program.absolutePath(), program.absolutePath() + QStringLiteral("/..") }) {
+        const QDir d(dir);
+        if (d.exists(QStringLiteral("icudtl.dat"))
+            && (d.exists(QStringLiteral("chrome_100_percent.pak")) || d.exists(QStringLiteral("resources.pak"))
+                || d.exists(QStringLiteral("v8_context_snapshot.bin"))))
+            return true;
+    }
+    return false;
+}
+
+static bool keyringAvailable()
+{
+    QDBusConnectionInterface *bus = QDBusConnection::sessionBus().interface();
+    if (!bus)
+        return false;
+    const QString name = QStringLiteral("org.freedesktop.secrets");
+    return bus->isServiceRegistered(name).value() || bus->activatableServiceNames().value().contains(name);
+}
+
 QString Launcher::resolve(const QString &program)
 {
     if (program.contains(QLatin1Char('/')))
@@ -167,9 +200,15 @@ bool Launcher::launch(const QString &program, const QStringList &arguments)
     if (!locale.isEmpty())
         env.remove(QStringLiteral("LC_ALL")); // it would override them all
 
+    QStringList args = arguments;
+    if (isChromium(path) && !std::any_of(args.cbegin(), args.cend(), [](const QString &a) {
+            return a.startsWith(QLatin1String("--password-store"));
+        }) && keyringAvailable())
+        args.prepend(QStringLiteral("--password-store=gnome-libsecret"));
+
     QProcess process;
     process.setProgram(path);
-    process.setArguments(arguments);
+    process.setArguments(args);
     process.setProcessEnvironment(env);
     process.setWorkingDirectory(QDir::homePath());
     process.setStandardInputFile(QProcess::nullDevice());

@@ -6,7 +6,7 @@
 # logs) and what's drawn (grim screenshots).
 #
 #   tests/run.sh [SUITE...]        all suites, or some of: input (Chromium) firefox
-#                                  windows popups x11 clipboard qt frames snap alttab
+#                                  windows popups x11 clipboard qt frames snap places alttab
 #                                  settings shell startitems dialogs notifications session screensaver power
 #                                  capture accessibility windowkeys shellstart timezone network
 #                                  games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx samba logon studio monitors screen
@@ -89,6 +89,8 @@ start_compositor() { # [WIDTHxHEIGHT]  (COMP_EXTRA: more arguments)
     CLOG=$WORK/$SUITE-compositor.log
     # its own settings (settings.ini), not the user's
     CONFIG=$WORK/config-$RUN; mkdir -p "$CONFIG/wayland95"
+    # where windows were (windows.tsv), as from a session before
+    [ -n "${SEED_PLACES:-}" ] && cp "$SEED_PLACES" "$CONFIG/wayland95/windows.tsv"
     XDG_CONFIG_HOME=$CONFIG "$COMPOSITOR" --socket "$SOCKET" --headless "$size" "${COMP_EXTRA[@]}" >"$CLOG" 2>&1 &
     COMP_PID=$!
     PIDS+=($!)
@@ -133,8 +135,8 @@ expect_true() { # STATUS NAME WHAT-HAPPENED   e.g.  [ "$x" = 1 ]; expect_true $?
 }
 
 # --- probes: GTK windows that log what they get ------------------------------
-# start_probe NAME wayland|headerbar|x11|qt RRGGBB: GTK on Wayland (headerbar:
-# with its own title bar, as GNOME programs have) or X11, or Qt; its log is $WORK/SUITE-NAME.log, commands go to $WORK/SUITE-NAME.in
+# start_probe NAME wayland|headerbar|x11|qt|qtx11 RRGGBB: GTK on Wayland (headerbar:
+# with its own title bar, as GNOME programs have) or X11, or Qt (on Wayland or X11); its log is $WORK/SUITE-NAME.log, commands go to $WORK/SUITE-NAME.in
 start_probe() {
     local name=$1 backend=$2 color=$3 fifo=$WORK/$SUITE-$1.in
     # GTK's settings are its defaults (Adwaita), never the desktop's own
@@ -145,6 +147,9 @@ start_probe() {
     PIDS+=($!)
     if [ "$backend" = qt ]; then
         WAYLAND_DISPLAY=$SOCKET QT_QPA_PLATFORM=wayland "$PROBE_QT" --title "$name" --color "$color" \
+            <"$fifo" >"$WORK/$SUITE-$name.log" 2>"$WORK/$SUITE-$name.err" &
+    elif [ "$backend" = qtx11 ]; then
+        env -u WAYLAND_DISPLAY QT_QPA_PLATFORM=xcb DISPLAY="$XDISPLAY" "$PROBE_QT" --title "$name" --color "$color" \
             <"$fifo" >"$WORK/$SUITE-$name.log" 2>"$WORK/$SUITE-$name.err" &
     elif [ "$backend" = headerbar ]; then
         WAYLAND_DISPLAY=$SOCKET GDK_BACKEND=wayland GSETTINGS_BACKEND=$gsettings "$PROBE" --title "$name" --color "$color" --headerbar \
@@ -825,6 +830,94 @@ suite_snap() {
     expect_pixel "and no further" gtk-left 642 400 '!0000cc'
     drag 300 $((PY - 15)) 500 400; sleep 0.6
     [ "$(size_of G)" = "$gsize" ]; expect_true $? "dragged off, it gets its size back" "size $(size_of G), expected $gsize"
+}
+
+# --- windows open where they were (places.c) -----------------------------------
+# the line windows.tsv has for a window: STATE X Y W H (or nothing)
+place_of() { # APP TITLE
+    awk -F '\t' -v a="$1" -v t="$2" '$6 == a && $7 == t { print $1, $2, $3, $4, $5; exit }' "$CONFIG/wayland95/windows.tsv" 2>/dev/null
+}
+app_of() { query list | awk -F '|' -v t="$1" '$1 == t { print $2; exit }'; }
+gone() { # PROBE: closed, and the window gone from the list
+    eval "kill \$PID_$1" 2>/dev/null
+    for _ in $(seq 20); do query list | grep -q "^$1|" || break; sleep 0.1; done
+}
+suite_places() {
+    say "places: windows open where they were last"
+    fresh
+    start_probe A qt cc0000 || return
+    local app size W H MX MY BW BH XX XY xsize
+    app=$(app_of A)
+    locate_probe A 300 250 || return
+    size=$(size_of A); W=${size%x*}; H=${size#*x}
+    # moved, and made bigger from its bottom right corner
+    drag $((PX + 60)) $(title_y $PY) $((PX + 260)) $(($(title_y $PY) + 150)); sleep 0.5
+    locate_probe A $((PX + 300)) $((PY + 200)) || return
+    MX=$PX; MY=$PY
+    drag $((MX + W + 1)) $((MY + H + 1)) $((MX + W + 81)) $((MY + H + 61)); sleep 0.6
+    BW=$((W + 80)); BH=$((H + 60))
+    [ "$(size_of A)" = "${BW}x$BH" ]; expect_true $? "(moved and resized)" "size $(size_of A), expected ${BW}x$BH"
+    sleep 2
+    [ "$(place_of "$app" A)" = "normal $MX $MY $BW $BH" ]
+    expect_true $? "a moment later its place and size are in windows.tsv" "$(place_of "$app" A), expected normal $MX $MY $BW $BH"
+
+    gone A
+    start_probe A qt cc0000 || return
+    locate_probe A $((MX + 40)) $((MY + 40)) || return
+    [ "$PX" -eq "$MX" ] && [ "$PY" -eq "$MY" ] && [ "$(size_of A)" = "${BW}x$BH" ]
+    expect_true $? "opened again, it's where it was, as big" "at $PX,$PY $(size_of A), expected $MX,$MY ${BW}x$BH"
+
+    # another window of the program: cascaded from it, not on top of it
+    start_probe A2 qt 00cc00 || return
+    locate_probe A2 $((MX + 70)) $((MY + 70)) || return
+    [ "$PX" -eq $((MX + 30)) ] && [ "$PY" -eq $((MY + 30)) ]
+    expect_true $? "a second window of the program is cascaded from the first" "at $PX,$PY, expected $((MX + 30)),$((MY + 30))"
+    gone A2
+
+    # maximized
+    pointer click:$((MX + 60)),$(title_y $MY) click:$((MX + 60)),$(title_y $MY) wait:0.6
+    query list | grep -q "^A|.*maximized"; expect_true $? "(maximized)" "$(query list | tr '\n' ' ')"
+    sleep 2; gone A
+    start_probe A qt cc0000 || return
+    query list | grep -q "^A|.*maximized" && [ "$(size_of A)" = "1280x778" ]
+    expect_true $? "maximized when it closed, it opens maximized" "$(query list | grep "^A|") $(size_of A)"
+    query unmaximize A; sleep 0.6
+    [ "$(size_of A)" = "${BW}x$BH" ]; expect_true $? "and restores to its size from before" "size $(size_of A), expected ${BW}x$BH"
+
+    # snapped to the left half, then the desktop ends (a logout) and starts
+    # again: a snapped window comes back snapped
+    locate_probe A $((MX + 40)) $((MY + 40)) || return
+    drag $((PX + 60)) $(title_y $PY) 0 $(title_y $PY); sleep 0.6
+    [ "$(size_of A)" = "634x772" ]; expect_true $? "(snapped to the left half)" "size $(size_of A)"
+    if [ -n "$XDISPLAY" ] && start_probe X qtx11 0000cc; then
+        locate_probe X 400 300 || return
+        drag $((PX + 60)) $(title_y $PY) $((PX + 360)) $(($(title_y $PY) + 100)); sleep 0.5
+        locate_probe X $((PX + 340)) $((PY + 130)) || return
+        XX=$PX; XY=$PY; xsize=$(size_of X)
+    fi
+    stop_all   # (SIGTERM: what's waiting is written as it stops)
+    place_of "$app" A | grep -qE "^left -?[0-9]+ -?[0-9]+ $BW $BH$"
+    expect_true $? "written as the desktop stops (snapped, and its size from before)" "$(place_of "$app" A)"
+    local seed=$WORK/places-seed.tsv
+    cp "$CONFIG/wayland95/windows.tsv" "$seed"
+    SEED_PLACES=$seed fresh
+    start_probe A qt cc0000 || return
+    locate_probe A 300 300 || return
+    [ "$(size_of A)" = "634x772" ] && [ "$PX" -eq 3 ] && [ "$PY" -eq 25 ]
+    expect_true $? "after logging in again, it's back on the left half" "at $PX,$PY $(size_of A)"
+    if [ -n "$XX" ] && start_probe X qtx11 0000cc; then
+        locate_probe X $((XX + 40)) $((XY + 40)) || return
+        [ "$PX" -eq "$XX" ] && [ "$PY" -eq "$XY" ] && [ "$(size_of X)" = "$xsize" ]
+        expect_true $? "an X11 window too, where it was" "at $PX,$PY $(size_of X), expected $XX,$XY $xsize"
+    fi
+
+    # a smaller screen: on it, and no bigger than it
+    printf 'normal\t1100\t700\t900\t700\t%s\tA\n' "$app" >"$seed"
+    SEED_PLACES=$seed fresh 800x600
+    start_probe A qt cc0000 || return
+    locate_probe A 300 300 || return
+    [ "$PX" -eq 3 ] && [ "$PY" -eq 25 ] && [ "$(size_of A)" = "794x572" ]
+    expect_true $? "on a smaller screen, it's moved and shrunk to fit" "at $PX,$PY $(size_of A), expected 3,25 794x572"
 }
 
 # --- Alt+Tab, Alt+F4 ----------------------------------------------------------------
@@ -5235,7 +5328,7 @@ suite_x11sharp() {
     unset W95INPUT_EXTENT
 }
 
-ALL=(input firefox windows popups x11 x11sharp clipboard qt frames snap programlook alttab settings shell startitems dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx samba logon studio studioplayer studiomcp studioicons studioimport studioapi studioai studiograph studiostock monitors screen classic vscode)
+ALL=(input firefox windows popups x11 x11sharp clipboard qt frames snap places programlook alttab settings shell startitems dialogs notifications session screensaver power capture accessibility windowkeys shellstart timezone network games files find repos markdown markdownscroll startup drives backup calc email web dbservices nginx samba logon studio studioplayer studiomcp studioicons studioimport studioapi studioai studiograph studiostock monitors screen classic vscode)
 if [ $# -eq 0 ]; then SUITES=("${ALL[@]}"); else SUITES=("$@"); fi
 for s in "${SUITES[@]}"; do
     SUITE=$s

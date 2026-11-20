@@ -26,6 +26,8 @@ Build-Depends: debhelper-compat (= 13),
                libfontconfig-dev,
                libglib2.0-dev,
                libsqlite3-dev,
+               libssl-dev,
+               libpam0g-dev,
                zlib1g-dev
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
@@ -56,6 +58,7 @@ Depends: ${shlibs:Depends},
          polkitd,
          pkexec,
          libpam-modules-bin,
+         libpam-runtime,
          passwd,
          fontconfig,
          fonts-liberation,

@@ -135,6 +135,11 @@ WaylandCompositor {
                     z: 2000
                     onClosed: desktop.focusActiveWindow()
                 }
+                // the password list (win95keyring) needs its password
+                KeyringPasswordDialog {
+                    z: 2000
+                    onClosed: desktop.focusActiveWindow()
+                }
                 // a program needs a password (polkit): above windows and dialogs
                 PasswordDialog {
                     z: 2000

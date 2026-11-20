@@ -1,0 +1,13 @@
+Name: Wayland 95 password list (unlock the keyring with the login password)
+Default: yes
+Priority: 0
+Auth-Type: Additional
+Auth:
+	optional	@WAYLAND95_PAM_MODULE@
+Session-Type: Additional
+Session-Interactive-Only: yes
+Session:
+	optional	@WAYLAND95_PAM_MODULE@
+Password-Type: Additional
+Password:
+	optional	@WAYLAND95_PAM_MODULE@

@@ -34,6 +34,7 @@ qt_add_qml_module(win95photos
         PhotoView.qml
         EditPanel.qml
         PhotoIcon.qml
+        FolderIcon.qml
         PhotoButton.qml
         SlideShow.qml
     RESOURCE_PREFIX /qt/qml

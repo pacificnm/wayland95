@@ -938,11 +938,10 @@ Window {
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSize
                         }
-                        Icon95 {
+                        FolderIcon {
                             visible: cell.isDir
                             anchors.centerIn: parent
-                            name: "folder"
-                            size: Math.round(window.thumbSize / 2)
+                            size: window.thumbSize >= 128 ? 48 : 32
                         }
                     }
 

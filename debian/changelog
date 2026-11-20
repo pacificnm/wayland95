@@ -1,3 +1,9 @@
+wayland95 (0.11.0) trixie; urgency=medium
+
+  * A "Starting Wayland 95..." loading screen at login while the desktop starts, instead of an empty screen; Photo Gallery folders drawn like the file manager's.
+
+ -- Wayland 95 <wayland95@localhost>  Fri, 20 Nov 2026 13:30:51 -0800
+
 wayland95 (0.10.0) trixie; urgency=medium
 
   * Archive Manager (win95archive): open, test, extract and create zip, 7z, rar, tar, gz, bz2, xz, zst, iso, cab and more, with passwords and progress; the file manager's right-click menu gets Extract Here, Extract to, Open with Archive Manager and Add to archive.

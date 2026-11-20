@@ -1,3 +1,9 @@
+wayland95 (0.9.0) trixie; urgency=medium
+
+  * Photo Gallery (win95photos): thumbnails, viewer, slide show, set as wallpaper, and basic editing (rotate, flip, crop, resize, brightness/contrast, colour effects) with undo; Control Panel > Firewall: Wayland 95's own nftables firewall with exceptions, ping and logging; Control Panel > System Log: the system journal by log, start-up and severity, with Find and details.
+
+ -- Wayland 95 <wayland95@localhost>  Fri, 20 Nov 2026 08:41:39 -0800
+
 wayland95 (0.8.0) trixie; urgency=medium
 
   * Wayland 95's own keyring (win95keyring): passwords kept in an encrypted list opened with your logon password, so GNOME Keyring isn't needed; windows open where they were last, as big, maximized or snapped; desktop icons stay where you drag them, with Arrange Icons and Line up Icons; dialogs opened as a program starts appear centered.

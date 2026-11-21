@@ -70,6 +70,7 @@ xdg-desktop-portal
 xdg-desktop-portal-gtk
 xdg-user-dirs
 udisks2
+smartmontools
 dosfstools
 e2fsprogs
 exfatprogs

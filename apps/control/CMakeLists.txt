@@ -39,6 +39,9 @@ qt_add_executable(win95control
     src/systemlog.cpp
     src/firewall.h
     src/firewall.cpp
+    src/ollamamodels.h
+    src/ollamamodels.cpp
+    src/launcher.h
 )
 
 # Services runs session/wayland95-services as root through pkexec: the
@@ -48,6 +51,37 @@ target_compile_definitions(win95control PRIVATE
     WAYLAND95_SERVICES_HELPER="${CMAKE_INSTALL_FULL_LIBEXECDIR}/wayland95/wayland95-services"
     WAYLAND95_SERVICES_HELPER_SRC="${CMAKE_SOURCE_DIR}/session/wayland95-services"
 )
+
+# Services > Wayland 95 Development installs what building Wayland 95 needs:
+# debian/control's Build-Depends (versions dropped; debhelper-compat is
+# debhelper), read here so the two never drift apart
+file(STRINGS ${CMAKE_SOURCE_DIR}/debian/control _control_lines)
+set(_in_build_depends OFF)
+set(_build_depends "")
+foreach(_line IN LISTS _control_lines)
+    if(_line MATCHES "^Build-Depends:(.*)$")
+        set(_in_build_depends ON)
+        set(_line "${CMAKE_MATCH_1}")
+    elseif(_in_build_depends AND NOT _line MATCHES "^[ \t]")
+        set(_in_build_depends OFF)
+    endif()
+    if(_in_build_depends)
+        string(REGEX REPLACE "\\([^)]*\\)" "" _line "${_line}")
+        string(REPLACE "," ";" _items "${_line}")
+        foreach(_item IN LISTS _items)
+            string(STRIP "${_item}" _item)
+            if(_item STREQUAL "debhelper-compat")
+                set(_item debhelper)
+            endif()
+            if(_item)
+                list(APPEND _build_depends ${_item})
+            endif()
+        endforeach()
+    endif()
+endforeach()
+list(JOIN _build_depends "," _build_depends)
+target_compile_definitions(win95control PRIVATE WAYLAND95_BUILD_DEPENDS="${_build_depends}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/debian/control)
 
 set_target_properties(win95control PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
@@ -106,8 +140,10 @@ qt_add_qml_module(win95control
         UnitPage.qml
         MysqlSettings.qml
         SqliteSettings.qml
+        DevSettings.qml
         NginxSettings.qml
         SambaSettings.qml
+        OllamaSettings.qml
         SystemLogApplet.qml
         FirewallApplet.qml
     RESOURCE_PREFIX /qt/qml

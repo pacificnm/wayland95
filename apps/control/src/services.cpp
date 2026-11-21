@@ -156,6 +156,20 @@ void readSshd(const QString &path, QVariantMap &out, int depth = 0)
     }
 }
 
+// what building Wayland 95 needs: debian/control's Build-Depends (CMake
+// reads them, apps/control/CMakeLists.txt), and the compilers and git
+// that it takes for granted
+QStringList buildDepends()
+{
+    QStringList list{ QStringLiteral("build-essential"), QStringLiteral("git") };
+#ifdef WAYLAND95_BUILD_DEPENDS
+    for (const QString &p : QStringLiteral(WAYLAND95_BUILD_DEPENDS).split(QLatin1Char(','), Qt::SkipEmptyParts))
+        if (!list.contains(p))
+            list << p;
+#endif
+    return list;
+}
+
 QString terminalProgram()
 {
     const QString local = QCoreApplication::applicationDirPath() + QStringLiteral("/win95terminal");
@@ -218,6 +232,24 @@ ServiceManager::ServiceManager(QObject *parent)
           { QStringLiteral("sqlite3") },
           { QStringLiteral("sqlite3"), QStringLiteral("sqlitebrowser") },
           { QStringLiteral("/usr/bin/sqlite3"), QStringLiteral("--version") } },
+        { QStringLiteral("wayland95dev"), QStringLiteral("Wayland 95 Development"), QStringLiteral("tool"),
+          QStringLiteral("Everything needed to build Wayland 95 itself from its source: compilers, CMake, git, and "
+                         "Qt 6's and wlroots' development files. Settings gets the source and builds it."),
+          QString(), QStringLiteral("DevSettings.qml"),
+          buildDepends(),
+          // turning it off takes away only the development files: compilers,
+          // CMake and the rest may be wanted for other things, and some
+          // (fonts, GRUB's tools) the desktop and the boot menu need
+          buildDepends().filter(QRegularExpression(QStringLiteral("-dev(-tools)?$"))),
+          {} },
+        // not in Debian: installed from ollama.com by wayland95-services
+        // ollama-install (no packages; it's there when its program is)
+        { QStringLiteral("ollama"), QStringLiteral("Ollama (AI Models)"), QStringLiteral("server"),
+          QStringLiteral("Runs AI language models on this computer, for programs such as Athenaeum: nothing is "
+                         "sent to the internet. Installed from ollama.com; Settings gets and removes models."),
+          QStringLiteral("ollama"), QStringLiteral("OllamaSettings.qml"),
+          {}, {},
+          { QStringLiteral("/usr/local/bin/ollama"), QStringLiteral("--version") } },
     };
     refresh();
 }
@@ -291,7 +323,9 @@ void ServiceManager::refresh()
                 // the first version number: "Python 3.13.5", "v22.1.0",
                 // "3.46.1 2024-08-13 ..." -> 3.13.5, 22.1.0, 3.46.1
                 static const QRegularExpression number(QStringLiteral("\\d+(?:\\.\\d+)+"));
-                v = number.match(v.section(QLatin1Char('\n'), 0, 0)).captured(0);
+                // (or a later line: ollama --version warns first when its server isn't running)
+                const QString first = number.match(v.section(QLatin1Char('\n'), 0, 0)).captured(0);
+                v = first.isEmpty() ? number.match(v).captured(0) : first;
                 m_versions.insert(id, v);
                 p->deleteLater();
                 --m_loading;
@@ -334,6 +368,8 @@ void ServiceManager::publish()
         bool installed = !m_installed.isEmpty();
         for (const QString &p : d.packages)
             installed = installed && m_installed.contains(p);
+        if (d.packages.isEmpty()) // not from a package (Ollama): there when its program is
+            installed = !d.version.isEmpty() && QFileInfo::exists(d.version.first());
 
         bool enabled = installed, active = false;
         QString status;
@@ -435,7 +471,14 @@ void ServiceManager::turnOn(const QString &id)
     const Def *d = def(id);
     if (!d || m_busy)
         return;
-    QList<Step> steps{ installStep(d->packages) };
+    QList<Step> steps;
+    if (!d->packages.isEmpty())
+        steps << installStep(d->packages);
+    if (id == QLatin1String("ollama") && !QFileInfo::exists(d->version.first())) {
+        // from ollama.com (curl and zstd fetch and unpack it), with progress
+        steps << installStep({ QStringLiteral("curl"), QStringLiteral("zstd") })
+              << adminStep({ QStringLiteral("ollama-install") }, QStringLiteral("Downloading Ollama..."));
+    }
     if (id == QLatin1String("nodejs")) {
         // Debian's nodejs leaves npm to its own package; NodeSource's
         // includes it (and conflicts with Debian's)
@@ -464,6 +507,9 @@ void ServiceManager::turnOn(const QString &id)
                 : id == QLatin1String("samba")
                 ? QStringLiteral("Samba is on. It starts whenever the computer starts.\n\n"
                                  "Choose the folders to share in Settings.")
+                : id == QLatin1String("ollama")
+                ? QStringLiteral("Ollama is on. It starts whenever the computer starts.\n\n"
+                                 "Get models to run in Settings (Athenaeum needs qwen3.5:2b and nomic-embed-text).")
                 : d->name + QStringLiteral(" is on. It starts whenever the computer starts.");
     } else {
         done = d->name + QStringLiteral(" is installed.");
@@ -653,8 +699,22 @@ ServiceManager::Step ServiceManager::adminStep(const QStringList &args, const QS
         }
         auto *p = new QProcess(this);
         p->setProcessChannelMode(QProcess::MergedChannels);
-        connect(p, &QProcess::finished, this, [this, p](int code, QProcess::ExitStatus st) {
-            const QString out = QString::fromUtf8(p->readAll()).trimmed();
+        // "percent N" and "status TEXT" lines (ollama-install's download) move the
+        // progress bar; the rest is kept, for what went wrong
+        auto rest = std::make_shared<QString>();
+        connect(p, &QProcess::readyRead, this, [this, p, rest] {
+            while (p->canReadLine()) {
+                const QString line = QString::fromUtf8(p->readLine()).trimmed();
+                if (line.startsWith(QLatin1String("percent ")))
+                    setStatus(QString(), line.mid(8).toInt());
+                else if (line.startsWith(QLatin1String("status ")))
+                    setStatus(line.mid(7), m_percent);
+                else
+                    *rest += line + QLatin1Char('\n');
+            }
+        });
+        connect(p, &QProcess::finished, this, [this, p, rest](int code, QProcess::ExitStatus st) {
+            const QString out = (*rest + QString::fromUtf8(p->readAll())).trimmed();
             p->deleteLater();
             if (st == QProcess::NormalExit && code == 0)
                 nextStep();
@@ -1379,4 +1439,11 @@ QVariantMap ServiceManager::sambaConfig() const
         qInfo("services: samba %s \"%s\" shares %s", qPrintable(workgroup), qPrintable(description), qPrintable(names.join(QLatin1Char(','))));
     }
     return out;
+}
+
+void ServiceManager::adminTask(const QString &title, const QStringList &args, const QString &status, const QString &doneMessage)
+{
+    if (m_busy)
+        return;
+    runTask(title, { adminStep(args, status) }, doneMessage);
 }

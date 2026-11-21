@@ -89,4 +89,23 @@ Window {
 
     Menu95 { id: popup }
     MessageBox95 { id: msgBox }
+
+    // W95_CONTROL_GRAB: every tab saved as a picture, for the tests
+    Timer {
+        id: grabTimer
+        running: typeof testGrabDir !== "undefined" && testGrabDir !== "" && sheet.visible
+        interval: 2500
+        onTriggered: {
+            var f = testGrabDir + "/" + sheet.title.replace(/[^A-Za-z0-9]+/g, "-") + "-" + tabs.currentIndex + ".png";
+            sheet.contentItem.grabToImage(function (r) {
+                r.saveToFile(f);
+                console.log("grabbed " + f);
+                if (tabs.currentIndex < tabs.titles.length - 1) {
+                    tabs.currentIndex++;
+                    grabTimer.interval = 800;
+                    grabTimer.restart();
+                }
+            });
+        }
+    }
 }

@@ -1,0 +1,55 @@
+// KDE's i18n() family, without KDE: Wayland 95 programs are in English, so
+// a string is its own translation and only its %1, %2... are filled in.
+// Kept so KAthenaeum's sources build unchanged (their #include
+// <KLocalizedString> finds this file).
+#pragma once
+
+#include <QString>
+#include <QStringList>
+#include <QVariant>
+
+namespace KLocalizedStringShim
+{
+QString substitute(const QString &text, const QStringList &args);
+
+inline QString toArg(const QString &s) { return s; }
+inline QString toArg(const char *s) { return QString::fromUtf8(s); }
+inline QString toArg(QLatin1String s) { return QString(s); }
+inline QString toArg(QStringView s) { return s.toString(); }
+inline QString toArg(QChar c) { return QString(c); }
+inline QString toArg(double d) { return QString::number(d); }
+inline QString toArg(float d) { return QString::number(d); }
+template<typename T>
+inline std::enable_if_t<std::is_integral_v<T>, QString> toArg(T n) { return QString::number(n); }
+
+template<typename... Args>
+QString fill(const QString &text, const Args &...args)
+{
+    return substitute(text, QStringList{toArg(args)...});
+}
+}
+
+template<typename... Args>
+inline QString i18n(const char *text, const Args &...args)
+{
+    return KLocalizedStringShim::fill(QString::fromUtf8(text), args...);
+}
+
+template<typename... Args>
+inline QString i18nc(const char * /*context*/, const char *text, const Args &...args)
+{
+    return KLocalizedStringShim::fill(QString::fromUtf8(text), args...);
+}
+
+// the number decides singular or plural, and is %1
+template<typename N, typename... Args>
+inline QString i18np(const char *singular, const char *plural, N n, const Args &...args)
+{
+    return KLocalizedStringShim::fill(QString::fromUtf8(n == 1 ? singular : plural), n, args...);
+}
+
+template<typename N, typename... Args>
+inline QString i18ncp(const char * /*context*/, const char *singular, const char *plural, N n, const Args &...args)
+{
+    return i18np(singular, plural, n, args...);
+}

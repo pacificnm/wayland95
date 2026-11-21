@@ -18,8 +18,8 @@ Item {
     // our own programs' icons (their app IDs aren't icon names)
     readonly property var ownIcons: ({
         win95notepad: "notepad", win95files: "files", win95terminal: "terminal", win95control: "control",
-        win95sysmon: "sysmon", win95volume: "volume", win95imagewriter: "imagewriter",
-        win95solitaire: "solitaire", win95mines: "mines", win95find: "find", win95repos: "repos", win95markdown: "markdown", win95photos: "photos", win95archive: "archive", "win95archive-progress": "archive", win95calc: "calc", win95email: "email", win95web: "web", win95studio: "studio",
+        win95sysmon: "sysmon", win95volume: "volume", win95imagewriter: "imagewriter", win95disks: "disks",
+        win95solitaire: "solitaire", win95mines: "mines", win95find: "find", win95repos: "repos", win95markdown: "markdown", win95photos: "photos", win95archive: "archive", "win95archive-progress": "archive", win95calc: "calc", win95email: "email", win95web: "web", win95studio: "studio", win95athenaeum: "athenaeum", win95netmanager: "netmanager",
     })
     function appIdOf(frame) {
         if (frame.toplevel)

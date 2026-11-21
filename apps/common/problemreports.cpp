@@ -55,6 +55,7 @@ QString ProblemReports::displayName(const QString &program)
         { QStringLiteral("win95volume"), QStringLiteral("Volume Control") },
         { QStringLiteral("win95portal"), QStringLiteral("File dialogs (portal)") },
         { QStringLiteral("win95imagewriter"), QStringLiteral("Disk Image Writer") },
+        { QStringLiteral("win95disks"), QStringLiteral("Disk Manager") },
         { QStringLiteral("win95solitaire"), QStringLiteral("Solitaire") },
         { QStringLiteral("win95mines"), QStringLiteral("Mines") },
         { QStringLiteral("win95repos"), QStringLiteral("Repositories") },
@@ -65,6 +66,8 @@ QString ProblemReports::displayName(const QString &program)
         { QStringLiteral("win95email"), QStringLiteral("Email") },
         { QStringLiteral("win95web"), QStringLiteral("Web Browser") },
         { QStringLiteral("win95studio"), QStringLiteral("Wayland Studio") },
+        { QStringLiteral("win95athenaeum"), QStringLiteral("Athenaeum") },
+        { QStringLiteral("win95netmanager"), QStringLiteral("Network Manager") },
         { QStringLiteral("win95notify"), QStringLiteral("win95notify") },
     };
     return names.value(program, program);

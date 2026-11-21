@@ -73,6 +73,7 @@ FocusScope {
     // Wayland 95's own programs, and where they go
     readonly property var ownPrograms: ({
         "Accessories":  [{ label: "Archive Manager", icon: "archive", program: "win95archive" },
+                         { label: "Athenaeum",      icon: "athenaeum", program: "win95athenaeum" },
                          { label: "Calculator",     icon: "calc",    program: "win95calc" },
                          { label: "Markdown Editor", icon: "markdown", program: "win95markdown" },
                          { label: "Notepad",        icon: "notepad", program: "win95notepad" },
@@ -84,7 +85,8 @@ FocusScope {
         "Games":        [{ label: "Mines",          icon: "mines",   program: "win95mines" },
                          { label: "Solitaire",      icon: "solitaire", program: "win95solitaire" }],
         "Multimedia":   [{ label: "Volume Control", icon: "volume",  program: "win95volume" }],
-        "System Tools": [{ label: "Image Writer",   icon: "imagewriter", program: "win95imagewriter" },
+        "System Tools": [{ label: "Disk Manager",   icon: "disks",   program: "win95disks" },
+                         { label: "Image Writer",   icon: "imagewriter", program: "win95imagewriter" },
                          { label: "System Monitor", icon: "sysmon",  program: "win95sysmon" }],
     })
 

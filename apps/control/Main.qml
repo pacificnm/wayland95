@@ -43,6 +43,8 @@ Window {
           description: "Changes the double-click speed." },
         { id: "network", name: "Network", file: "NetworkApplet.qml",
           description: "Shows network adapters, connects to Wi-Fi and shows this computer's network name." },
+        { id: "netmanager", name: "Network Manager", program: "win95netmanager",
+          description: "Logs in to the settings pages of your network's devices (router, switches, printers...), saving each with its address and login." },
         { id: "passwords", name: "Passwords", file: "PasswordsApplet.qml",
           description: "Changes your password, and shows who can approve changes to the computer." },
         { id: "power", name: "Power", file: "PowerApplet.qml",
@@ -81,6 +83,12 @@ Window {
         var a = applets[i];
         if (!a)
             return;
+        // a program of its own (Network Manager)
+        if (a.program) {
+            if (!Launcher.start(a.program))
+                msgBox.show("Control Panel", a.name + " couldn't be started (" + a.program + " isn't installed).", "error", ["OK"], null);
+            return;
+        }
         var existing = openWindows[a.id];
         if (existing) {
             existing.raise();
@@ -111,6 +119,11 @@ Window {
             if (initialCheck)
                 Software.checkUpdates(true);
             openApplet(i);
+            // (a program of its own has its own window: nothing more here)
+            if (applets[i].program) {
+                Qt.callLater(Qt.quit);
+                return;
+            }
             var w = openWindows[applets[i].id];
             if (w && initialTab > 0 && initialTab < w.titles.length)
                 w.currentTab = initialTab;

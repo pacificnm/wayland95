@@ -58,7 +58,8 @@ sudo apt-get install qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-w
     libwlroots-0.18-dev libcairo2-dev libpango1.0-dev libdrm-dev libpixman-1-dev \
     libinput-dev libxkbcommon-dev libvterm-dev libxcb1-dev libwayland-dev wayland-protocols \
     zlib1g-dev libfontconfig-dev libsqlite3-dev pkg-config cmake build-essential xwayland \
-    libqt6sql6-sqlite libqt6sql6-mysql libqt6sql6-psql libarchive-dev
+    libqt6sql6-sqlite libqt6sql6-mysql libqt6sql6-psql libarchive-dev \
+    libzim-dev libxml2-dev qt6-webengine-dev   # Athenaeum (skipped without them)
 
 cmake -B build
 cmake --build build -j$(nproc)
@@ -143,7 +144,7 @@ submenus:
   `.desktop` files in `~/.local/share/applications`, Flatpak's exports and
   `XDG_DATA_DIRS`, and the menu updates by itself when programs are
   installed or removed. Wayland 95's own apps go in the same folders
-  (Archive Manager, Calculator, Notepad, the Markdown Editor and Photo Gallery in Accessories, System Monitor in System Tools, Volume Control
+  (Archive Manager, Athenaeum, Calculator, Notepad, the Markdown Editor and Photo Gallery in Accessories, System Monitor in System Tools, Volume Control
   in Multimedia), and File Manager and Terminal sit at the bottom.
   Programs that run in a terminal (htop, vim...) open in Wayland 95's
   Terminal (`win95terminal -e ...`). A folder too long for the screen
@@ -793,6 +794,77 @@ up next to the shell first, then on `$PATH`.
     ([exif.cpp](apps/photos/src/exif.cpp)), no library needed. Usage:
     `win95photos [folder | photo]`; `W95_PHOTOS_DEBUG=1` logs what it does
     and `W95_PHOTOS_SCRIPT` runs a list of actions (for tests).
+- **Athenaeum** (`win95athenaeum`, [apps/athenaeum/](apps/athenaeum/)):
+  Start > Programs > Accessories > Athenaeum, or `win95athenaeum [file.zim |
+  zim://...]`. A private, offline Wikipedia library with an AI research
+  assistant: [KAthenaeum](https://github.com/pacificnm/KAthenaeum), a KDE
+  program, brought over with its own C++ and redrawn in the Win95 look.
+  Libraries are Kiwix ZIM files, read with libzim; answers come from a
+  small model running on this computer through [Ollama](https://ollama.com)
+  (install it, and the models qwen3.5:2b and nomic-embed-text, in Control
+  Panel > Services > Ollama; the Services... buttons open it). Reading and
+  searching work without it. The places are listed down the left; the page on the right keeps a
+  trail, so Back (Alt+Left, Backspace) returns through what was opened.
+  - **Libraries**: each installed library's home, with find-by-title as you
+    type, A to Z, a random article (Ctrl+R), recently read, and
+    Wikipedia's own "Outline of", "List of" and "Timeline of" articles.
+  - **Search** (Find in the toolbar, Ctrl+F): titles as you type, then on
+    Enter the text of every article through the ZIMs' own word indexes,
+    with the matching passage.
+  - **Reading**: articles in the Web Browser's engine with JavaScript off,
+    in the colours of Control Panel > Display, with Back and Forward,
+    Contents, Cite (MLA, APA or Chicago), Add to Project and Timeline. A
+    link to the web opens in the Web Browser. Select text and right-click
+    to copy it, define it (from an installed Wiktionary), highlight it in
+    one of four colours (with a note), save it to a project or ask about
+    it. Beside the article, one panel at a time: Ask (a chat about this
+    article alone, its sentences linked to its sections), its Notes, or
+    the Lesson it is a reading for.
+  - **Ask** and **Chats**: questions answered from the libraries, every
+    sentence cited by the program (not by the model), sentences no source
+    backs marked for checking, follow-up questions, Stop. Every chat is
+    kept, to reopen, rename, add to a project or delete.
+  - **Projects**: articles, saved passages, answers and chats around one
+    question, each with a note; a chat that answers from just that
+    material (or the whole library too); a bibliography; Export to `.md`;
+    and documents. A document opens in a window of its own: a Markdown
+    editor beside a live preview, with a Cite menu (a link to one of the
+    project's articles, an excerpt as a quotation, the list of works
+    cited). Draft with AI writes a summary of the project, notes from a
+    chat, or a report to your instructions, from the sources.
+  - **Notes**: every highlight and note by article, to search, show by
+    colour, export, or turn into a project document. **Timelines**: an
+    article's or a project's dated sentences in order, grouped by period.
+  - **Classroom**: an AI teacher plans a course in a subject at a level
+    (units, lessons, readings from your libraries), writes each lesson's
+    introduction, quizzes each lesson and tests each unit (every answer
+    checked against its reading), and answers as a tutor beside the
+    lesson.
+  - **Library Manager**: the installed libraries (details, updates,
+    remove, add a ZIM file, the download folder), the Kiwix catalog (kept
+    for use offline) and downloads through `aria2c` (recommended by the
+    package) with progress, cancel and resume. **Settings**: the Ollama
+    address and models, reading width, citation style, Use the Internet
+    (Tools menu too: off, nothing but Ollama on this computer is
+    contacted) and weekly update checks.
+  - Not brought over from the KDE version: the Marble map (an article
+    about a place has Show on OpenStreetMap instead, in the Web Browser,
+    when the internet may be used), the handbook, and translations.
+  - How it works: `src/core/` is KAthenaeum's own library (ZIM reading and
+    search, the SQLite database, the catalog and downloads, the assistant,
+    citations, the dictionary, timelines), unchanged; `src/compat/`
+    stands in for KDE's i18n; the `src/*.cpp` objects the pages use are
+    KAthenaeum's, with KTextEditor's window replaced by
+    `DocumentWindow.qml`. Its data is in
+    `~/.local/share/win95-wayland/win95athenaeum/` (apart from the KDE
+    version's, so neither upgrades the other's database). Built only when
+    libzim, libxml2 and Qt WebEngine's headers are installed (`libzim-dev
+    libxml2-dev qt6-webengine-dev`). For the tests:
+    `W95_ATHENAEUM_GRAB=file.png` saves the window, with
+    `W95_ATHENAEUM_PAGE=search|article|manager|...` (and
+    `W95_ATHENAEUM_QUERY`) to open a page first, or
+    `W95_ATHENAEUM_TEST=notes|project|reading|catalog|classroom|ask` to
+    walk through a feature, saving each step (`TestDriver.qml`).
 - **Archive Manager** (`win95archive`, [apps/archive/](apps/archive/)):
   Start > Programs > Accessories > Archive Manager, or double-click an
   archive in the file manager. In the spirit of WinZip: an archive's files
@@ -847,6 +919,33 @@ up next to the shell first, then on `$PATH`.
   which asks for the administrator password, so the program itself never
   runs as root. (`WIN95_IMAGEWRITER_LOOP=1` also lists loop devices from
   `udisksctl loop-setup`, for testing without a USB stick.)
+- **Disk Manager** (`win95disks`, [apps/disks/](apps/disks/)): Start >
+  Programs > System Tools > Disk Manager, or `win95disks [DEVICE]`
+  (`--smart DEVICE` opens that disk's health report). Like Windows' Disk
+  Management: every disk listed with its type and health, the chosen one
+  drawn as a bar of its partitions and free space, and the partitions
+  listed below with their filesystem, label, size, space used and where
+  they're mounted. Partition and Disk menus (and right-click): open,
+  mount, unmount, new partition (in free space: size, filesystem, label),
+  format (ext4, FAT32, exFAT, NTFS, Btrfs, XFS, swap, as far as this
+  computer has the tools), delete, change label, check for problems,
+  repair, a new partition table (GPT or MBR) and switching a USB drive
+  off. Everything is done through UDisks2, which asks for the
+  administrator password, so the program never runs as root. Partitions
+  the running system needs (`/`, `/boot`, `/home`... and swap, through
+  encryption, LVM and RAID too, found from `/proc/self/mounts` and
+  `/sys/class/block/*/slaves`) can't be formatted, deleted or unmounted,
+  and their disk can't get a new partition table. Disk > S.M.A.R.T.
+  Status (or double-click a disk) shows smartctl's report
+  (`smartmontools`, recommended by the package): the verdict in plain
+  words (reallocated and pending sectors, NVMe's critical warnings and
+  wear), the disk's details, every attribute, and short and extended
+  self-tests with their log. smartctl runs as root through
+  `wayland95-services smart` / `smart-test`, which take only a whole disk
+  (`/dev/sda`, `/dev/nvme0n1`...). The disk list's Health column needs no
+  password: it's what UDisks already reads (ATA's failing flag, NVMe's
+  warnings), until smartctl has been asked. (`WIN95_DISKS_LOOP=1` also
+  lists loop devices, for trying it out without a spare disk.)
 - **Games** (Start > Programs > Games, [apps/games/](apps/games/)), our
   own versions of two classics, with their own card and tile art:
   - **Solitaire** (`win95solitaire`): Klondike patience. Click the deck to
@@ -1128,6 +1227,32 @@ up next to the shell first, then on `$PATH`.
     **Identification** shows the computer name, description and DNS domain
     (read-only: renaming needs `sudo hostnamectl set-hostname`). The
     desktop's Network icon opens this applet.
+  - **Network Manager** (`win95netmanager`, [apps/netmanager/](apps/netmanager/),
+    a program of its own: its icon here starts it, or `win95netmanager
+    [DEVICE]`): logs in to the settings pages of the network's devices
+    (routers, switches, access points, printers, network storage,
+    cameras, servers) with Chromium (Qt WebEngine). **New Device** (or
+    **Add Your Router**, the default gateway filled in) saves a device:
+    its name and kind, HTTP or HTTPS, its address, port and page, its user
+    name and password, whether the login is filled in on its page (and
+    sent by itself), and notes. The details are in
+    `~/.config/win95-wayland/win95netmanager/devices.json` (yours only);
+    the password goes in the keyring (the Secret Service), never in a
+    file. **Connect** (or double-click) opens the device's page beside the
+    list, with an address line that says whether it's encrypted, Back,
+    Forward, Reload, Home and **Log In** (Ctrl+L: fill in and send).
+    Filling is done by a script in a world of its own (out of the page's
+    reach) and only on the device's own pages; a device that asks in the
+    browser's own login box (HTTP authentication) gets the saved login
+    once, then is asked. A device that signs its own certificate (most
+    do) shows who it says it is and its SHA-256 fingerprint; **Trust It**
+    keeps that fingerprint for the device, so it opens without asking
+    after that, and a different certificate later is called out as
+    changed. Its pages' alerts and questions, file uploads (firmware,
+    settings to restore) and downloads (to `~/Downloads`) work;
+    sessions (cookies) are kept, apart from the Web Browser's.
+    `W95_NETMANAGER_GRAB=file.png` saves the window for the tests
+    (`W95_NETMANAGER_DIALOG=new|edit` opens the device dialog first).
   - **Passwords:** **Change Wayland 95 Password...** changes your login
     password (old, new, confirm). It runs `passwd` on a pseudo-terminal,
     so the system's own password rules apply and its messages are shown.
@@ -1246,7 +1371,7 @@ up next to the shell first, then on `$PATH`.
       system's default through systemd-localed (it asks for a password).
   - **Services:** servers, programming languages and tools, each turned
     on and off with a check box: **SSH Server**, **PostgreSQL**, **MySQL
-    (MariaDB)**, **nginx Web Server**, **Samba File Sharing**, **WireGuard VPN**, **Python**, **Node.js** and **SQLite**. Checking one that isn't installed installs it first
+    (MariaDB)**, **nginx Web Server**, **Samba File Sharing**, **WireGuard VPN**, **Python**, **Node.js**, **SQLite** and **Wayland 95 Development**. Checking one that isn't installed installs it first
     (PackageKit), then starts it and has it start with the computer.
     Unchecking a server stops it but keeps it, with its settings and data;
     unchecking a language removes it. **Settings...** opens each one's own
@@ -1304,6 +1429,36 @@ up next to the shell first, then on `$PATH`.
       (read through SQLite's own library, opened read-only), makes a new
       one, opens one in `sqlite3` or DB Browser, and moves one to the
       Recycle Bin. Turning it off removes the commands; your files stay.
+    - **Wayland 95 Development:** what building Wayland 95 itself needs:
+      `debian/control`'s Build-Depends (read by CMake when the Control
+      Panel is built, so the two can't drift apart), with `build-essential`
+      and `git`. **Packages** lists them, installed or missing, and
+      installs the missing ones in one go. **General**: the source folder
+      (`~/wayland95` unless you choose another; kept in
+      `~/.config/wayland95/development.conf`), **Get Source** (`git clone`
+      from GitHub), **Build** (CMake in a Terminal window, into `build/`)
+      and **Terminal**. Turning it off removes only the `-dev` packages:
+      compilers, CMake, git, fonts and GRUB's tools stay.
+    - **Ollama (AI Models):** runs AI language models on this computer
+      (Athenaeum's assistant uses it). It isn't in Debian, so checking it
+      installs Ollama's own release the way its manual install does:
+      `wayland95-services ollama-install` downloads
+      `ollama-linux-ARCH.tar.zst` from ollama.com over https (with
+      progress), lets nothing out of it but `bin/ollama` and
+      `lib/ollama/`, unpacks it into `/usr/local`, makes the `ollama`
+      user (its models in `/usr/share/ollama`; you join its group) and
+      `/etc/systemd/system/ollama.service`, then starts it. **Models**
+      lists the models on this computer (size, which are in memory), gets
+      one by name with a progress bar (Suggest offers a few; "Athenaeum
+      needs ..." gets its two in one click) and removes them, through
+      Ollama's API as you. **Settings**: who can use it (this computer,
+      or the network too on port 11434), keeping two models loaded, how
+      long an unused model stays in memory (a systemd drop-in,
+      `ollama.service.d/wayland95.conf`), **Update** (the latest
+      release; models kept), **AMD Graphics...** (Ollama's ROCm
+      libraries) and **Remove Ollama...** (keeping its models, or not).
+      NVIDIA cards are used once NVIDIA's driver is installed; Services
+      doesn't install drivers.
     - **WireGuard VPN:** this computer's tunnels (the standard
       `/etc/wireguard/NAME.conf`, run by `wg-quick@NAME`, so ones set up
       before or by hand are there too). **Tunnels:** connect, disconnect,

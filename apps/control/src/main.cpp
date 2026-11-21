@@ -38,6 +38,11 @@ int main(int argc, char *argv[])
     engine.addImageProvider(QStringLiteral("appicon"), new AppIconProvider);
     engine.rootContext()->setContextProperty(QStringLiteral("initialApplet"), applet);
     engine.rootContext()->setContextProperty(QStringLiteral("initialTab"), tab);
+    // for the tests: W95_CONTROL_GRAB=DIR saves each property sheet as
+    // DIR/TITLE-TAB.png once it is up; W95_CONTROL_SETTINGS=ID opens that
+    // service's Settings sheet when Services opens
+    engine.rootContext()->setContextProperty(QStringLiteral("testGrabDir"), qEnvironmentVariable("W95_CONTROL_GRAB"));
+    engine.rootContext()->setContextProperty(QStringLiteral("testOpenSettings"), qEnvironmentVariable("W95_CONTROL_SETTINGS"));
     // --check: look for updates straight away (Start > Wayland 95 Update)
     engine.rootContext()->setContextProperty(QStringLiteral("initialCheck"), args.contains(QStringLiteral("--check")));
     // --uninstall ID (Start menu > Uninstall...): Add/Remove Programs asks

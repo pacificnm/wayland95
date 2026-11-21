@@ -357,6 +357,54 @@ Canvas {
             ctx.beginPath(); ctx.ellipse(16.5, 12, 9, 18); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(12, 21); ctx.lineTo(30, 21); ctx.stroke();
             break;
+        case "netmanager":
+            // Network Manager: a device's web page with a router in front of it
+            frame(1, 1, 24, 20, "#ffffff");
+            rect(2, 2, 22, 3, "#000080");
+            rect(4, 8, 14, 1, "#0000c0"); rect(4, 11, 10, 1, "#808080"); rect(4, 14, 12, 1, "#808080");
+            rect(12, 13, 2, 9, "#000000"); rect(11, 12, 4, 2, "#000000");
+            rect(26, 13, 2, 9, "#000000"); rect(25, 12, 4, 2, "#000000");
+            frame(8, 21, 23, 9, "#c0c0c0");
+            rect(9, 22, 21, 1, "#ffffff");
+            for (var nl = 0; nl < 5; ++nl)
+                rect(11 + nl * 4, 25, 2, 2, nl % 3 === 2 ? "#ffff00" : "#00e000");
+            break;
+        case "ollama":
+            // a llama's head on a computer's screen: AI models run here
+            frame(1, 6, 30, 20, "#c0c0c0");
+            rect(3, 8, 26, 16, "#008080");
+            rect(11, 26, 10, 2, "#808080");
+            frame(7, 28, 18, 3, "#c0c0c0");
+            ctx.fillStyle = "#ffffff";
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(12.5, 23.5); ctx.lineTo(12.5, 14); ctx.lineTo(11.5, 9.5); ctx.lineTo(13.5, 11.5);
+            ctx.lineTo(15, 9.5); ctx.lineTo(16, 12.5); ctx.lineTo(20, 13.5); ctx.lineTo(21.5, 16);
+            ctx.lineTo(18.5, 17); ctx.lineTo(17.5, 23.5); ctx.closePath();
+            ctx.fill(); ctx.stroke();
+            rect(15, 14, 2, 1, "#000000");
+            rect(20, 15, 1, 1, "#000000");
+            break;
+        case "wayland95dev":
+            // a Wayland 95 window with a hammer over it: building the desktop
+            frame(1, 3, 26, 22, "#c0c0c0");
+            rect(2, 4, 24, 4, "#000080");
+            rect(22, 5, 3, 2, "#c0c0c0");
+            frame(3, 10, 22, 13, "#008080");
+            rect(3, 21, 22, 2, "#c0c0c0");
+            rect(4, 21, 5, 2, "#ffffff");
+            // the hammer: a wooden handle, a grey head
+            ctx.save();
+            ctx.translate(21, 20);
+            ctx.rotate(-Math.PI / 4);
+            rect(-1.5, -1, 3, 13, "#000000");
+            rect(-0.5, 0, 1.5, 11, "#c08040");
+            rect(-6, -5, 12, 5, "#000000");
+            rect(-5, -4, 10, 3, "#a0a0a0");
+            rect(-5, -4, 10, 1, "#ffffff");
+            ctx.restore();
+            break;
         case "sqlite":
             // a page with a small database drum on it: a database in a file
             frame(5, 1, 20, 28, "#ffffff");

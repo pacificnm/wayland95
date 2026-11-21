@@ -3,7 +3,7 @@ import Win95Ui
 import Win95Control
 
 // Services: servers (SSH, PostgreSQL, MySQL, nginx, Samba, WireGuard), programming
-// languages (Python, Node.js) and tools (SQLite) turned on and off with a check box, like Windows Setup's list
+// languages (Python, Node.js) and tools (SQLite, Wayland 95 Development) turned on and off with a check box, like Windows Setup's list
 // of components. Turning one on installs it first if it isn't there;
 // Settings... opens its own property sheet.
 PropertySheet {
@@ -29,6 +29,7 @@ PropertySheet {
     property var settingsWindows: ({})
     // the task running now was started here (not from a settings window)
     property bool startedHere: false
+    property bool testOpened: false
     function openSettings(item) {
         if (!item || !item.available)
             return;
@@ -82,8 +83,11 @@ PropertySheet {
             messageBox.show("Services",
                             "Remove " + item.name + " from this computer?\n\n"
                             + (item.kind === "tool"
-                               ? "Your database files are kept, and programs that use SQLite's library keep working; "
-                                 + "the sqlite3 command (and DB Browser) go."
+                               ? (item.id === "wayland95dev"
+                                  ? "Qt's, wlroots' and the other libraries' development files are removed. Your source "
+                                    + "folder is kept, and so are the compilers, CMake and git (other things may use them)."
+                                  : "Your database files are kept, and programs that use SQLite's library keep working; "
+                                    + "the sqlite3 command (and DB Browser) go.")
                                : "Programs you've written are kept, but anything that needs " + item.name
                                  + " stops working until you turn it on again."),
                             "warning", ["Yes", "No"], function (b) {
@@ -145,7 +149,20 @@ PropertySheet {
             }
             onActivated: (item) => sheet.openSettings(item)
             Component.onCompleted: if (sheet.items.length) selectedKey = sheet.items[0].key
-            onModelChanged: if (!selectedKey && sheet.items.length) selectedKey = sheet.items[0].key
+            onModelChanged: {
+                if (!selectedKey && sheet.items.length)
+                    selectedKey = sheet.items[0].key;
+                // W95_CONTROL_SETTINGS=ID (for the tests): that one's Settings
+                if (typeof testOpenSettings !== "undefined" && testOpenSettings && !sheet.testOpened) {
+                    for (var i = 0; i < sheet.items.length; ++i) {
+                        if (sheet.items[i].id === testOpenSettings) {
+                            sheet.testOpened = true;
+                            selectedKey = sheet.items[i].key;
+                            sheet.openSettings(sheet.items[i]);
+                        }
+                    }
+                }
+            }
         }
 
         GroupBox95 {

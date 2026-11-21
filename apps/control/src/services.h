@@ -62,6 +62,9 @@ public:
     Q_INVOKABLE void control(const QString &id, const QString &action);
     // extra packages (Python's components): installs or removes them
     Q_INVOKABLE void changePackages(const QString &title, const QStringList &install, const QStringList &remove);
+    // wayland95-services ARGS as root, as a task (its progress shown like an
+    // install's): Ollama's update and removal
+    Q_INVOKABLE void adminTask(const QString &title, const QStringList &args, const QString &status, const QString &doneMessage);
     // which of these packages are installed: answers done([names])
     Q_INVOKABLE void installedPackages(const QStringList &names, const QJSValue &done);
 

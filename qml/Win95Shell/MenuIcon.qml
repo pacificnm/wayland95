@@ -190,6 +190,57 @@ Canvas {
             ctx.fillStyle = "#000000"; ctx.beginPath(); ctx.moveTo(20, 10); ctx.lineTo(32, 10); ctx.lineTo(26, 17); ctx.closePath(); ctx.fill();
             ctx.fillStyle = "#40e040"; ctx.beginPath(); ctx.moveTo(22, 11); ctx.lineTo(30, 11); ctx.lineTo(26, 15.5); ctx.closePath(); ctx.fill();
             break;
+        case "netmanager":
+            // Network Manager: a device's web page with a router in front of it
+            // (apps/netmanager/DeviceIcon.qml draws the same)
+            frame(1, 1, 24, 20, "#ffffff");
+            rect(2, 2, 22, 3, "#000080");
+            rect(4, 8, 14, 1, "#0000c0"); rect(4, 11, 10, 1, "#808080"); rect(4, 14, 12, 1, "#808080");
+            rect(12, 13, 2, 9, "#000000"); rect(11, 12, 4, 2, "#000000");
+            rect(26, 13, 2, 9, "#000000"); rect(25, 12, 4, 2, "#000000");
+            frame(8, 21, 23, 9, "#c0c0c0");
+            rect(9, 22, 21, 1, "#ffffff");
+            for (var nl = 0; nl < 5; ++nl)
+                rect(11 + nl * 4, 25, 2, 2, nl % 3 === 2 ? "#ffff00" : "#00e000");
+            break;
+        case "athenaeum":
+            // Athenaeum: a Greek temple, the library of the name, with a book
+            // on its steps (apps/athenaeum/AthenaeumIcon.qml draws it small)
+            ctx.fillStyle = "#000000";
+            ctx.beginPath(); ctx.moveTo(1, 10); ctx.lineTo(16, 1); ctx.lineTo(31, 10); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = "#c0c0c0";
+            ctx.beginPath(); ctx.moveTo(5, 9); ctx.lineTo(16, 3); ctx.lineTo(27, 9); ctx.closePath(); ctx.fill();
+            rect(14, 5, 4, 3, "#000080");
+            frame(2, 10, 28, 4, "#ffffff");
+            for (var col = 0; col < 4; ++col) {
+                rect(4 + col * 7, 14, 4, 11, "#ffffff");
+                rect(7 + col * 7, 14, 1, 11, "#808080");
+                rect(4 + col * 7, 14, 1, 11, "#000000");
+            }
+            rect(2, 25, 28, 2, "#808080");
+            frame(0, 27, 32, 4, "#c0c0c0");
+            frame(19, 20, 11, 8, "#800000");
+            rect(21, 21, 2, 6, "#ffff00");
+            break;
+        case "disks":
+            // Disk Manager: two hard disks stacked, and a pie of partitions
+            // (apps/disks/DriveIcon.qml draws the same)
+            for (var hd = 0; hd < 2; ++hd) {
+                var hy = hd === 0 ? 14 : 4;
+                frame(2, hy, 28, 14, "#c0c0c0");
+                rect(3, hy + 1, 26, 1, "#ffffff");
+                rect(3, hy + 1, 1, 12, "#ffffff");
+                rect(3, hy + 12, 26, 1, "#808080");
+                rect(4, hy + 10, 24, 1, "#808080");
+                rect(23, hy + 5, 4, 2, "#00c000");
+            }
+            ctx.fillStyle = "#000000";
+            ctx.beginPath(); ctx.arc(10, 24, 7.5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#0000ff";
+            ctx.beginPath(); ctx.moveTo(10, 24); ctx.arc(10, 24, 6.5, -Math.PI / 2, Math.PI * 0.6); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = "#ff00ff";
+            ctx.beginPath(); ctx.moveTo(10, 24); ctx.arc(10, 24, 6.5, Math.PI * 0.6, Math.PI * 1.5); ctx.closePath(); ctx.fill();
+            break;
         case "imagewriter":
             // a disc going onto a USB stick
             ctx.fillStyle = "#c0c0c0"; ctx.strokeStyle = "#000000"; ctx.lineWidth = 1;

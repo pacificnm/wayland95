@@ -45,6 +45,16 @@
 #                           messages of start-up BOOT (0 this one, -1 the one
 #                           before...) as journalctl's JSON, PRIORITY 0-7 or worse
 #   journal-boots         the start-ups the log has, as journalctl's JSON
+#   smart DEVICE          a disk's S.M.A.R.T. health (Disk Manager), as
+#                           smartctl's JSON: DEVICE is a whole disk
+#                           (/dev/sda, /dev/nvme0n1...), never a partition
+#   smart-test DEVICE short|long|abort   start or stop the disk's self-test
+#   unit ... ollama       Ollama (local AI models), once installed
+#   ollama-install [rocm] Ollama from ollama.com into /usr/local, with its
+#                           service (and AMD's ROCm libraries if asked);
+#                           prints "percent N" and "status TEXT" lines
+#   ollama-remove [models] Ollama and its service (and its downloaded models)
+#   ollama-config         < listen=local|all keep_models=yes|no keep_alive=MINUTES
 #
 # A tunnel's private and preshared keys never leave here: wg-show gives the
 # public key and whether a preshared key is set; wg-save takes "keep",
@@ -355,6 +365,19 @@ $peer"
     [ -z "$backup" ] || rm -f "$backup"
 }
 
+# a whole disk for smartctl: /dev/sda, /dev/nvme0n1, /dev/vda, /dev/mmcblk0...
+# (never a partition, nor anything else in /dev)
+smart_disk() {
+    case "$1" in
+        /dev/sd[a-z]|/dev/sd[a-z][a-z]|/dev/hd[a-z]|/dev/vd[a-z]|/dev/vd[a-z][a-z]|/dev/xvd[a-z]) ;;
+        /dev/nvme[0-9]|/dev/nvme[0-9][0-9]|/dev/nvme[0-9]n[0-9]|/dev/nvme[0-9]n[0-9][0-9]) ;;
+        /dev/nvme[0-9][0-9]n[0-9]|/dev/nvme[0-9][0-9]n[0-9][0-9]) ;;
+        /dev/mmcblk[0-9]|/dev/mmcblk[0-9][0-9]) ;;
+        *) die "$1 isn't a disk" ;;
+    esac
+    [ -b "$1" ] || [ -c "$1" ] || die "There's no disk $1"
+}
+
 cmd=${1:-}
 [ $# -gt 0 ] && shift
 
@@ -368,6 +391,7 @@ unit)
         postgresql) units=postgresql.service ;;
         mysql|mariadb) units=""; systemctl cat mariadb.service >/dev/null 2>&1 && units=mariadb.service ;;
         nginx) units=""; systemctl cat nginx.service >/dev/null 2>&1 && units=nginx.service ;;
+        ollama) units=""; systemctl cat ollama.service >/dev/null 2>&1 && units=ollama.service ;;
         samba|smbd)
             # smbd shares the folders; nmbd (if there) answers to the
             # computer's name, for older Windows' Network Neighborhood
@@ -1094,7 +1118,168 @@ journal-boots)
     exec journalctl --no-pager -q --list-boots -o json
     ;;
 
+smart|smart-test)
+    [ $# -ge 1 ] || die "usage: $cmd DEVICE ..."
+    smart_disk "$1"
+    command -v smartctl >/dev/null 2>&1 || die "smartctl isn't installed (sudo apt install smartmontools)."
+    # smartctl's exit status is a set of flags (a failing disk, errors in
+    # its logs...), not just success or failure: its JSON says it all
+    if [ "$cmd" = smart ]; then
+        [ $# -eq 1 ] || die "usage: smart DEVICE"
+        smartctl -x --json=c "$1" || true
+    else
+        [ $# -eq 2 ] || die "usage: smart-test DEVICE short|long|abort"
+        case "$2" in
+        short|long) smartctl --json=c -t "$2" "$1" || true ;;
+        abort) smartctl --json=c -X "$1" || true ;;
+        *) die "smart-test: short, long or abort" ;;
+        esac
+    fi
+    ;;
+
+ollama-install)
+    # Ollama isn't in Debian: its own release, the way its manual install
+    # does it (docs/linux.mdx), into /usr/local (out of dpkg's way). The
+    # archive comes from ollama.com over https (a redirect to its GitHub
+    # releases); it holds bin/ollama and lib/ollama/ and nothing else is
+    # let out of it. Progress lines for Services: "percent N" and "status TEXT".
+    [ $# -le 1 ] || die "usage: ollama-install [rocm]"
+    rocm=no
+    case "${1:-}" in '') ;; rocm) rocm=yes ;; *) die "usage: ollama-install [rocm]" ;; esac
+    command -v curl >/dev/null || die "curl isn't installed (sudo apt install curl)."
+    command -v zstd >/dev/null || die "zstd isn't installed (sudo apt install zstd)."
+    case "$(uname -m)" in
+        x86_64) arch=amd64 ;;
+        aarch64|arm64) arch=arm64 ;;
+        *) die "Ollama has no build for this kind of processor ($(uname -m))." ;;
+    esac
+    [ "$rocm" = no ] || [ "$arch" = amd64 ] || die "Ollama's AMD (ROCm) libraries are for x86-64 computers only."
+    work=$(mktemp -d /var/tmp/wayland95-ollama.XXXXXX)
+    trap 'rm -rf "$work"' EXIT
+    ollama_fetch() { # archive-name what share-from share-to
+        url="https://ollama.com/download/$1"
+        echo "status Downloading $2..."
+        total=$(curl -fsSIL --proto =https --tlsv1.2 "$url" | tr -d '\r' | awk 'tolower($1)=="content-length:" {n=$2} END {print n+0}')
+        curl -fsSL --proto =https --proto-redir =https --tlsv1.2 -o "$work/$1" "$url" &
+        pid=$!
+        while kill -0 "$pid" 2>/dev/null; do
+            if [ "${total:-0}" -gt 0 ] && [ -f "$work/$1" ]; then
+                got=$(stat -c %s "$work/$1")
+                echo "percent $(( $3 + got * ($4 - $3) / total ))"
+            fi
+            sleep 1
+        done
+        wait "$pid" || die "Couldn't download $2 from ollama.com. Is this computer on the internet?"
+        # nothing outside bin/ollama and lib/ollama/, no links leaving them
+        zstd -dc "$work/$1" | tar -tvf - > "$work/list" || die "The download of $2 is damaged. Try again."
+        awk '{print $NF}' "$work/list" | sed 's|^\./||' | while read -r f; do
+            case "$f" in
+                bin/|bin/ollama|lib/|lib/ollama|lib/ollama/*) ;;
+                *) echo bad; break ;;
+            esac
+            case "$f" in *..*) echo bad; break ;; esac
+        done | grep -q bad && die "The download of $2 has files where Ollama's shouldn't be; it wasn't installed."
+        grep -q ' -> /' "$work/list" && die "The download of $2 has links out of its folder; it wasn't installed."
+        :
+    }
+    ollama_fetch "ollama-linux-$arch.tar.zst" "Ollama" 0 85
+    if [ "$rocm" = yes ]; then
+        ollama_fetch "ollama-linux-amd64-rocm.tar.zst" "Ollama's AMD graphics libraries" 85 95
+    fi
+    echo "status Installing Ollama..."
+    echo "percent 96"
+    if systemctl is-active -q ollama.service 2>/dev/null; then systemctl stop ollama.service; fi
+    # the old libraries go first (the docs' upgrade advice)
+    rm -rf /usr/local/lib/ollama
+    zstd -dc "$work/ollama-linux-$arch.tar.zst" | tar --no-same-owner -xf - -C /usr/local bin/ollama lib/ollama 2>/dev/null \
+        || zstd -dc "$work/ollama-linux-$arch.tar.zst" | tar --no-same-owner -xf - -C /usr/local ./bin/ollama ./lib/ollama \
+        || die "Ollama couldn't be unpacked."
+    if [ "$rocm" = yes ]; then
+        zstd -dc "$work/ollama-linux-amd64-rocm.tar.zst" | tar --no-same-owner -xf - -C /usr/local \
+            || die "Ollama's AMD libraries couldn't be unpacked."
+    fi
+    chmod 755 /usr/local/bin/ollama
+    echo "status Setting up the Ollama service..."
+    echo "percent 98"
+    if ! id ollama >/dev/null 2>&1; then
+        useradd -r -s /usr/sbin/nologin -U -m -d /usr/share/ollama ollama
+    fi
+    for g in render video; do
+        getent group "$g" >/dev/null && usermod -a -G "$g" ollama
+    done
+    # the person installing it may read its models' folder
+    if [ -n "${PKEXEC_UID:-}" ] && [ "$PKEXEC_UID" != 0 ]; then
+        caller=$(getent passwd "$PKEXEC_UID" | cut -d: -f1)
+        [ -z "$caller" ] || usermod -a -G ollama "$caller"
+    fi
+    cat > /etc/systemd/system/ollama.service <<'UNIT'
+# Ollama, installed by Wayland 95's Control Panel (Services)
+[Unit]
+Description=Ollama Service
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/ollama serve
+User=ollama
+Group=ollama
+Restart=always
+RestartSec=3
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    systemctl daemon-reload
+    if [ -n "$(systemctl show -p UnitFileState --value ollama.service 2>/dev/null | grep enabled)" ]; then
+        systemctl restart ollama.service
+    fi
+    echo "percent 100"
+    ;;
+
+ollama-remove)
+    # the program and its service; "models" also its models (and its user)
+    [ $# -le 1 ] || die "usage: ollama-remove [models]"
+    case "${1:-}" in ''|models) ;; *) die "usage: ollama-remove [models]" ;; esac
+    systemctl disable --now ollama.service 2>/dev/null || true
+    rm -f /etc/systemd/system/ollama.service
+    rm -rf /etc/systemd/system/ollama.service.d
+    systemctl daemon-reload
+    rm -f /usr/local/bin/ollama
+    rm -rf /usr/local/lib/ollama
+    if [ "${1:-}" = models ]; then
+        if id ollama >/dev/null 2>&1; then userdel ollama 2>/dev/null || true; fi
+        getent group ollama >/dev/null && groupdel ollama 2>/dev/null || true
+        rm -rf /usr/share/ollama
+    fi
+    ;;
+
+ollama-config)
+    # listen=local|all  keep_models=yes|no (two models stay loaded: the
+    # answer and the embedding model, for Athenaeum)  keep_alive=MINUTES
+    [ -f /etc/systemd/system/ollama.service ] || die "Ollama isn't installed."
+    listen=local keep_models=no keep_alive=5
+    while IFS= read -r line; do
+        case "$line" in
+            listen=*) listen=${line#*=}; case "$listen" in local|all) ;; *) die "listen must be local or all";; esac ;;
+            keep_models=*) keep_models=${line#*=}; yesno keep_models "$keep_models" ;;
+            keep_alive=*) keep_alive=${line#*=}; number "keep_alive" "$keep_alive" 0 1440 ;;
+            '') ;;
+            *) die "Unknown setting: ${line%%=*}" ;;
+        esac
+    done
+    mkdir -p /etc/systemd/system/ollama.service.d
+    {
+        echo "# Set by Wayland 95's Control Panel (Services > Ollama > Settings)"
+        echo "[Service]"
+        [ "$listen" = all ] && echo 'Environment="OLLAMA_HOST=0.0.0.0:11434"'
+        [ "$keep_models" = yes ] && echo 'Environment="OLLAMA_MAX_LOADED_MODELS=2"'
+        echo "Environment=\"OLLAMA_KEEP_ALIVE=${keep_alive}m\""
+    } > /etc/systemd/system/ollama.service.d/wayland95.conf
+    systemctl daemon-reload
+    if systemctl is-active -q ollama.service; then systemctl restart ollama.service; fi
+    ;;
+
 *)
-    die "usage: wayland95-services unit|ssh-config|pg-config|pg-role|my-config|my-role|my-password|nginx-config|www-own|smb-config|smb-password|wg-list|wg-show|wg-save|wg-import|wg-delete|update-source|login-theme|fw-save|journal|journal-boots ..."
+    die "usage: wayland95-services unit|ssh-config|pg-config|pg-role|my-config|my-role|my-password|nginx-config|www-own|smb-config|smb-password|wg-list|wg-show|wg-save|wg-import|wg-delete|update-source|login-theme|fw-save|journal|journal-boots|smart|smart-test|ollama-install|ollama-remove|ollama-config ..."
     ;;
 esac

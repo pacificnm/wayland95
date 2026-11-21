@@ -1,0 +1,220 @@
+// SPDX-FileCopyrightText: 2026 Jaimie Garner <pacificnm@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "articlestore.h"
+
+#include "core/zimreader.h"
+
+#include "core/highlights.h"
+#include "core/library.h"
+#include "core/projects.h"
+#include "core/settings.h"
+
+#include <KLocalizedString>
+
+#include <QCache>
+#include <QColor>
+#include <QSet>
+
+namespace
+{
+using ArticleCache = QCache<QString, ArticleStore::Article>;
+Q_GLOBAL_STATIC(ArticleCache, cache, 24) // rendered articles, most recently used kept
+
+QString key(qint64 libraryId, const QString &path)
+{
+    return QString::number(libraryId) + QLatin1Char('/') + path;
+}
+
+QColor mix(const QColor &a, const QColor &b, double t)
+{
+    return QColor::fromRgbF(float(a.redF() * (1 - t) + b.redF() * t), float(a.greenF() * (1 - t) + b.greenF() * t), float(a.blueF() * (1 - t) + b.blueF() * t));
+}
+
+// Article styling, adapted from Athenaeum's article.css, with the colours taken from the desktop
+QString css(const QPalette &p)
+{
+    const QColor bg = p.color(QPalette::Base);
+    const QColor text = p.color(QPalette::Text);
+    const bool dark = bg.lightness() < 128;
+    QString vars = QStringLiteral(
+                       ":root { --bg: %1; --text: %2; --muted: %3; --border: %4; --surface: %5; --surface-2: %6;"
+                       " --link: %7; --link-visited: %8; --accent-soft: %9; color-scheme: %10; %11 }")
+                       .arg(bg.name(),
+                            text.name(),
+                            mix(text, bg, 0.4).name(),
+                            mix(text, bg, 0.82).name(),
+                            mix(text, bg, 0.97).name(),
+                            mix(text, bg, 0.92).name(),
+                            p.color(QPalette::Link).name(),
+                            p.color(QPalette::LinkVisited).name(),
+                            mix(p.color(QPalette::Highlight), bg, 0.85).name(),
+                            dark ? QStringLiteral("dark") : QStringLiteral("light"),
+                            // highlighter colours: see-through, so the text keeps its own colour in light and dark pages
+                            dark ? QStringLiteral("--hl-yellow: rgba(250, 204, 21, 0.38); --hl-green: rgba(74, 222, 128, 0.32);"
+                                                  " --hl-blue: rgba(96, 165, 250, 0.38); --hl-pink: rgba(244, 114, 182, 0.38);")
+                                 : QStringLiteral("--hl-yellow: rgba(253, 224, 71, 0.6); --hl-green: rgba(134, 239, 172, 0.6);"
+                                                  " --hl-blue: rgba(147, 197, 253, 0.6); --hl-pink: rgba(249, 168, 212, 0.6);"));
+    // Wayland 95: scrollbars like the rest of the desktop's (raised buttons and thumb on a dithered trough), in the
+    // palette's 3D colours; the arrows are CSS gradients (the page may load images from zim: only)
+    vars += QStringLiteral(":root { --face: %1; --face-hl: %2; --face-light: %3; --face-shadow: %4; --face-dark: %5; --arrow: %6; }")
+                .arg(p.color(QPalette::Button).name(),
+                     p.color(QPalette::Light).name(),
+                     p.color(QPalette::Midlight).name(),
+                     p.color(QPalette::Mid).name(),
+                     p.color(QPalette::Shadow).name(),
+                     p.color(QPalette::ButtonText).name());
+    vars += QStringLiteral(R"(
+::-webkit-scrollbar { width: 16px; height: 16px; }
+::-webkit-scrollbar-track { background-color: var(--face); background-image: repeating-conic-gradient(var(--face-hl) 0 25%, var(--face) 0 50%); background-size: 2px 2px; }
+::-webkit-scrollbar-thumb, ::-webkit-scrollbar-button:single-button { background-color: var(--face); border: 1px solid; border-color: var(--face-light) var(--face-dark) var(--face-dark) var(--face-light); box-shadow: inset 1px 1px var(--face-hl), inset -1px -1px var(--face-shadow); }
+::-webkit-scrollbar-button:single-button { display: block; width: 16px; height: 16px; background-repeat: no-repeat; background-position: center; }
+::-webkit-scrollbar-button:single-button:active { border-color: var(--face-shadow); box-shadow: none; background-position: calc(50% + 1px) calc(50% + 1px); }
+::-webkit-scrollbar-button:single-button:vertical:decrement { background-image: conic-gradient(from 135deg at 50% 0, var(--arrow) 90deg, transparent 0); background-size: 7px 4px; }
+::-webkit-scrollbar-button:single-button:vertical:increment { background-image: conic-gradient(from -45deg at 50% 100%, var(--arrow) 90deg, transparent 0); background-size: 7px 4px; }
+::-webkit-scrollbar-button:single-button:horizontal:decrement { background-image: conic-gradient(from 45deg at 0 50%, var(--arrow) 90deg, transparent 0); background-size: 4px 7px; }
+::-webkit-scrollbar-button:single-button:horizontal:increment { background-image: conic-gradient(from 225deg at 100% 50%, var(--arrow) 90deg, transparent 0); background-size: 4px 7px; }
+::-webkit-scrollbar-corner { background: var(--face); }
+)");
+    QString rules = QStringLiteral(R"(
+html { background: var(--bg); color: var(--text); }
+body { margin: 0; padding: 24px 32px 64px; font: 17px/1.72 "Noto Serif", "Source Serif Pro", Georgia, serif; overflow-wrap: anywhere; }
+h1 { margin: 0 0 12px; font-weight: 600; font-size: 2.3rem; line-height: 1.15; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.article p { margin: 0.9em 0; }
+.article h2, .article h3, .article h4 { font-weight: 600; line-height: 1.25; margin: 1.6em 0 0.5em; }
+.article h2 { font-size: 1.6rem; padding-bottom: 0.2em; border-bottom: 1px solid var(--border); }
+.article h3 { font-size: 1.25rem; }
+.article a { color: var(--link); text-decoration: none; }
+.article a:hover { text-decoration: underline; }
+.article a:visited { color: var(--link-visited); }
+.article a.wl-ext::after { content: '\2197'; font-size: 0.7em; margin-left: 2px; opacity: 0.6; }
+.article .wl-missing { color: inherit; }
+.article .book-trail { font-size: 0.9em; opacity: 0.8; margin: 0 0 1em 0; }
+.article mark.excerpt-hl { background: var(--accent-soft); color: inherit; border-bottom: 2px solid var(--link); border-radius: 2px; cursor: help; }
+.article mark.hl { color: inherit; border-radius: 2px; padding: 0 1px; scroll-margin-top: 30vh; }
+.article mark.hl[title] { cursor: help; border-bottom: 2px dotted currentColor; }
+.article mark.hl-yellow { background: var(--hl-yellow); } .article mark.hl-green { background: var(--hl-green); }
+.article mark.hl-blue { background: var(--hl-blue); } .article mark.hl-pink { background: var(--hl-pink); }
+.article ul, .article ol { padding-left: 1.5em; margin: 0.8em 0; }
+.article li { margin: 0.25em 0; }
+.article .plainlist ul, .article .plainlist ol, .article ul.plainlist { list-style: none; padding-left: 0; }
+.article sup, .article sub { line-height: 0; font-size: 0.72em; }
+.article img { max-width: 100%; height: auto; }
+.article figure { margin: 1em 0; }
+.article figcaption, .article .thumbcaption { font: 0.85rem/1.4 sans-serif; color: var(--muted); }
+.article .hatnote { font-style: italic; padding-left: 1.6em; margin: 0.6em 0; color: var(--muted); font-size: 0.95em; }
+.article .nowrap { white-space: nowrap; }
+.article .reflist, .article ol.references { font-size: 0.88rem; line-height: 1.5; }
+.article math, .article .mwe-math-element { overflow-x: auto; max-width: 100%; }
+.article pre, .article code { font-family: monospace; font-size: 0.88em; }
+.article pre { overflow-x: auto; padding: 12px; background: var(--surface-2); border-radius: 8px; }
+.article table { border-collapse: collapse; font: 0.9rem/1.45 sans-serif; }
+.article table.infobox, .article table.ib-chembox { float: right; clear: right; width: 22em; max-width: 100%; margin: 0.4em 0 1.2em 1.6em;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.article table.infobox caption, .article .infobox-above { font-weight: 700; font-size: 1.05rem; padding: 10px 12px; background: var(--accent-soft); }
+.article table.infobox th, .article table.infobox td { padding: 5px 10px; border-top: 1px solid var(--border); vertical-align: top; text-align: left; }
+.article table.infobox table { width: 100%; }
+.article table.wikitable { margin: 1em 0; display: block; overflow-x: auto; max-width: 100%; }
+.article table.wikitable th, .article table.wikitable td { border: 1px solid var(--border); padding: 6px 10px; }
+.article table.wikitable th { background: var(--surface-2); }
+@media (max-width: 640px) { body { padding: 16px; } .article table.infobox, .article table.ib-chembox { float: none; width: 100%; margin: 1em 0; } }
+)");
+    // the whole window, or a column of comfortable reading width (Settings; full by default: on a big screen the 860-pixel
+    // column leaves most of it empty)
+    rules += AppSettings::articleFullWidth() ? QStringLiteral("main { max-width: none; margin: 0; }\n")
+                                             : QStringLiteral("main { max-width: 860px; margin: 0 auto; }\n");
+    // Wikipedia hard-codes light backgrounds inline; keep their text readable. !important: the infobox rules are more
+    // specific, and an infobox section header ("Names") would stay white on pale yellow.
+    if (dark)
+        rules += QStringLiteral(
+            ".article [style*='background'], .article [style*='background'] * { color: #1b1d21 !important; }"
+            " .article [style*='background'] a { color: #234a9e !important; }\n");
+    return vars + rules;
+}
+
+QByteArray document(const QString &title, const QString &body, const QPalette &palette)
+{
+    // No scripts at all (JavaScript is off in the view too), and nothing may load from anywhere but the ZIM
+    return QStringLiteral(
+               "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+               "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src zim:; style-src 'unsafe-inline'\">"
+               "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+               "<title>%1</title><style>%2</style></head><body><main><h1>%1</h1><div class=\"article\">%3</div></main></body></html>")
+        .arg(title.toHtmlEscaped(), css(palette), body)
+        .toUtf8();
+}
+}
+
+QUrl ArticleStore::url(qint64 libraryId, const QString &path, const QString &fragment)
+{
+    QUrl u(QStringLiteral("zim://lib%1/%2").arg(libraryId).arg(ArticleRenderer::encodePath(path)));
+    if (!fragment.isEmpty())
+        u.setFragment(fragment);
+    return u;
+}
+
+bool ArticleStore::parse(const QUrl &url, qint64 *libraryId, QString *path)
+{
+    if (url.scheme() != QLatin1String("zim") || !url.host().startsWith(QLatin1String("lib")))
+        return false;
+    bool ok = false;
+    *libraryId = url.host().mid(3).toLongLong(&ok);
+    *path = url.path(QUrl::FullyDecoded).mid(1);
+    return ok && !path->isEmpty();
+}
+
+std::optional<ArticleStore::Article> ArticleStore::article(qint64 libraryId, const QString &path)
+{
+    if (const Article *a = cache->object(key(libraryId, path)))
+        return *a;
+    const auto content = ZimReader::content(libraryId, path);
+    if (!content || !content->mimetype.startsWith(QLatin1String("text/html")))
+        return std::nullopt;
+    // highlights and saved excerpts are marked in the page (cleared from the cache whenever either changes)
+    // a passage both highlighted and saved to a project (a lesson's highlight is both) is marked once, in its colour
+    QList<Highlight> marks = Highlights::marksFor(libraryId, content->path);
+    QSet<QString> marked;
+    for (const Highlight &h : std::as_const(marks))
+        marked.insert(h.text.simplified().toLower());
+    for (const auto excerpts = Projects::highlightsFor(libraryId, content->path); const Highlight &h : excerpts)
+        if (!marked.contains(h.text.simplified().toLower()))
+            marks << h;
+    auto rendered = ArticleRenderer::render(
+        content->data,
+        content->path,
+        QStringLiteral("zim://lib%1/").arg(libraryId),
+        [libraryId](const QString &p) {
+            return ZimReader::hasEntry(libraryId, p);
+        },
+        nullptr,
+        marks);
+    if (!rendered)
+        return std::nullopt;
+    auto *a = new Article{libraryId, content->path, std::move(*rendered)};
+    const Article copy = *a;
+    cache->insert(key(libraryId, path), a);
+    return copy;
+}
+
+void ArticleStore::clear()
+{
+    cache->clear();
+}
+
+QByteArray ArticleStore::page(const Article &article, const QPalette &palette)
+{
+    return document(article.rendered.title, article.rendered.html, palette);
+}
+
+QByteArray ArticleStore::notFoundPage(qint64 libraryId, const QString &path, const QPalette &palette)
+{
+    const auto library = Library::byId(libraryId);
+    if (!library || !library->fileExists()) // a saved chat or project can outlive its library
+        return document(i18n("Library not installed"),
+                        QStringLiteral("<p>%1</p>")
+                            .arg(i18n("The library this article came from is no longer installed. Add it again in the Library Manager "
+                                      "to read “%1”; its chats and saved passages come back with it.",
+                                      path)
+                                     .toHtmlEscaped()),
+                        palette);
+    return document(i18n("Not found"), QStringLiteral("<p>%1</p>").arg(i18n("This library has no article at “%1”.", path).toHtmlEscaped()), palette);
+}

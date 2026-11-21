@@ -1,0 +1,117 @@
+{
+  "screener": {
+    "defaultFilters": {
+      "sector": "",
+      "industry": "",
+      "exchange": "",
+      "country": "US",
+      "capMin": "300",
+      "capMax": "",
+      "priceMin": "",
+      "priceMax": "",
+      "volumeMin": "200000",
+      "betaMin": "",
+      "betaMax": "",
+      "yieldMin": "",
+      "relVolMin": "",
+      "kind": "stocks",
+      "active": true,
+      "limit": 250
+    },
+    "presets": [
+      {
+        "id": "large",
+        "label": "Large-cap leaders",
+        "what": "Companies worth $10B+ that trade at least 2 million shares a day: liquid and well covered.",
+        "apply": {
+          "capMin": "10000",
+          "capMax": "",
+          "volumeMin": "2000000"
+        }
+      },
+      {
+        "id": "dividend",
+        "label": "Dividend payers",
+        "what": "Established companies ($2B+) yielding at least 3% a year. Check payout safety before trusting a high yield.",
+        "apply": {
+          "capMin": "2000",
+          "capMax": "",
+          "yieldMin": "3",
+          "volumeMin": "300000"
+        }
+      },
+      {
+        "id": "volume",
+        "label": "Unusual volume",
+        "what": "Stocks trading at least twice their normal volume today: something is happening, so find out what.",
+        "apply": {
+          "capMin": "500",
+          "capMax": "",
+          "relVolMin": "2",
+          "volumeMin": "500000",
+          "priceMin": "5"
+        }
+      },
+      {
+        "id": "defensive",
+        "label": "Low-beta defensives",
+        "what": "Larger companies that historically move less than the market (beta under 0.8).",
+        "apply": {
+          "capMin": "5000",
+          "capMax": "",
+          "betaMax": "0.8",
+          "volumeMin": "500000"
+        }
+      },
+      {
+        "id": "growth",
+        "label": "High-beta tech",
+        "what": "Technology companies that swing more than the market (beta over 1.5): bigger moves both ways.",
+        "apply": {
+          "sector": "Technology",
+          "capMin": "2000",
+          "capMax": "",
+          "betaMin": "1.5",
+          "volumeMin": "500000"
+        }
+      },
+      {
+        "id": "small",
+        "label": "Liquid small caps",
+        "what": "Companies between $300M and $2B that still trade enough shares to get in and out.",
+        "apply": {
+          "capMin": "300",
+          "capMax": "2000",
+          "volumeMin": "500000",
+          "priceMin": "5"
+        }
+      },
+      {
+        "id": "etf",
+        "label": "Active ETFs",
+        "what": "Exchange-traded funds trading at least a million shares a day.",
+        "apply": {
+          "kind": "etfs",
+          "capMin": "",
+          "capMax": "",
+          "volumeMin": "1000000"
+        }
+      }
+    ]
+  },
+  "market": {
+    "defaultMoverFilter": {
+      "minPrice": 5,
+      "hideFunds": true,
+      "exchange": "all"
+    }
+  },
+  "congress": {
+    "defaultTradeFilter": {
+      "kind": "all",
+      "assetType": "all",
+      "q": "",
+      "owner": "all"
+    }
+  }
+}

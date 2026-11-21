@@ -1,0 +1,66 @@
+{
+  "brokers": [
+    "Charles Schwab",
+    "Fidelity",
+    "Interactive Brokers",
+    "Robinhood",
+    "E*TRADE",
+    "Webull",
+    "Vanguard",
+    "Tastytrade",
+    "Merrill",
+    "Ally Invest",
+    "Public",
+    "Firstrade"
+  ],
+  "accountTypeLabel": {
+    "cash": "Cash (no margin, no short)",
+    "margin": "Margin (2:1, can short)"
+  },
+  "marginMultiple": 2,
+  "emotions": [
+    "Calm",
+    "Confident",
+    "Patient",
+    "Anxious",
+    "FOMO",
+    "Greedy",
+    "Fearful",
+    "Frustrated",
+    "Impulsive"
+  ],
+  "sideLabel": {
+    "buy": "Buy",
+    "sell": "Sell",
+    "sell_short": "Sell short",
+    "buy_to_cover": "Buy to cover"
+  },
+  "orderTypeLabel": {
+    "market": "Market",
+    "limit": "Limit",
+    "stop": "Stop",
+    "stop_limit": "Stop limit",
+    "trailing_stop": "Trailing stop"
+  },
+  "portfolioKinds": [
+    {
+      "id": "stock",
+      "label": "Stock"
+    },
+    {
+      "id": "etf",
+      "label": "ETF"
+    },
+    {
+      "id": "fund",
+      "label": "Mutual fund"
+    }
+  ],
+  "defaultRiskRules": {
+    "maxRiskPct": 1,
+    "maxPositionPct": 25,
+    "maxTotalMode": "percent",
+    "maxTotalPct": 80,
+    "maxTotalDollars": 50000
+  }
+}

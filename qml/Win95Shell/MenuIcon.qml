@@ -222,6 +222,16 @@ Canvas {
             frame(19, 20, 11, 8, "#800000");
             rect(21, 21, 2, 6, "#ffff00");
             break;
+        case "tradinglab":
+            // Trading Lab: a chart window with green and red candles over a rising line
+            frame(1, 3, 30, 26, "#ffffff");
+            rect(2, 4, 28, 3, "#000080");
+            var tc = [[5, 20, 6, "#00a000"], [10, 16, 7, "#c00000"], [15, 14, 8, "#00a000"], [20, 10, 7, "#00a000"], [25, 9, 6, "#c00000"]];
+            for (var ti = 0; ti < tc.length; ++ti) {
+                rect(tc[ti][0] + 1, tc[ti][1] - 2, 1, tc[ti][2] + 4, "#000000");
+                frame(tc[ti][0], tc[ti][1], 3, tc[ti][2], tc[ti][3]);
+            }
+            break;
         case "disks":
             // Disk Manager: two hard disks stacked, and a pie of partitions
             // (apps/disks/DriveIcon.qml draws the same)

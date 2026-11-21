@@ -1,0 +1,165 @@
+{
+  "caps": [
+    {
+      "id": "quotes",
+      "label": "Live quotes",
+      "lost": "live prices, watchlist prices and the paper account's marks"
+    },
+    {
+      "id": "indices",
+      "label": "Index quotes",
+      "lost": "the index ticker along the top"
+    },
+    {
+      "id": "daily",
+      "label": "Daily bars",
+      "lost": "daily, weekly and monthly charts"
+    },
+    {
+      "id": "bars1min",
+      "label": "1-minute bars",
+      "lost": "1-minute charts (and precise order fills)"
+    },
+    {
+      "id": "bars5min",
+      "label": "5-minute bars",
+      "lost": "5-minute charts"
+    },
+    {
+      "id": "bars15min",
+      "label": "15-minute bars",
+      "lost": "15-minute charts"
+    },
+    {
+      "id": "bars30min",
+      "label": "30-minute bars",
+      "lost": "30-minute charts"
+    },
+    {
+      "id": "bars1hour",
+      "label": "1-hour bars",
+      "lost": "1-hour charts"
+    },
+    {
+      "id": "bars4hour",
+      "label": "4-hour bars",
+      "lost": "4-hour charts"
+    },
+    {
+      "id": "search",
+      "label": "Symbol search",
+      "lost": "searching for symbols by name"
+    },
+    {
+      "id": "news",
+      "label": "Stock news",
+      "lost": "news for a symbol"
+    },
+    {
+      "id": "marketNews",
+      "label": "Market news",
+      "lost": "general market news"
+    },
+    {
+      "id": "profile",
+      "label": "Company profile",
+      "lost": "company details on the quote screen"
+    },
+    {
+      "id": "analyst",
+      "label": "Analyst ratings",
+      "lost": "ratings, price targets and grades"
+    },
+    {
+      "id": "estimates",
+      "label": "Analyst estimates",
+      "lost": "the estimates section of Analyst Reports"
+    },
+    {
+      "id": "aftermarket",
+      "label": "After-hours quotes",
+      "lost": "after-hours prices on the quote screen"
+    },
+    {
+      "id": "sectors",
+      "label": "Sector performance",
+      "lost": "sector and industry performance"
+    },
+    {
+      "id": "movers",
+      "label": "Market movers",
+      "lost": "the biggest gainers and losers"
+    },
+    {
+      "id": "screener",
+      "label": "Stock screener",
+      "lost": "the Stock Screener"
+    },
+    {
+      "id": "congress",
+      "label": "Senate and House trades",
+      "lost": "the congressional trades screen"
+    },
+    {
+      "id": "fundamentals",
+      "label": "Fundamentals",
+      "lost": "ratios, key metrics and financial statements"
+    }
+  ],
+  "screenCaps": {
+    "market": [
+      "sectors",
+      "movers"
+    ],
+    "congress": [
+      "congress"
+    ],
+    "marketnews": [
+      "news",
+      "marketNews"
+    ],
+    "screener": [
+      "screener"
+    ],
+    "news": [
+      "news"
+    ],
+    "analyst": [
+      "analyst",
+      "estimates"
+    ],
+    "fundamentals": [
+      "fundamentals"
+    ]
+  },
+  "toolCaps": {
+    "get_news": [
+      "news",
+      "marketNews"
+    ],
+    "get_analyst_ratings": [
+      "analyst"
+    ],
+    "run_screener": [
+      "screener"
+    ],
+    "get_congress_trades": [
+      "congress"
+    ],
+    "get_market_performance": [
+      "sectors",
+      "movers"
+    ],
+    "get_quote": [
+      "quotes"
+    ]
+  },
+  "intervalCap": {
+    "1min": "bars1min",
+    "5min": "bars5min",
+    "15min": "bars15min",
+    "30min": "bars30min",
+    "1hour": "bars1hour",
+    "4hour": "bars4hour"
+  }
+}

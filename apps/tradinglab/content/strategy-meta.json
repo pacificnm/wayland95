@@ -1,0 +1,37 @@
+{
+  "categories": [
+    "Foundations",
+    "Trend",
+    "Breakouts",
+    "Chart patterns",
+    "Mean reversion & momentum",
+    "Intraday",
+    "Events & options",
+    "Long-term investing",
+    "Process & psychology",
+    "My strategies"
+  ],
+  "levels": [
+    "beginner",
+    "intermediate",
+    "advanced"
+  ],
+  "progressStates": [
+    "new",
+    "learning",
+    "practiced",
+    "confident"
+  ],
+  "progressLabel": {
+    "new": "Not started",
+    "learning": "Learning",
+    "practiced": "Practiced",
+    "confident": "Confident"
+  },
+  "newDoc": {
+    "category": "My strategies",
+    "level": "beginner",
+    "minutes": 10,
+    "body": "## The idea\n\n## Rules\n- Entry:\n- Stop:\n- Target:\n\n## Common mistakes\n\n## Practice\n"
+  }
+}

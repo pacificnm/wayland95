@@ -865,6 +865,28 @@ up next to the shell first, then on `$PATH`.
     `W95_ATHENAEUM_QUERY`) to open a page first, or
     `W95_ATHENAEUM_TEST=notes|project|reading|catalog|classroom|ask` to
     walk through a feature, saving each step (`TestDriver.qml`).
+- **Trading Lab** (`win95tradinglab`, [apps/tradinglab/](apps/tradinglab/)):
+  Start > Programs > Accessories > Trading Lab. Learning to trade with paper
+  money: [Trading Lab](https://github.com/pacificnm/trading-labs.app), an
+  Electron app, brought over with its main process ported to C++
+  ([src/core](apps/tradinglab/src/core): the same SQLite schema, paper-trading
+  engine, journal, strategies, watchlists, portfolios and Claude loop) and its
+  screens redrawn in the Win95 look. Charts with 23 studies and drawings,
+  several simulated paper accounts with a full order ticket (market, limit,
+  stop, stop-limit, trailing stop, brackets and OCO, filled from real
+  1-minute bars), a position calculator, a portfolio planner, research
+  screens from [Financial Modeling Prep](https://site.financialmodelingprep.com/)
+  (quotes, analysts, fundamentals, news, market performance, screener,
+  Senate and House trades) and Cboe's delayed options, a trading journal, a
+  library of 44 strategy lessons and 66 candle patterns, and a Claude
+  assistant with 47 tools that can read the screens and prepare an order
+  ticket but never send, change or cancel an order. The FMP and Anthropic
+  API keys are kept in the desktop keyring (File > Settings); without an FMP
+  key it shows sample data and trading is off. Nothing in it is investment
+  advice; trades are simulated. Data: `~/.local/share/win95-wayland/win95tradinglab/trading.db`
+  (`TRADING_DATA_DIR` for another folder). Lessons, pattern text, the tool
+  list and the Help pages were converted once from upstream into
+  [content/](apps/tradinglab/content/) (see its README).
 - **Archive Manager** (`win95archive`, [apps/archive/](apps/archive/)):
   Start > Programs > Accessories > Archive Manager, or double-click an
   archive in the file manager. In the spirit of WinZip: an archive's files

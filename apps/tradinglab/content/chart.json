@@ -1,0 +1,137 @@
+{
+  "intervals": [
+    {
+      "id": "1min",
+      "label": "1 Min",
+      "barsPerDay": 390,
+      "intraday": true
+    },
+    {
+      "id": "5min",
+      "label": "5 Min",
+      "barsPerDay": 78,
+      "intraday": true
+    },
+    {
+      "id": "15min",
+      "label": "15 Min",
+      "barsPerDay": 26,
+      "intraday": true
+    },
+    {
+      "id": "30min",
+      "label": "30 Min",
+      "barsPerDay": 13,
+      "intraday": true
+    },
+    {
+      "id": "1hour",
+      "label": "1 Hour",
+      "barsPerDay": 7,
+      "intraday": true
+    },
+    {
+      "id": "4hour",
+      "label": "4 Hour",
+      "barsPerDay": 2,
+      "intraday": true
+    },
+    {
+      "id": "1day",
+      "label": "Day",
+      "barsPerDay": 1,
+      "intraday": false
+    },
+    {
+      "id": "1week",
+      "label": "Week",
+      "barsPerDay": 0.2,
+      "intraday": false
+    },
+    {
+      "id": "1month",
+      "label": "Month",
+      "barsPerDay": 0.047619047619047616,
+      "intraday": false
+    }
+  ],
+  "ranges": [
+    {
+      "id": "1D",
+      "label": "1 Day"
+    },
+    {
+      "id": "5D",
+      "label": "5 Days"
+    },
+    {
+      "id": "1M",
+      "label": "1 Month"
+    },
+    {
+      "id": "3M",
+      "label": "3 Months"
+    },
+    {
+      "id": "6M",
+      "label": "6 Months"
+    },
+    {
+      "id": "YTD",
+      "label": "Year to Date"
+    },
+    {
+      "id": "1Y",
+      "label": "1 Year"
+    },
+    {
+      "id": "5Y",
+      "label": "5 Years"
+    },
+    {
+      "id": "MAX",
+      "label": "Max"
+    }
+  ],
+  "minBars": 4,
+  "maxBars": 10000,
+  "chartTypes": [
+    "candles",
+    "hollow",
+    "bars",
+    "line",
+    "area",
+    "heikin"
+  ],
+  "scaleModes": [
+    "normal",
+    "log",
+    "percent"
+  ],
+  "defaultSettings": {
+    "range": "1Y",
+    "interval": "1day",
+    "type": "candles",
+    "scale": "normal",
+    "grid": true,
+    "crosshair": "normal",
+    "upColor": "#26a69a",
+    "downColor": "#ef5350",
+    "studies": [
+      {
+        "uid": "default-volume",
+        "studyId": "volume",
+        "params": {},
+        "visible": true
+      }
+    ]
+  },
+  "dupPalette": [
+    "#ba68c8",
+    "#81c784",
+    "#ff7043",
+    "#fff176",
+    "#4dd0e1",
+    "#f06292"
+  ]
+}

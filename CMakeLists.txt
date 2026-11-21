@@ -222,6 +222,7 @@ add_subdirectory(apps/calc)     # win95calc
 add_subdirectory(apps/email)    # win95email
 add_subdirectory(apps/web)      # win95web
 add_subdirectory(apps/athenaeum) # win95athenaeum (Athenaeum: offline Wikipedia, KAthenaeum)
+add_subdirectory(apps/tradinglab) # win95tradinglab (Trading Lab: paper trading, charts, Claude)
 add_subdirectory(apps/netmanager) # win95netmanager (Network Manager: devices' web pages)
 add_subdirectory(apps/studio)   # win95studio, win95apprun
 

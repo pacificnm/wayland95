@@ -1,28 +1,5 @@
 Package: wayland95
 Architecture: amd64
-Version: 0.11.0
-Priority: optional
-Section: x11
-Maintainer: Wayland 95 <wayland95@localhost>
-Installed-Size: 63500
-Depends: libarchive13t64 (>= 3.3.3), libc6 (>= 2.38), libcairo2 (>= 1.2.4), libegl1, libfontconfig1 (>= 2.12.6), libgcc-s1 (>= 4.0), libgles2, libglib2.0-0t64 (>= 2.40.0), libinput10 (>= 0.21.0), libpam0g (>= 0.99.7.1), libpango-1.0-0 (>= 1.14.0), libpangocairo-1.0-0 (>= 1.14.0), libpixman-1-0 (>= 0.11.2), libqt6concurrent6 (>= 6.1.2), libqt6core6t64 (>= 6.8.2), libqt6dbus6 (>= 6.8.2), libqt6gui6 (>= 6.4.0), libqt6multimedia6 (>= 6.8.2), libqt6network6 (>= 6.7.2), libqt6qml6 (>= 6.7.2), libqt6quick6 (>= 6.6.0), libqt6sql6 (>= 6.8.2), libqt6waylandclient6 (>= 6.6.0), libsqlite3-0 (>= 3.5.9), libssl3t64 (>= 3.0.0), libstdc++6 (>= 14), libvterm0 (>= 0.3), libwayland-client0 (>= 1.20.0), libwayland-server0 (>= 1.14.91), libwlroots-0.18 (>= 0.18.0), libxcb1, libxkbcommon0 (>= 0.5.0), qt6-base-private-abi (= 6.8.2), qt6-declarative-private-abi (= 6.8.2), qt6-waylandclient-private-abi (= 6.8.2), zlib1g (>= 1:1.1.4), libqt6opengl6, qt6-qpa-plugins, qt6-svg-plugins, qt6-wayland, qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-controls, qml6-module-qtquick-templates, qml6-module-qtquick-layouts, qml6-module-qtqml, qml6-module-qtqml-workerscript, qml6-module-qt-labs-folderlistmodel, qml6-module-qtwebengine, libqt6sql6-sqlite, libqt6sql6-mysql, libqt6sql6-psql, qml6-module-qtmultimedia, xwayland, dbus-user-session, polkitd, pkexec, libpam-modules-bin, libpam-runtime, passwd, fontconfig, fonts-liberation, xdg-utils, xdg-desktop-portal
-Recommends: network-manager, pipewire-bin, pipewire-pulse, wireplumber, sound-theme-freedesktop, bluez, upower, cups, cups-client, flatpak, packagekit, xdg-desktop-portal-gtk | xdg-desktop-portal-kde, xdg-user-dirs, udisks2, rsync, cron | cron-daemon, gsettings-desktop-schemas, dconf-gsettings-backend, 7zip
-Suggests: unar
-Filename: pool/main/w/wayland95/wayland95_0.11.0_amd64.deb
-Size: 11878224
-MD5sum: c8b9207126a83283a08db5afb59b3491
-SHA1: 0ee9d120dadf4ebd976a9f4a54a0a90f435f24b6
-SHA256: c40bc4bf7c5a5dea30e8ebc5ec1be0748fd8fb4cf81ab64139e130f0b86c4d49
-SHA512: fec4fdeaf36b3fc0af6c5289e048828e1797985a60964ac28374d2bf37a0d1f63e7718b33b60d9f8123c4c7c2073579176443f9ed45b28b068c68aaafe769a6f
-Description: Windows 95-style Wayland desktop
- A complete desktop session in the style of Windows 95: a Wayland
- compositor (wlroots) with Win95 window frames, a taskbar, Start menu and
- desktop, plus its own File Manager, Notepad, Terminal, Control Panel,
- System Monitor and file dialogs for other programs. Log in to it as
- "Wayland 95".
-
-Package: wayland95
-Architecture: amd64
 Version: 0.12.0
 Priority: optional
 Section: x11
@@ -60,6 +37,29 @@ MD5sum: e557590924ddfb2d3cca62d3809196e4
 SHA1: aed858ba9ea94b5c0ffca94db7f778394e79dd34
 SHA256: fc843620975e67fed370dbb26e82cb2605f1b1513be8c2b6073b0ff4559981ea
 SHA512: ea5e1dc03c137dc6e6d322b4baa8ca54d4fe87baa88adb389904bfbcd4d7ba358ae802cd499d09b653f92c7619997c9744c942138d5fb9fdd024756cfa1905fa
+Description: Windows 95-style Wayland desktop
+ A complete desktop session in the style of Windows 95: a Wayland
+ compositor (wlroots) with Win95 window frames, a taskbar, Start menu and
+ desktop, plus its own File Manager, Notepad, Terminal, Control Panel,
+ System Monitor and file dialogs for other programs. Log in to it as
+ "Wayland 95".
+
+Package: wayland95
+Architecture: amd64
+Version: 0.14.0
+Priority: optional
+Section: x11
+Maintainer: Wayland 95 <wayland95@localhost>
+Installed-Size: 83506
+Depends: libarchive13t64 (>= 3.3.3), libc6 (>= 2.38), libcairo2 (>= 1.2.4), libegl1, libfontconfig1 (>= 2.12.6), libgcc-s1 (>= 4.0), libgles2, libglib2.0-0t64 (>= 2.40.0), libinput10 (>= 0.21.0), libpam0g (>= 0.99.7.1), libpango-1.0-0 (>= 1.14.0), libpangocairo-1.0-0 (>= 1.14.0), libpixman-1-0 (>= 0.11.2), libqt6concurrent6 (>= 6.1.2), libqt6core6t64 (>= 6.8.2), libqt6dbus6 (>= 6.8.2), libqt6gui6 (>= 6.4.0), libqt6multimedia6 (>= 6.8.2), libqt6network6 (>= 6.7.2), libqt6qml6 (>= 6.7.2), libqt6quick6 (>= 6.6.0), libqt6sql6 (>= 6.8.2), libqt6waylandclient6 (>= 6.6.0), libqt6webenginecore6 (>= 6.6.0), libqt6webenginecore6-bin (>= 6.6.0), libqt6webenginequick6 (>= 6.6.0), libsqlite3-0 (>= 3.5.9), libssl3t64 (>= 3.0.0), libstdc++6 (>= 14), libvterm0 (>= 0.3), libwayland-client0 (>= 1.20.0), libwayland-server0 (>= 1.14.91), libwlroots-0.18 (>= 0.18.0), libxcb1, libxkbcommon0 (>= 0.5.0), libxml2 (>= 2.7.4), libzim9 (>= 9.2.3), qt6-base-private-abi (= 6.8.2), qt6-declarative-private-abi (= 6.8.2), qt6-waylandclient-private-abi (= 6.8.2), qt6-webengine-private-abi (= 6.8.2), zlib1g (>= 1:1.1.4), libqt6opengl6, qt6-qpa-plugins, qt6-svg-plugins, qt6-wayland, qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-controls, qml6-module-qtquick-templates, qml6-module-qtquick-layouts, qml6-module-qtqml, qml6-module-qtqml-workerscript, qml6-module-qt-labs-folderlistmodel, qml6-module-qtwebengine, libqt6sql6-sqlite, libqt6sql6-mysql, libqt6sql6-psql, qml6-module-qtmultimedia, xwayland, dbus-user-session, polkitd, pkexec, libpam-modules-bin, libpam-runtime, passwd, fontconfig, fonts-liberation, xdg-utils, xdg-desktop-portal
+Recommends: network-manager, pipewire-bin, pipewire-pulse, wireplumber, sound-theme-freedesktop, bluez, upower, cups, cups-client, flatpak, packagekit, xdg-desktop-portal-gtk | xdg-desktop-portal-kde, xdg-user-dirs, udisks2, smartmontools, aria2, rsync, cron | cron-daemon, gsettings-desktop-schemas, dconf-gsettings-backend, 7zip
+Suggests: unar
+Filename: pool/main/w/wayland95/wayland95_0.14.0_amd64.deb
+Size: 15879900
+MD5sum: 12066d226f0b72f3299d3084c03b7280
+SHA1: 025e74ceec3a0a10a4b84c76609d62148c274e46
+SHA256: b4396bdf67332a79073e79e4a0a8d792b875e7d291572aa8d3ea6bff61693612
+SHA512: 27790dc02507b91871a228fe73c3e4290e398e7bec9c628989f86349ccfb7e631f78b80a61e98401028c1088ca51f7975d8c55110bcc83f2cf3e8d3da43647e5
 Description: Windows 95-style Wayland desktop
  A complete desktop session in the style of Windows 95: a Wayland
  compositor (wlroots) with Win95 window frames, a taskbar, Start menu and

@@ -1,3 +1,9 @@
+wayland95 (0.14.0) trixie; urgency=medium
+
+  * Trading Lab (learning to trade with paper money: charts with studies and drawings, simulated paper accounts and an order ticket, research screens, a journal, strategy lessons and a Claude assistant, from trading-labs.app); Athenaeum answers with Claude as well as Ollama.
+
+ -- Wayland 95 <wayland95@localhost>  Sat, 21 Nov 2026 09:22:30 -0800
+
 wayland95 (0.13.0) trixie; urgency=medium
 
   * Athenaeum (an offline Wikipedia library with a local AI assistant, from KAthenaeum); Network Manager in Control Panel (logs in to network devices' web pages); Disk Manager (partitions and S.M.A.R.T. health); Ollama and its models, and Wayland 95 Development, in Control Panel > Services.

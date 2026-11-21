@@ -1,3 +1,9 @@
+wayland95 (0.13.0) trixie; urgency=medium
+
+  * Athenaeum (an offline Wikipedia library with a local AI assistant, from KAthenaeum); Network Manager in Control Panel (logs in to network devices' web pages); Disk Manager (partitions and S.M.A.R.T. health); Ollama and its models, and Wayland 95 Development, in Control Panel > Services.
+
+ -- Wayland 95 <wayland95@localhost>  Fri, 20 Nov 2026 20:12:22 -0800
+
 wayland95 (0.12.0) trixie; urgency=medium
 
   * The boot menu (GRUB) in the Wayland 95 look: a "Wayland 95 Startup Menu" dialog on the teal desktop, with icons, a countdown bar and a scroll bar; the live ISO uses it for UEFI and BIOS, and installs from it boot with it.

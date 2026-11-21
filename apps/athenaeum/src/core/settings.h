@@ -21,6 +21,13 @@ QString ollamaUrl(); // default http://localhost:11434
 QString answerModel(); // default qwen3.5:2b
 QString embeddingModel(); // default nomic-embed-text
 
+// Who writes the answers: "ollama" (the default, on this computer) or "claude" (Anthropic's API, with an API key kept in
+// the keyring). Embeddings stay with Ollama either way.
+QString aiProvider();
+bool setAiProvider(const QString &provider);
+QString claudeModel(); // default claude-opus-5-5
+bool setClaudeModel(const QString &model);
+
 // Library updates: checked against the Kiwix catalog once a week (on by default), and when that last happened
 bool autoCheckLibraryUpdates();
 // Whether the app may use the internet (the catalog, downloads, maps); on unless switched off in Settings

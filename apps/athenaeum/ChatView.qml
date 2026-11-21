@@ -55,7 +55,7 @@ Item {
         Notice {
             width: parent.width
             kind: "error"
-            text: Models.checked && !Models.reachable
+            text: !Models.claude && Models.checked && !Models.reachable
                   ? "Ollama is not running at " + Util.plain(Models.url) + ", so questions cannot be answered. Reading and searching libraries work without it." : ""
             buttons: [{ text: "Services...", action: function () { controlPanel.openServices(); } },
                       { text: "Check Again", action: function () { Models.refresh(); } },
@@ -64,12 +64,26 @@ Item {
         Notice {
             width: parent.width
             kind: "error"
-            text: Models.reachable && !Models.answerModelInstalled
+            text: !Models.claude && Models.reachable && !Models.answerModelInstalled
                   ? "The answer model “" + Util.plain(Models.answerModel) + "” is not installed. Install it in a terminal with: <b>ollama pull "
                     + Util.plain(Models.answerModel) + "</b>, or get it in Control Panel > Services > Ollama > Settings." : ""
             buttons: [{ text: "Services...", action: function () { controlPanel.openServices(); } },
                       { text: "Check Again", action: function () { Models.refresh(); } },
                       { text: "Settings", action: function () { window.show("settings"); } }]
+        }
+        Notice {
+            width: parent.width
+            kind: "error"
+            text: Models.claude && !Models.claudeKeySet
+                  ? "Claude answers questions here, but no Anthropic API key is set. Enter one in Settings > Models." : ""
+            buttons: [{ text: "Settings", action: function () { window.show("settings"); } }]
+        }
+        Notice {
+            width: parent.width
+            kind: "error"
+            text: Models.claude && Models.claudeKeySet && !Connectivity.allowed
+                  ? "Claude answers questions here, and it needs the internet, which is switched off in Settings > Internet." : ""
+            buttons: [{ text: "Settings", action: function () { window.show("settings"); } }]
         }
         Notice {
             width: parent.width
@@ -299,7 +313,7 @@ Item {
                     ? "Answers come from this article alone. Each sentence links to the section it comes from."
                     : view.conversation.projectId > 0
                     ? "Answers come from the project's articles and saved excerpts, written with its goal in mind. Tick “Also search the whole library” to look further."
-                    : "A local model answers from your libraries. Each sentence links to the article it comes from; sentences no source backs are marked for checking."
+                    : (Models.claude ? "Claude answers" : "A local model answers") + " from your libraries. Each sentence links to the article it comes from; sentences no source backs are marked for checking."
             }
         }
     }

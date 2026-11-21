@@ -1,8 +1,8 @@
 import QtQuick
 import Win95Ui
 
-// Settings, as a property sheet: the models (Ollama, the answer and
-// embedding models), reading (width, citation style), the internet and
+// Settings, as a property sheet: the models (who answers: Ollama or Claude
+// with an API key; the answer and embedding models), reading (width, citation style), the internet and
 // library updates, and where things are kept.
 Page95 {
     id: page
@@ -28,6 +28,92 @@ Page95 {
             Column {
                 width: Math.min(parent.width, 560)
                 spacing: 10
+                GroupBox95 {
+                    width: parent.width
+                    height: Models.claude ? 196 : 74
+                    title: "Answers"
+                    RadioButton95 {
+                        x: 10
+                        y: 0
+                        text: "Ollama, on this computer (private; works offline)"
+                        checked: !Models.claude
+                        onClicked: Models.provider = "ollama"
+                    }
+                    RadioButton95 {
+                        x: 10
+                        y: 22
+                        text: "Claude, by Anthropic (needs the internet and an API key)"
+                        checked: Models.claude
+                        onClicked: Models.provider = "claude"
+                    }
+                    Label95 { visible: Models.claude; x: 10; y: 52; width: 120; height: 22; verticalAlignment: Text.AlignVCenter; text: "Claude model:" }
+                    ComboBox95 {
+                        visible: Models.claude
+                        x: 130
+                        y: 52
+                        width: parent.width - 140
+                        height: 22
+                        popupMenu: popup
+                        model: Models.claudeModels
+                        currentIndex: Math.max(0, Models.claudeModels.indexOf(Models.claudeModel))
+                        onActivated: (i) => Models.claudeModel = model[i]
+                    }
+                    Label95 { visible: Models.claude; x: 10; y: 80; width: 120; height: 22; verticalAlignment: Text.AlignVCenter; text: "API key:" }
+                    TextField95 {
+                        id: keyField
+                        visible: Models.claude
+                        x: 130
+                        y: 80
+                        width: parent.width - 140 - 170
+                        height: 22
+                        input.echoMode: TextInput.Password
+                        onAccepted: { Models.setClaudeKey(text); text = ""; }
+                    }
+                    Button95 {
+                        visible: Models.claude
+                        anchors.right: forgetKey.left
+                        anchors.rightMargin: 6
+                        y: 79
+                        width: 76
+                        text: "Save"
+                        enabled: keyField.text.trim() !== "" && Models.keyringAvailable
+                        onClicked: { Models.setClaudeKey(keyField.text); keyField.text = ""; }
+                    }
+                    Button95 {
+                        id: forgetKey
+                        visible: Models.claude
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        y: 79
+                        width: 76
+                        text: "Forget"
+                        enabled: Models.claudeKeySet
+                        onClicked: Models.setClaudeKey("")
+                    }
+                    Label95 {
+                        visible: Models.claude
+                        x: 130
+                        y: 106
+                        width: parent.width - 140
+                        small: true
+                        wrapMode: Text.Wrap
+                        color: Models.claudeKeyError !== "" || !Models.claudeKeySet ? "#800000" : Theme.text
+                        text: Models.claudeKeyError !== "" ? Models.claudeKeyError
+                            : !Models.keyringAvailable ? "No keyring is running, so a key cannot be saved. ANTHROPIC_API_KEY is used if it is set."
+                            : Models.claudeKeySet ? "A key is set, kept in the keyring. Enter another to replace it."
+                            : "No key set. Create one at console.anthropic.com; it is kept in the keyring, never in a file."
+                    }
+                    Label95 {
+                        visible: Models.claude
+                        x: 130
+                        y: 138
+                        width: parent.width - 140
+                        small: true
+                        dim: true
+                        wrapMode: Text.Wrap
+                        text: "Your question and the passages found for it are sent to Anthropic. Passages are still ranked by Ollama's embedding model below when it is running, or by words alone."
+                    }
+                }
                 GroupBox95 {
                     width: parent.width
                     height: 108
@@ -61,17 +147,18 @@ Page95 {
                     width: parent.width
                     height: 158
                     title: "Models"
-                    Label95 { x: 10; y: 22; width: 120; height: 22; verticalAlignment: Text.AlignVCenter; text: "Answer model:" }
+                    Label95 { x: 10; y: 22; width: 120; height: 22; verticalAlignment: Text.AlignVCenter; text: "Answer model:"; enabled: !Models.claude }
                     ComboBox95 {
                         id: answerBox
                         x: 130
                         y: 22
                         width: parent.width - 140
                         height: 22
+                        enabled: !Models.claude
                         popupMenu: popup
-                        model: page.choices(Models.answerModel)
-                        currentIndex: page.indexOf(model, Models.answerModel)
-                        onActivated: (i) => Models.answerModel = model[i]
+                        model: page.choices(Models.ollamaAnswerModel)
+                        currentIndex: page.indexOf(model, Models.ollamaAnswerModel)
+                        onActivated: (i) => Models.ollamaAnswerModel = model[i]
                     }
                     Label95 {
                         x: 130
@@ -80,7 +167,8 @@ Page95 {
                         small: true
                         dim: true
                         wrapMode: Text.Wrap
-                        text: Models.answerModel === Models.defaultAnswerModel
+                        text: Models.claude ? "Not used while Claude writes the answers."
+                              : Models.ollamaAnswerModel === Models.defaultAnswerModel
                               ? "Writes the answers. " + Models.defaultAnswerModel + " is the measured default for laptops."
                               : "Writes the answers. The measured default is " + Models.defaultAnswerModel + "."
                     }
@@ -111,9 +199,9 @@ Page95 {
                 Notice {
                     width: parent.width
                     kind: "warning"
-                    text: Models.reachable && (!Models.answerModelInstalled || !Models.embeddingModelInstalled)
+                    text: Models.reachable && ((!Models.claude && !Models.answerModelInstalled) || !Models.embeddingModelInstalled)
                           ? "Not installed in Ollama. Install in a terminal with: <b>"
-                            + [Models.answerModelInstalled ? "" : "ollama pull " + Util.plain(Models.answerModel),
+                            + [Models.claude || Models.answerModelInstalled ? "" : "ollama pull " + Util.plain(Models.answerModel),
                                Models.embeddingModelInstalled ? "" : "ollama pull " + Util.plain(Models.embeddingModel)].filter(function (s) { return s !== ""; }).join("</b> and <b>") + "</b>"
                           : ""
                 }
@@ -128,7 +216,11 @@ Page95 {
                 Notice {
                     width: parent.width
                     kind: "info"
-                    text: Models.checked && !Models.reachable
+                    text: Models.checked && !Models.reachable && Models.claude
+                          ? "Ollama is not running, so Claude's sources are ranked by words alone and its sentences are not linked to them. "
+                            + "For ranking by meaning, install Ollama in Control Panel > Services > Ollama (AI Models) and get <b>"
+                            + Util.plain(Models.defaultEmbeddingModel) + "</b> (small; fine without a graphics card)."
+                          : Models.checked && !Models.reachable
                           ? "Install Ollama and its models in Control Panel > Services > Ollama (AI Models): check it, then get <b>"
                             + Util.plain(Models.defaultAnswerModel) + "</b> and <b>" + Util.plain(Models.defaultEmbeddingModel)
                             + "</b> in its Settings. Reading and searching work without it." : ""
@@ -193,7 +285,7 @@ Page95 {
                         onToggled: (c) => Connectivity.allowed = c
                     }
                     Label95 { x: 30; y: 42; width: parent.width - 40; small: true; dim: true; wrapMode: Text.Wrap
-                              text: "For the library catalog and downloads, and update checks. Reading, search, Ask, the Classroom, notes and projects never need it." }
+                              text: "For the library catalog and downloads, update checks, and Claude. Reading, search, notes and projects never need it, nor Ask and the Classroom with Ollama." }
                     Label95 {
                         x: 10
                         y: 76

@@ -10,15 +10,27 @@ class OllamaClient;
 class QQmlEngine;
 class QJSEngine;
 
-// Ollama and the models Ask uses, for Settings and the Ask page: where Ollama is, which models answer and embed, whether
-// it is reachable and has them, and whether it keeps both models loaded. One instance, created in main().
+// The models Ask uses, for Settings and the Ask page: who answers (Ollama on this computer, or Claude with an API key
+// kept in the keyring), where Ollama is, which models answer and embed, whether Ollama is reachable and has them, and
+// whether it keeps both models loaded. One instance, created in main().
+//
+// `answerModel` is the model that answers now (the Claude model when Claude answers); `ollamaAnswerModel` is the Ollama
+// one chosen in Settings.
 class ModelSettings : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(Models)
     QML_SINGLETON
     Q_PROPERTY(QString url READ url WRITE setUrl NOTIFY settingsChanged)
-    Q_PROPERTY(QString answerModel READ answerModel WRITE setAnswerModel NOTIFY settingsChanged)
+    Q_PROPERTY(QString provider READ provider WRITE setProvider NOTIFY settingsChanged)
+    Q_PROPERTY(bool claude READ claude NOTIFY settingsChanged)
+    Q_PROPERTY(QString answerModel READ answerModel NOTIFY settingsChanged)
+    Q_PROPERTY(QString ollamaAnswerModel READ ollamaAnswerModel WRITE setOllamaAnswerModel NOTIFY settingsChanged)
+    Q_PROPERTY(QString claudeModel READ claudeModel WRITE setClaudeModel NOTIFY settingsChanged)
+    Q_PROPERTY(QStringList claudeModels READ claudeModels CONSTANT)
+    Q_PROPERTY(bool claudeKeySet READ claudeKeySet NOTIFY claudeKeyChanged)
+    Q_PROPERTY(QString claudeKeyError READ claudeKeyError NOTIFY claudeKeyChanged)
+    Q_PROPERTY(bool keyringAvailable READ keyringAvailable CONSTANT)
     Q_PROPERTY(QString embeddingModel READ embeddingModel WRITE setEmbeddingModel NOTIFY settingsChanged)
     Q_PROPERTY(QString defaultAnswerModel READ defaultAnswerModel CONSTANT)
     Q_PROPERTY(QString defaultEmbeddingModel READ defaultEmbeddingModel CONSTANT)
@@ -44,8 +56,23 @@ public:
 
     QString url() const;
     void setUrl(const QString &url);
+    QString provider() const;
+    void setProvider(const QString &provider);
+    bool claude() const;
     QString answerModel() const;
-    void setAnswerModel(const QString &model);
+    QString ollamaAnswerModel() const;
+    void setOllamaAnswerModel(const QString &model);
+    QString claudeModel() const;
+    void setClaudeModel(const QString &model);
+    QStringList claudeModels() const;
+    bool claudeKeySet() const;
+    QString claudeKeyError() const
+    {
+        return m_claudeKeyError;
+    }
+    bool keyringAvailable() const;
+    // Keeps the key in the keyring (an empty one forgets it)
+    Q_INVOKABLE void setClaudeKey(const QString &key);
     QString embeddingModel() const;
     void setEmbeddingModel(const QString &model);
     QString defaultAnswerModel() const;
@@ -90,10 +117,12 @@ public:
 Q_SIGNALS:
     void settingsChanged();
     void statusChanged();
+    void claudeKeyChanged();
 
 private:
     explicit ModelSettings(QObject *parent);
     bool has(const QString &model) const;
+    void loadClaudeKey();
 
     OllamaClient *m_client;
     bool m_checking = false;
@@ -104,4 +133,5 @@ private:
     QStringList m_installed;
     QStringList m_loaded;
     bool m_swapping = false;
+    QString m_claudeKeyError;
 };

@@ -1,13 +1,14 @@
 # win95athenaeum - Athenaeum: KAthenaeum (github.com/pacificnm/KAthenaeum),
 # the offline Wikipedia library with a local AI research assistant, as a
 # Wayland 95 program. Kiwix ZIM files are read with libzim; answers come
-# from Ollama on this computer; chats, projects and notes are kept in
+# from Ollama on this computer, or from Claude (Anthropic's API, key in the
+# keyring); chats, projects and notes are kept in
 # SQLite. The library and assistant are KAthenaeum's own C++ (src/core);
 # KDE Frameworks are replaced by plain Qt (src/compat stands in for KI18n)
 # and the pages are drawn with Win95Ui. Start > Programs > Accessories >
 # Athenaeum. Built only when libzim and Qt WebEngine's headers are there.
 
-find_package(Qt6 QUIET COMPONENTS Sql Network Concurrent WebEngineQuick)
+find_package(Qt6 QUIET COMPONENTS Sql Network Concurrent WebEngineQuick DBus)
 pkg_check_modules(ZIM QUIET IMPORTED_TARGET libzim>=9.0)
 pkg_check_modules(LIBXML2 QUIET IMPORTED_TARGET libxml-2.0)
 if(NOT TARGET Qt6::WebEngineQuick OR NOT ZIM_FOUND OR NOT LIBXML2_FOUND)
@@ -39,6 +40,7 @@ add_library(athenaeum_core STATIC
     src/core/library.cpp src/core/library.h
     src/core/network.cpp src/core/network.h
     src/core/ollama.cpp src/core/ollama.h
+    src/core/claude.cpp src/core/claude.h
     src/core/projects.cpp src/core/projects.h
     src/core/rag.cpp src/core/rag.h
     src/core/settings.cpp src/core/settings.h
@@ -145,6 +147,7 @@ target_link_libraries(win95athenaeum PRIVATE
     Qt6::Quick
     Qt6::Concurrent
     Qt6::WebEngineQuick
+    Qt6::DBus # the keyring (secrets.h), for the Claude API key
     win95uiplugin
 )
 

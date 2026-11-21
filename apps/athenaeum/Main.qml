@@ -410,8 +410,9 @@ Window {
                 width: parent.width
                 small: true
                 wrapMode: Text.Wrap
-                color: Models.reachable && Models.answerModelInstalled ? "#006000" : "#800000"
-                text: Models.checking ? "Looking for Ollama..."
+                color: (Models.claude || Models.reachable) && Models.answerModelInstalled ? "#006000" : "#800000"
+                text: Models.claude ? (Models.claudeKeySet ? "Claude: " + Models.answerModel : "Claude: no API key set (Settings).")
+                    : Models.checking ? "Looking for Ollama..."
                     : !Models.reachable ? "Ollama is not running: Ask and the Classroom need it."
                     : !Models.answerModelInstalled ? "Ollama has no " + Models.answerModel + " model."
                     : "Ollama: " + Models.answerModel

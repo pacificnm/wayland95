@@ -55,6 +55,26 @@ QString AppSettings::embeddingModel()
     return value(QStringLiteral("models.embedding"), QStringLiteral("nomic-embed-text"));
 }
 
+QString AppSettings::aiProvider()
+{
+    return value(QStringLiteral("ai.provider"), QStringLiteral("ollama")) == QLatin1String("claude") ? QStringLiteral("claude") : QStringLiteral("ollama");
+}
+
+bool AppSettings::setAiProvider(const QString &provider)
+{
+    return setValue(QStringLiteral("ai.provider"), provider == QLatin1String("claude") ? QStringLiteral("claude") : QStringLiteral("ollama"));
+}
+
+QString AppSettings::claudeModel()
+{
+    return value(QStringLiteral("claude.model"), QStringLiteral("claude-opus-5-5"));
+}
+
+bool AppSettings::setClaudeModel(const QString &model)
+{
+    return setValue(QStringLiteral("claude.model"), model.trimmed());
+}
+
 bool AppSettings::articleFullWidth()
 {
     return value(QStringLiteral("reading.width"), QStringLiteral("full")) == QLatin1String("full");

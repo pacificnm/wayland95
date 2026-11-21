@@ -14,7 +14,8 @@
 #include <functional>
 #include <optional>
 
-// Ollama's HTTP API, the parts the app uses. Parsing is separate so it can be tested without a server.
+// Ollama's HTTP API, the parts the app uses. A chat whose model is a Claude model ("claude-...") goes to Anthropic's
+// Messages API instead (claude.h), so the callers need not know which one answers; embeddings always come from Ollama. Parsing is separate so it can be tested without a server.
 namespace Ollama
 {
 // One line of a streamed /api/chat reply
@@ -45,6 +46,15 @@ public:
     {
         return m_baseUrl;
     }
+    // The Anthropic API key Claude chats use (empty: none set)
+    void setClaudeKey(const QString &key)
+    {
+        m_claudeKey = key.trimmed();
+    }
+    bool hasClaudeKey() const
+    {
+        return !m_claudeKey.isEmpty();
+    }
 
     // Callbacks run on this object's thread, only while `context` lives, and never for a request that was aborted.
     // Every call returns its reply so the caller can abort() it.
@@ -74,8 +84,10 @@ private:
     QNetworkReply *owned(QNetworkReply *reply);
     QNetworkReply *post(const QString &path, const QJsonObject &body, int timeoutMs);
     QNetworkReply *names(const QString &path, const QString &listKey, QObject *context, Names done);
+    QNetworkReply *claudeChat(const QJsonObject &body, QObject *context, ChatText text, ChatDone done);
 
     QNetworkAccessManager m_nam;
     QString m_baseUrl = QStringLiteral("http://localhost:11434");
     QHash<QString, QStringList> m_capabilities;
+    QString m_claudeKey;
 };
